@@ -3,11 +3,11 @@ Hi! Welcome to my portfolio!
 
 You can find the hosted website on jordansosa.com.
 
-##Languages
+## Languages
 HTML
 CSS
 Javascript
 
-##Frameworks
+## Frameworks
 CSS Skeleton
 React.js
