@@ -1,29 +1,21 @@
-function openNav(x) {
-    document.getElementById("side-navbar").style.width = "200px";
-    document.getElementById("main-container").style.marginLeft = "300px";
-    x.classList.toggle("bar-animation");
-}
-
-function closeNav(x) {
-    document.getElementById("side-navbar").style.width = "25px";
-    document.getElementById("main-container").style.marginLeft = "10%";
-    x.classList.toggle("bar-animation");
-}
+var navIsOpen = false;
 
 function toggleNav() {
-    var x = document.getElementById("side-navbar");
-    if (x.style.width = "200px") {
+    if (navIsOpen == true) {
         document.getElementById("side-navbar").style.width = "25px";
         document.getElementById("main-container").style.marginLeft = "10%";
-        x.classList.toggle("bar-animation");
+        document.getElementById("side-navbar").classList.toggle("bar-animation");
         console.log(document.getElementById("side-navbar").style.width);
-        
+        navIsOpen = false;
+        console.log(navIsOpen);
     }
 
     else {
         document.getElementById("side-navbar").style.width = "200px";
         document.getElementById("main-container").style.marginLeft = "300px";
-        x.classList.toggle("bar-animation");
+        document.getElementById("side-navbar").classList.toggle("bar-animation");
         console.log(document.getElementById("side-navbar").style.width);
+        navIsOpen = true;
+        console.log(navIsOpen);
     }
 }
