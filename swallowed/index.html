@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Swallowed — a first-person journey through the digestive tract</title>
+  <meta name="description" content="Swallowed: an immersive single-page 3D experience. You are a piece of food travelling through the human digestive tract, from bite to exit. Part Planet Earth, part theme-park dark ride." />
+  <meta name="theme-color" content="#120D0A" />
+  <link rel="stylesheet" href="/src/styles.css" />
+  <script type="module" src="/src/main.js"></script>
+</head>
+<body>
+  <!-- The 3D canvas is injected here after first paint (lazy-init). -->
+  <div id="scene-root" aria-hidden="true"></div>
+
+  <!-- Static gradient backdrop so the page has a fleshy mood before JS boots. -->
+  <div id="prepaint-backdrop" aria-hidden="true"></div>
+
+  <!-- Scroll spacer: gives the page scrollable height that ScrollTrigger maps
+       to journey progress. Height is set in CSS (vh multiples). -->
+  <div id="scroll-track" aria-hidden="true"></div>
+
+  <!-- ====================== HUD overlay ====================== -->
+  <main id="hud">
+
+    <!-- Stage title, corner -->
+    <h1 id="stage-title" class="stage-title">Swallowed</h1>
+
+    <!-- Caption: the one-to-two-line narration per stage. Also a live region. -->
+    <div id="caption-wrap" class="caption-wrap">
+      <p id="caption" class="caption" aria-live="polite">
+        You're a strawberry. Enjoy being whole — it won't last.
+      </p>
+    </div>
+
+    <!-- Title card (start) -->
+    <section id="title-card" class="title-card">
+      <p class="kicker">An immersive journey through your own body</p>
+      <h2 class="big-title">Swallowed</h2>
+      <p class="subtitle">You are about to be eaten. Pick what you are.</p>
+
+      <fieldset class="food-picker">
+        <legend class="sr-only">Choose your food</legend>
+        <button type="button" class="food-btn is-selected" data-food="strawberry" aria-pressed="true">a strawberry</button>
+        <button type="button" class="food-btn" data-food="slice of toast" aria-pressed="false">a slice of toast</button>
+        <button type="button" class="food-btn" data-food="cube of cheese" aria-pressed="false">a cube of cheese</button>
+      </fieldset>
+
+      <button type="button" id="begin-btn" class="begin-btn">Begin · scroll to be swallowed</button>
+      <p class="scroll-hint">Scroll is peristalsis. Scroll down to be carried forward.</p>
+    </section>
+
+    <!-- End card -->
+    <section id="end-card" class="end-card" hidden>
+      <h2 class="big-title">Journey complete.</h2>
+      <p class="end-stats">~9 metres travelled · 24–72 hours · you were delicious.</p>
+      <button type="button" id="restart-btn-end" class="begin-btn">Travel again</button>
+      <p class="credits">Swallowed — built with three.js &amp; GSAP. No real photos, no gore, just awe. A reverent dark ride through the body.</p>
+    </section>
+
+    <!-- Controls cluster -->
+    <div id="controls" class="controls">
+      <button type="button" id="sound-toggle" class="ctl" aria-pressed="false" title="Sound (off)">
+        <span class="ctl-icon" aria-hidden="true">♪</span><span class="ctl-label">Sound off</span>
+      </button>
+      <button type="button" id="storybook-toggle" class="ctl" aria-pressed="false" title="Storybook mode">
+        <span class="ctl-icon" aria-hidden="true">▤</span><span class="ctl-label">Storybook</span>
+      </button>
+      <button type="button" id="autoplay-toggle" class="ctl" aria-pressed="false" title="Auto-play">
+        <span class="ctl-icon" aria-hidden="true">▶</span><span class="ctl-label">Auto-play</span>
+      </button>
+      <button type="button" id="restart-btn" class="ctl" title="Restart journey">
+        <span class="ctl-icon" aria-hidden="true">⟲</span><span class="ctl-label">Restart</span>
+      </button>
+    </div>
+
+    <!-- Storybook stepper (shown only in storybook mode) -->
+    <div id="storybook-nav" class="storybook-nav" hidden>
+      <button type="button" id="sb-prev" class="sb-btn">‹ Back</button>
+      <span id="sb-pos" class="sb-pos">1 / 7</span>
+      <button type="button" id="sb-next" class="sb-btn">Next ›</button>
+    </div>
+
+    <!-- Gut-silhouette progress indicator -->
+    <div id="progress-gut" class="progress-gut" aria-hidden="true">
+      <svg viewBox="0 0 24 200" preserveAspectRatio="none" width="24" height="200">
+        <defs>
+          <clipPath id="gut-clip">
+            <!-- A simplified gut silhouette: mouth → throat → coiled gut → exit -->
+            <path d="M12 2
+                     C 18 6, 18 14, 12 18
+                     C 6 22, 6 30, 12 34
+                     L 12 60
+                     C 4 66, 20 78, 12 90
+                     C 4 102, 20 114, 12 126
+                     C 4 138, 20 150, 12 162
+                     L 12 186
+                     C 16 190, 16 196, 12 198
+                     C 8 196, 8 190, 12 186 Z" />
+          </clipPath>
+        </defs>
+        <rect x="0" y="0" width="24" height="200" fill="rgba(255,255,255,0.10)" clip-path="url(#gut-clip)" />
+        <rect id="gut-fill" x="0" y="200" width="24" height="0" fill="#FFE9B0" clip-path="url(#gut-clip)" />
+      </svg>
+    </div>
+
+  </main>
+
+  <noscript>
+    <div class="noscript">
+      <h1>Swallowed</h1>
+      <p>This is an interactive 3D experience and needs JavaScript. You're a piece of food about to travel the human digestive tract — from bite to exit.</p>
+    </div>
+  </noscript>
+</body>
+</html>

@@ -1,0 +1,76 @@
+name: Deploy site to GitHub Pages
+
+# Builds every project into its own sub-path and combines them under one
+# Pages deployment:
+#   /                 -> homepage (landing page)
+#   /corp-sec-desk/   -> corp-sec-desk
+#   /swallowed/       -> swallowed
+on:
+  push:
+    branches: [master]
+    paths:
+      - "homepage/**"
+      - "corp-sec-desk/**"
+      - "swallowed/**"
+      - ".github/workflows/deploy-pages.yml"
+  workflow_dispatch:
+
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    env:
+      # Project-pages root, e.g. /MyPortfolio
+      SITE_ROOT: /${{ github.event.repository.name }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: |
+            corp-sec-desk/package-lock.json
+            swallowed/package-lock.json
+
+      - name: Build corp-sec-desk
+        working-directory: corp-sec-desk
+        run: npm ci && npm run build
+        env:
+          BASE_PATH: ${{ env.SITE_ROOT }}/corp-sec-desk/
+
+      - name: Build swallowed
+        working-directory: swallowed
+        run: npm ci && npm run build
+        env:
+          BASE_PATH: ${{ env.SITE_ROOT }}/swallowed/
+
+      - name: Assemble site
+        run: |
+          rm -rf _site
+          mkdir -p _site
+          cp -r homepage/. _site/
+          cp -r corp-sec-desk/dist _site/corp-sec-desk
+          cp -r swallowed/dist _site/swallowed
+
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
