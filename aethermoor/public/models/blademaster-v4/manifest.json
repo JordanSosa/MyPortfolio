@@ -1,11 +1,22 @@
 {
   "name": "blademaster-v4",
   "tasks": {
-    "generate": "bab69b13-0b18-473b-bae2-edb0ee01284b"
+    "generate": "bab69b13-0b18-473b-bae2-edb0ee01284b",
+    "rigCheck": "fafb1bfc-0dc9-4461-8b6f-c5f371f040eb",
+    "rig": "85cb8c9d-518a-48e0-846d-5e4fc1e890ac",
+    "retarget_0": "6507687f-bd20-431a-8208-7a1e35052019"
   },
   "files": {
-    "base": "base.glb"
+    "base": "base.glb",
+    "rigged": "rigged.glb"
   },
-  "anims": {},
-  "prompt": "anime MMORPG hero boy, slender teen proportions five heads tall, large expressive anime eyes, elaborate windswept two-tone auburn hair, ornate red and gold fantasy tunic with small shoulder armor and belt pouches, fingerless gloves, knee-high boots, empty hands, symmetrical T-pose, cel shaded anime style, low poly game character, vibrant saturated colors"
+  "anims": {
+    "idle": "anim_idle.glb",
+    "run": "anim_run.glb",
+    "slash": "anim_slash.glb",
+    "hurt": "anim_hurt.glb",
+    "walk": "anim_walk.glb"
+  },
+  "prompt": "anime MMORPG hero boy, slender teen proportions five heads tall, large expressive anime eyes, elaborate windswept two-tone auburn hair, ornate red and gold fantasy tunic with small shoulder armor and belt pouches, fingerless gloves, knee-high boots, empty hands, symmetrical T-pose, cel shaded anime style, low poly game character, vibrant saturated colors",
+  "rigType": "biped"
 }

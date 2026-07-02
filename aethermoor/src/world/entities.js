@@ -45,6 +45,37 @@ function addFace(g, y, z, s = 1, eyeHex = 0x2a2438) {
   }
 }
 
+export function buildWeapon(weaponType) {
+  const weapon = new THREE.Group();
+  if (weaponType === "sword") {
+    const blade = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.15, 0.24), toon(0xe8edf8, { emissive: 0x8899bb, emissiveIntensity: 0.15 }));
+    blade.position.y = 0.68;
+    const tip = new THREE.Mesh(new THREE.ConeGeometry(0.13, 0.25, 4), toon(0xe8edf8));
+    tip.position.y = 1.35;
+    tip.rotation.y = Math.PI / 4;
+    const hilt = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.09, 0.12), lam(0xe8b845));
+    hilt.position.y = 0.12;
+    const pommel = new THREE.Mesh(new THREE.SphereGeometry(0.07, 6, 6), lam(0xe8b845));
+    pommel.position.y = -0.05;
+    weapon.add(blade, tip, hilt, pommel);
+  } else if (weaponType === "staff") {
+    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.07, 1.8, 7), lam(0x8a6444));
+    const cradle = new THREE.Mesh(new THREE.TorusGeometry(0.17, 0.04, 6, 12), lam(0xe8b845));
+    cradle.position.y = 0.95;
+    const orb = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 8), toon(0x9f8ff8, { emissive: 0x7f5fe5, emissiveIntensity: 1 }));
+    orb.position.y = 0.95;
+    const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture("#b8a4ff"), blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.7 }));
+    glow.position.y = 0.95;
+    glow.scale.set(0.9, 0.9, 1);
+    weapon.add(shaft, cradle, orb, glow);
+  } else if (weaponType === "bow") {
+    const arc = new THREE.Mesh(new THREE.TorusGeometry(0.58, 0.05, 6, 14, Math.PI), lam(0xa87b4f));
+    const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.25, 6), lam(0xe8b845));
+    weapon.add(arc, grip);
+  }
+  return weapon;
+}
+
 export function buildHumanoid(bodyHex, headHex, weaponType, scale = 1, accentHex = 0x333344, opts = {}) {
   const g = new THREE.Group();
 
@@ -87,39 +118,11 @@ export function buildHumanoid(bodyHex, headHex, weaponType, scale = 1, accentHex
   g.add(body, collar, head);
 
   let weapon = null;
-  if (weaponType === "sword") {
-    weapon = new THREE.Group();
-    const blade = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.15, 0.24), toon(0xe8edf8, { emissive: 0x8899bb, emissiveIntensity: 0.15 }));
-    blade.position.y = 0.68;
-    const tip = new THREE.Mesh(new THREE.ConeGeometry(0.13, 0.25, 4), toon(0xe8edf8));
-    tip.position.y = 1.35;
-    tip.rotation.y = Math.PI / 4;
-    const hilt = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.09, 0.12), lam(0xe8b845));
-    hilt.position.y = 0.12;
-    const pommel = new THREE.Mesh(new THREE.SphereGeometry(0.07, 6, 6), lam(0xe8b845));
-    pommel.position.y = -0.05;
-    weapon.add(blade, tip, hilt, pommel);
-    weapon.position.set(0.6, 0.75, 0.1);
-    weapon.rotation.z = -0.35;
-  } else if (weaponType === "staff") {
-    weapon = new THREE.Group();
-    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.07, 1.8, 7), lam(0x8a6444));
-    const cradle = new THREE.Mesh(new THREE.TorusGeometry(0.17, 0.04, 6, 12), lam(0xe8b845));
-    cradle.position.y = 0.95;
-    const orb = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 8), toon(0x9f8ff8, { emissive: 0x7f5fe5, emissiveIntensity: 1 }));
-    orb.position.y = 0.95;
-    const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture("#b8a4ff"), blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.7 }));
-    glow.position.y = 0.95;
-    glow.scale.set(0.9, 0.9, 1);
-    weapon.add(shaft, cradle, orb, glow);
-    weapon.position.set(0.6, 0.75, 0.1);
-  } else if (weaponType === "bow") {
-    weapon = new THREE.Group();
-    const arc = new THREE.Mesh(new THREE.TorusGeometry(0.58, 0.05, 6, 14, Math.PI), lam(0xa87b4f));
-    const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.25, 6), lam(0xe8b845));
-    weapon.add(arc, grip);
-    weapon.position.set(0.6, 0.85, 0.15);
-    weapon.rotation.z = Math.PI / 2;
+  if (weaponType) {
+    weapon = buildWeapon(weaponType);
+    weapon.position.set(0.6, weaponType === "bow" ? 0.85 : 0.75, weaponType === "bow" ? 0.15 : 0.1);
+    if (weaponType === "sword") weapon.rotation.z = -0.35;
+    if (weaponType === "bow") weapon.rotation.z = Math.PI / 2;
   }
   if (weapon) g.add(weapon);
   g.userData.weapon = weapon;
@@ -347,11 +350,44 @@ export function spawnFakes() {
   }
 }
 
+// Generated GLB roster: class -> model folder in public/models/
+const MODEL_BY_CLASS = { blademaster: "blademaster-v4" };
+
 export function spawnPlayerMesh() {
   const cls = CLASSES[G.player.classId];
   const mesh = buildHumanoid(cls.color, 0xf5d3b3, cls.weapon, 1.05, 0x3b3045);
-  G.playerEnt = { mesh, walkPhase: 0, atkT: 0 };
+  G.playerEnt = { mesh, walkPhase: 0, atkT: 0, ctl: null, oneShotUntil: 0 };
   G.three.scene.add(mesh);
+
+  const modelName = MODEL_BY_CLASS[G.player.classId];
+  if (!modelName) return;
+  import("./models.js").then(async ({ loadCharacter, instantiate, attachToHand }) => {
+    const entry = await loadCharacter(modelName);
+    if (!entry || !G.playerEnt) return;
+    const ctl = instantiate(entry);
+    // pace one-shots to combat cadence regardless of clip length
+    if (ctl.actions.slash) ctl.actions.slash.timeScale = ctl.actions.slash.getClip().duration / 0.7;
+    if (ctl.actions.hurt) ctl.actions.hurt.timeScale = ctl.actions.hurt.getClip().duration / 0.5;
+
+    const weapon = buildWeapon(cls.weapon);
+    ctl.mesh.updateMatrixWorld(true);
+    if (attachToHand(ctl, weapon)) {
+      const ws = new THREE.Vector3();
+      weapon.parent.getWorldScale(ws);
+      weapon.scale.setScalar(1 / Math.max(ws.x, 1e-6));
+      weapon.rotation.set(Math.PI / 2, 0, 0); // grip along the palm
+    }
+    const shadow = new THREE.Mesh(new THREE.CircleGeometry(0.5, 12).rotateX(-Math.PI / 2),
+      new THREE.MeshBasicMaterial({ color: 0x1e3020, transparent: true, opacity: 0.22 }));
+    shadow.position.y = 0.05;
+    ctl.mesh.add(shadow);
+
+    G.three.scene.remove(G.playerEnt.mesh);
+    G.playerEnt.mesh = ctl.mesh;
+    G.playerEnt.ctl = ctl;
+    ctl.play("idle");
+    G.three.scene.add(ctl.mesh);
+  }).catch((e) => console.warn("model load failed, keeping procedural character", e));
 }
 
 // boss adds
@@ -456,8 +492,23 @@ on("chainFx", ({ from, to }) => {
   fxList.push({ mesh: line, ttl: 0.2, age: 0 });
 });
 
-on("skillUsed", () => { if (G.playerEnt) G.playerEnt.atkT = 0.28; });
-on("swingFx", () => { if (G.playerEnt) G.playerEnt.atkT = 0.28; });
+function playerAttackAnim() {
+  const pe = G.playerEnt;
+  if (!pe) return;
+  if (pe.ctl && pe.ctl.actions.slash) {
+    pe.ctl.oneShot("slash");
+    pe.oneShotUntil = G.now + 0.7;
+  } else pe.atkT = 0.28;
+}
+on("skillUsed", playerAttackAnim);
+on("swingFx", playerAttackAnim);
+on("playerHurt", () => {
+  const pe = G.playerEnt;
+  if (pe?.ctl && pe.ctl.actions.hurt && G.now >= pe.oneShotUntil) {
+    pe.ctl.oneShot("hurt");
+    pe.oneShotUntil = G.now + 0.5;
+  }
+});
 on("mobSwing", (mob) => { mob.atkT = 0.3; });
 
 // ---------------- nameplates & floaters (DOM) ----------------
@@ -558,16 +609,25 @@ export function updateEntities(dt) {
   const pe = G.playerEnt;
   pe.mesh.position.set(p.pos.x, py, p.pos.z);
   pe.mesh.rotation.y = p.facing;
-  if (G.playerMoving) {
-    pe.walkPhase += dt * 10;
-    pe.mesh.position.y = py + Math.abs(Math.sin(pe.walkPhase)) * 0.12;
-    pe.mesh.rotation.x = 0.06;
-  } else pe.mesh.rotation.x = 0;
-  if (pe.atkT > 0) {
-    pe.atkT -= dt;
-    const w = pe.mesh.userData.weapon;
-    if (w) w.rotation.x = -Math.sin((0.28 - pe.atkT) / 0.28 * Math.PI) * 1.4;
-  } else if (pe.mesh.userData.weapon) pe.mesh.userData.weapon.rotation.x = 0;
+  if (pe.ctl) {
+    // GLB character: clip-driven animation state machine
+    pe.ctl.update(dt);
+    if (G.now >= pe.oneShotUntil) {
+      if (G.playerMoving) pe.ctl.play(pe.ctl.actions.run ? "run" : "walk");
+      else pe.ctl.play("idle");
+    }
+  } else {
+    if (G.playerMoving) {
+      pe.walkPhase += dt * 10;
+      pe.mesh.position.y = py + Math.abs(Math.sin(pe.walkPhase)) * 0.12;
+      pe.mesh.rotation.x = 0.06;
+    } else pe.mesh.rotation.x = 0;
+    if (pe.atkT > 0) {
+      pe.atkT -= dt;
+      const w = pe.mesh.userData.weapon;
+      if (w) w.rotation.x = -Math.sin((0.28 - pe.atkT) / 0.28 * Math.PI) * 1.4;
+    } else if (pe.mesh.userData.weapon) pe.mesh.userData.weapon.rotation.x = 0;
+  }
 
   // mobs
   for (const mob of G.mobs) {

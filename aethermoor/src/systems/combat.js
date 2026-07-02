@@ -421,6 +421,7 @@ export function damagePlayer(mob, raw, element = "phys") {
   G.player.hp -= dmg;
   emit("floater", { x: G.player.pos.x, z: G.player.pos.z, y: 2.2, text: `-${dmg}`, cls: crit ? "takencrit" : "taken" });
   emit("sfx", { type: "hurt" });
+  emit("playerHurt");
   emit("hudDirty");
 
   if (element === "cold" && !s.specials.has("juggernaut")) G.playerChillUntil = G.now + 1.5;
