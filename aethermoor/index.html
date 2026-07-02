@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Aethermoor — Isle of Brightshore</title>
+  <meta name="description" content="Aethermoor: a browser MMO vertical slice — Flyff's nostalgic tab-target grind meets Path of Exile's build depth." />
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🗡️</text></svg>" />
+</head>
+<body>
+  <canvas id="game"></canvas>
+  <div id="plates"></div>
+  <div id="floaters"></div>
+
+  <div id="ui">
+    <div id="player-frame" class="frame">
+      <div class="frame-head"><span id="pf-name"></span><span id="pf-level"></span></div>
+      <div class="bar hp"><div id="pf-hp" class="bar-in"></div><span id="pf-hp-t" class="bar-t"></span></div>
+      <div class="bar mp"><div id="pf-mp" class="bar-in"></div><span id="pf-mp-t" class="bar-t"></span></div>
+      <div class="bar xp"><div id="pf-xp" class="bar-in"></div><span id="pf-xp-t" class="bar-t"></span></div>
+      <div id="buffs"></div>
+    </div>
+
+    <div id="target-frame" class="frame" style="display:none">
+      <div class="frame-head"><span id="tf-name"></span><span id="tf-level"></span></div>
+      <div class="bar hp"><div id="tf-hp" class="bar-in"></div><span id="tf-hp-t" class="bar-t"></span></div>
+    </div>
+
+    <div id="minimap">
+      <canvas id="minimap-cv" width="148" height="148"></canvas>
+      <div id="zone-name"></div>
+      <div id="clock"></div>
+    </div>
+
+    <div id="quest-tracker"></div>
+
+    <div id="hotbar"></div>
+
+    <div id="gold-display">🪙 <span id="gold-amt">0</span></div>
+
+    <div id="chat">
+      <div id="chat-lines"></div>
+      <input id="chat-input" placeholder="Press Enter to chat…" maxlength="120" />
+    </div>
+
+    <div id="ui-error"></div>
+    <div id="craft-cursor"></div>
+    <div id="windows"></div>
+    <div id="tooltip" style="display:none"></div>
+  </div>
+
+  <div id="death-overlay" style="display:none">
+    <div class="death-box">
+      <h2>You have fallen…</h2>
+      <p id="death-text"></p>
+      <button id="respawn-btn">Return to Brightshore</button>
+    </div>
+  </div>
+
+  <div id="charselect">
+    <div class="cs-inner">
+      <h1>AETHERMOOR</h1>
+      <p class="cs-sub">Isle of Brightshore — a vertical slice</p>
+      <div id="cs-continue" style="display:none">
+        <button id="cs-continue-btn" class="cs-big"></button>
+        <p class="cs-or">— or start anew (erases the old save) —</p>
+      </div>
+      <div class="cs-classes" id="cs-classes"></div>
+      <div class="cs-name-row">
+        <input id="cs-name" placeholder="Character name" maxlength="16" />
+        <button id="cs-start" class="cs-big" disabled>Enter the World</button>
+      </div>
+      <p class="cs-hint">WASD move · click to move/target · Tab target · 1-6 skills · Q/E potions · Z loot · B bag · K skills · P passives · L quests · H help</p>
+    </div>
+  </div>
+
+  <script type="module" src="/src/main.js"></script>
+</body>
+</html>
