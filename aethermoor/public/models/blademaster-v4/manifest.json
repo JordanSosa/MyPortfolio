@@ -1,0 +1,11 @@
+{
+  "name": "blademaster-v4",
+  "tasks": {
+    "generate": "bab69b13-0b18-473b-bae2-edb0ee01284b"
+  },
+  "files": {
+    "base": "base.glb"
+  },
+  "anims": {},
+  "prompt": "anime MMORPG hero boy, slender teen proportions five heads tall, large expressive anime eyes, elaborate windswept two-tone auburn hair, ornate red and gold fantasy tunic with small shoulder armor and belt pouches, fingerless gloves, knee-high boots, empty hands, symmetrical T-pose, cel shaded anime style, low poly game character, vibrant saturated colors"
+}
