@@ -129,7 +129,7 @@ function frame(t) {
     if (saveAcc > 10) { saveAcc = 0; save(); }
   }
 
-  updateDayNight(G.dayT);
+  updateDayNight(G.dayT, dt);
   G.three.renderer.render(G.three.scene, G.three.camera);
 }
 requestAnimationFrame(frame);

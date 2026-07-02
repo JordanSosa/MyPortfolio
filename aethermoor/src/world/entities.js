@@ -10,133 +10,240 @@ import { RARITIES } from "../data/items.js";
 import { rng } from "../core/rng.js";
 import { on, emit } from "../core/events.js";
 import { terrainHeight } from "./scene.js";
+import { toon, glowTexture } from "./toon.js";
 import { mobMaxHp } from "../systems/combat.js";
 import { availableFrom, turninsFor } from "../systems/quests.js";
 
 const ELEM_HEX = { phys: 0xd8d8e0, fire: 0xff7a45, cold: 0x7ad4ff, light: 0xffe45c, poison: 0x8fd45c };
 
 // ---------------- mesh builders ----------------
-function lam(hex, opts = {}) { return new THREE.MeshLambertMaterial({ color: hex, ...opts }); }
+const lam = toon; // cel-shaded everywhere
 
-export function buildHumanoid(bodyHex, headHex, weaponType, scale = 1, accentHex = 0x333344) {
-  const g = new THREE.Group();
-  const body = new THREE.Mesh(new THREE.CapsuleGeometry(0.42, 0.6, 4, 8), lam(bodyHex));
-  body.position.y = 0.85;
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.42, 12, 10), lam(headHex));
-  head.position.y = 1.75;
-  const eyeMat = lam(0x22222a);
-  for (const s of [-1, 1]) {
-    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.06, 6, 6), eyeMat);
-    eye.position.set(0.15 * s, 1.8, 0.36);
-    g.add(eye);
+const castAll = (g) => {
+  g.traverse((o) => { if (o.isMesh && !o.userData.noShadow) o.castShadow = true; });
+  return g;
+};
+
+// Big anime eyes with highlights + blush — the chibi face kit.
+function addFace(g, y, z, s = 1, eyeHex = 0x2a2438) {
+  const eyeMat = lam(eyeHex);
+  const hiMat = toon(0xffffff, { emissive: 0xffffff, emissiveIntensity: 0.6 });
+  const blushMat = toon(0xf59aa8, { transparent: true, opacity: 0.85 });
+  for (const side of [-1, 1]) {
+    const eye = new THREE.Mesh(new THREE.SphereGeometry(0.105 * s, 8, 8), eyeMat);
+    eye.position.set(0.19 * s * side, y, z);
+    eye.scale.set(0.8, 1.25, 0.55);
+    eye.userData.noShadow = true;
+    const hi = new THREE.Mesh(new THREE.SphereGeometry(0.035 * s, 6, 6), hiMat);
+    hi.position.set(0.19 * s * side - 0.035 * s, y + 0.045 * s, z + 0.05 * s);
+    hi.userData.noShadow = true;
+    const blush = new THREE.Mesh(new THREE.SphereGeometry(0.06 * s, 6, 6), blushMat);
+    blush.position.set(0.3 * s * side, y - 0.12 * s, z - 0.03 * s);
+    blush.scale.set(1, 0.55, 0.35);
+    blush.userData.noShadow = true;
+    g.add(eye, hi, blush);
   }
-  const hair = new THREE.Mesh(new THREE.SphereGeometry(0.44, 10, 8, 0, Math.PI * 2, 0, Math.PI / 2.2), lam(accentHex));
-  hair.position.y = 1.82;
-  g.add(body, head, hair);
+}
+
+export function buildHumanoid(bodyHex, headHex, weaponType, scale = 1, accentHex = 0x333344, opts = {}) {
+  const g = new THREE.Group();
+
+  // chibi: squat egg body, oversized head
+  const body = new THREE.Mesh(new THREE.SphereGeometry(0.44, 12, 10), lam(bodyHex));
+  body.position.y = 0.62;
+  body.scale.set(0.95, 1.15, 0.85);
+  // little trim collar
+  const collar = new THREE.Mesh(new THREE.TorusGeometry(0.3, 0.07, 6, 14), lam(accentHex));
+  collar.position.y = 1.02;
+  collar.rotation.x = Math.PI / 2;
+  // feet
+  for (const side of [-1, 1]) {
+    const foot = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), lam(0x6e5138));
+    foot.position.set(0.2 * side, 0.12, 0.06);
+    foot.scale.set(1, 0.7, 1.3);
+    g.add(foot);
+  }
+  const head = new THREE.Mesh(new THREE.SphereGeometry(0.55, 14, 12), lam(headHex));
+  head.position.y = 1.62;
+  head.scale.set(1, 0.95, 0.95);
+  addFace(g, 1.62, 0.5, 1);
+
+  // hair: cap + swept spikes
+  const hairMat = lam(accentHex);
+  const hair = new THREE.Mesh(new THREE.SphereGeometry(0.58, 12, 9, 0, Math.PI * 2, 0, Math.PI / 1.9), hairMat);
+  hair.position.y = 1.72;
+  hair.scale.set(1, 0.9, 1);
+  g.add(hair);
+  if (opts.spikes !== false) {
+    for (let i = 0; i < 5; i++) {
+      const spike = new THREE.Mesh(new THREE.ConeGeometry(0.11, 0.36, 6), hairMat);
+      const a = (i / 5) * Math.PI * 1.7 + 0.7;
+      spike.position.set(Math.sin(a) * 0.42, 2.06 + (i % 2) * 0.06, Math.cos(a) * 0.42 - 0.12);
+      spike.rotation.set(Math.cos(a) * 0.7, 0, -Math.sin(a) * 0.7);
+      spike.userData.noShadow = true;
+      g.add(spike);
+    }
+  }
+  g.add(body, collar, head);
 
   let weapon = null;
   if (weaponType === "sword") {
     weapon = new THREE.Group();
-    const blade = new THREE.Mesh(new THREE.BoxGeometry(0.09, 1.1, 0.22), lam(0xd8dde8));
-    blade.position.y = 0.65;
-    const hilt = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.08, 0.08), lam(0xc9a24b));
-    hilt.position.y = 0.1;
-    weapon.add(blade, hilt);
-    weapon.position.set(0.55, 0.9, 0.1);
-    weapon.rotation.z = -0.3;
+    const blade = new THREE.Mesh(new THREE.BoxGeometry(0.1, 1.15, 0.24), toon(0xe8edf8, { emissive: 0x8899bb, emissiveIntensity: 0.15 }));
+    blade.position.y = 0.68;
+    const tip = new THREE.Mesh(new THREE.ConeGeometry(0.13, 0.25, 4), toon(0xe8edf8));
+    tip.position.y = 1.35;
+    tip.rotation.y = Math.PI / 4;
+    const hilt = new THREE.Mesh(new THREE.BoxGeometry(0.36, 0.09, 0.12), lam(0xe8b845));
+    hilt.position.y = 0.12;
+    const pommel = new THREE.Mesh(new THREE.SphereGeometry(0.07, 6, 6), lam(0xe8b845));
+    pommel.position.y = -0.05;
+    weapon.add(blade, tip, hilt, pommel);
+    weapon.position.set(0.6, 0.75, 0.1);
+    weapon.rotation.z = -0.35;
   } else if (weaponType === "staff") {
     weapon = new THREE.Group();
-    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 1.7, 6), lam(0x8a6444));
-    const orb = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 8), lam(0x8f7ff5, { emissive: 0x6f5fd5, emissiveIntensity: 0.7 }));
-    orb.position.y = 0.9;
-    weapon.add(shaft, orb);
-    weapon.position.set(0.55, 0.9, 0.1);
+    const shaft = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.07, 1.8, 7), lam(0x8a6444));
+    const cradle = new THREE.Mesh(new THREE.TorusGeometry(0.17, 0.04, 6, 12), lam(0xe8b845));
+    cradle.position.y = 0.95;
+    const orb = new THREE.Mesh(new THREE.SphereGeometry(0.16, 10, 8), toon(0x9f8ff8, { emissive: 0x7f5fe5, emissiveIntensity: 1 }));
+    orb.position.y = 0.95;
+    const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture("#b8a4ff"), blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.7 }));
+    glow.position.y = 0.95;
+    glow.scale.set(0.9, 0.9, 1);
+    weapon.add(shaft, cradle, orb, glow);
+    weapon.position.set(0.6, 0.75, 0.1);
   } else if (weaponType === "bow") {
-    weapon = new THREE.Mesh(new THREE.TorusGeometry(0.55, 0.045, 6, 12, Math.PI), lam(0x8a6444));
-    weapon.position.set(0.55, 1.0, 0.15);
+    weapon = new THREE.Group();
+    const arc = new THREE.Mesh(new THREE.TorusGeometry(0.58, 0.05, 6, 14, Math.PI), lam(0xa87b4f));
+    const grip = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.06, 0.25, 6), lam(0xe8b845));
+    weapon.add(arc, grip);
+    weapon.position.set(0.6, 0.85, 0.15);
     weapon.rotation.z = Math.PI / 2;
   }
   if (weapon) g.add(weapon);
   g.userData.weapon = weapon;
 
-  // blob shadow
-  const shadow = new THREE.Mesh(new THREE.CircleGeometry(0.55, 12).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x1e3020, transparent: true, opacity: 0.28 }));
+  // soft blob shadow (real shadows layer on top)
+  const shadow = new THREE.Mesh(new THREE.CircleGeometry(0.5, 12).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x1e3020, transparent: true, opacity: 0.22 }));
   shadow.position.y = 0.05;
+  shadow.userData.noShadow = true;
   g.add(shadow);
   g.scale.setScalar(scale);
-  return g;
+  return castAll(g);
 }
 
 function buildMobMesh(sp) {
   const g = new THREE.Group();
   const s = sp.size;
   if (sp.shape === "puff") {
-    const body = new THREE.Mesh(new THREE.SphereGeometry(0.55, 12, 10), lam(sp.color));
+    const body = new THREE.Mesh(new THREE.SphereGeometry(0.55, 14, 12), lam(sp.color));
     body.position.y = 0.55;
-    for (const side of [-1, 1]) {
-      const ear = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.5, 6), lam(sp.accent));
-      ear.position.set(0.28 * side, 1.1, 0);
-      g.add(ear);
-      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.07, 6, 6), lam(0x22222a));
-      eye.position.set(0.2 * side, 0.65, 0.48);
-      g.add(eye);
+    // fluff tufts
+    for (let i = 0; i < 4; i++) {
+      const tuft = new THREE.Mesh(new THREE.SphereGeometry(0.16, 8, 6), lam(sp.accent));
+      const a = i * 1.9;
+      tuft.position.set(Math.sin(a) * 0.42, 0.85 + (i % 2) * 0.14, Math.cos(a) * 0.38 - 0.15);
+      tuft.userData.noShadow = true;
+      g.add(tuft);
     }
-    g.add(body);
-  } else if (sp.shape === "boar") {
-    const body = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.85, 0.9), lam(sp.color));
-    body.position.y = 0.75;
-    const snout = new THREE.Mesh(new THREE.BoxGeometry(0.45, 0.45, 0.5), lam(sp.accent));
-    snout.position.set(0, 0.6, 0.75);
-    const mane = new THREE.Mesh(new THREE.BoxGeometry(1.1, 0.3, 0.6), lam(sp.accent));
-    mane.position.set(0, 1.25, -0.1);
     for (const side of [-1, 1]) {
-      const tusk = new THREE.Mesh(new THREE.ConeGeometry(0.07, 0.32, 5), lam(0xf3ead2));
-      tusk.position.set(0.22 * side, 0.55, 0.95);
-      tusk.rotation.x = 0.7;
-      g.add(tusk);
+      const ear = new THREE.Mesh(new THREE.ConeGeometry(0.17, 0.55, 7), lam(sp.accent));
+      ear.position.set(0.3 * side, 1.15, 0);
+      ear.rotation.z = -side * 0.25;
+      const inner = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.3, 6), lam(0xffe0ee));
+      inner.position.set(0.3 * side, 1.1, 0.06);
+      inner.rotation.z = -side * 0.25;
+      inner.userData.noShadow = true;
+      g.add(ear, inner);
+    }
+    addFace(g, 0.62, 0.5, 0.95);
+    const tail = new THREE.Mesh(new THREE.SphereGeometry(0.18, 8, 6), lam(0xffffff));
+    tail.position.set(0, 0.5, -0.55);
+    g.add(body, tail);
+  } else if (sp.shape === "boar") {
+    const body = new THREE.Mesh(new THREE.SphereGeometry(0.8, 12, 10), lam(sp.color));
+    body.position.y = 0.72;
+    body.scale.set(1, 0.85, 1.15);
+    const snout = new THREE.Mesh(new THREE.SphereGeometry(0.26, 10, 8), lam(0xd89aa0));
+    snout.position.set(0, 0.55, 0.92);
+    snout.scale.set(1.15, 0.8, 0.7);
+    for (const side of [-1, 1]) {
+      const nostril = new THREE.Mesh(new THREE.SphereGeometry(0.045, 6, 6), lam(0x8a5560));
+      nostril.position.set(0.09 * side, 0.55, 1.1);
+      nostril.userData.noShadow = true;
+      const ear = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.4, 6), lam(sp.accent));
+      ear.position.set(0.4 * side, 1.28, 0.2);
+      ear.rotation.z = -side * 0.5;
+      const tusk = new THREE.Mesh(new THREE.ConeGeometry(0.08, 0.36, 6), lam(0xfff3dd));
+      tusk.position.set(0.28 * side, 0.5, 0.95);
+      tusk.rotation.x = -1;
+      g.add(nostril, ear, tusk);
       for (const fz of [-0.45, 0.45]) {
-        const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.13, 0.6, 6), lam(sp.accent));
-        leg.position.set(0.35 * side, 0.3, fz);
+        const leg = new THREE.Mesh(new THREE.CylinderGeometry(0.12, 0.15, 0.55, 7), lam(sp.accent));
+        leg.position.set(0.36 * side, 0.28, fz);
         g.add(leg);
       }
     }
+    addFace(g, 0.88, 0.85, 0.9);
+    const mane = new THREE.Mesh(new THREE.SphereGeometry(0.55, 10, 8, 0, Math.PI * 2, 0, Math.PI / 2), lam(sp.accent));
+    mane.position.set(0, 1.05, -0.15);
+    mane.scale.set(1.05, 0.8, 1.3);
     g.add(body, snout, mane);
   } else if (sp.shape === "shroom") {
-    const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.45, 0.9, 8), lam(0xf3ead2));
-    stem.position.y = 0.45;
-    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.75, 10, 8, 0, Math.PI * 2, 0, Math.PI / 2), lam(sp.color));
-    cap.position.y = 0.85;
-    cap.scale.y = 0.75;
-    for (let i = 0; i < 3; i++) {
-      const spot = new THREE.Mesh(new THREE.SphereGeometry(0.11, 6, 6), lam(0xfff6e8));
-      const a = i * 2.1;
-      spot.position.set(Math.sin(a) * 0.45, 1.05, Math.cos(a) * 0.45);
+    const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.34, 0.48, 0.95, 10), lam(0xfff3dd));
+    stem.position.y = 0.48;
+    const cap = new THREE.Mesh(new THREE.SphereGeometry(0.8, 12, 9, 0, Math.PI * 2, 0, Math.PI / 2), lam(sp.color));
+    cap.position.y = 0.88;
+    cap.scale.y = 0.8;
+    const capRim = new THREE.Mesh(new THREE.TorusGeometry(0.72, 0.09, 8, 18), lam(sp.accent));
+    capRim.position.y = 0.9;
+    capRim.rotation.x = Math.PI / 2;
+    for (let i = 0; i < 4; i++) {
+      const spot = new THREE.Mesh(new THREE.SphereGeometry(0.1 + (i % 2) * 0.05, 6, 6), lam(0xfff6e8));
+      const a = i * 1.7 + 0.4;
+      spot.position.set(Math.sin(a) * 0.45, 1.12 + (i % 2) * 0.1, Math.cos(a) * 0.45);
+      spot.userData.noShadow = true;
       g.add(spot);
     }
-    const eyeMat = lam(0x22222a);
-    for (const side of [-1, 1]) {
-      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.06, 6, 6), eyeMat);
-      eye.position.set(0.16 * side, 0.62, 0.42);
-      g.add(eye);
-    }
-    g.add(stem, cap);
+    addFace(g, 0.62, 0.44, 0.9);
+    g.add(stem, cap, capRim);
   } else if (sp.shape === "wisp") {
-    const core = new THREE.Mesh(new THREE.SphereGeometry(0.4, 12, 10), lam(sp.color, { emissive: sp.accent, emissiveIntensity: 1.2, transparent: true, opacity: 0.9 }));
+    const core = new THREE.Mesh(new THREE.SphereGeometry(0.4, 12, 10), toon(sp.color, { emissive: sp.accent, emissiveIntensity: 1.4, transparent: true, opacity: 0.95 }));
     core.position.y = 1.3;
-    const halo = new THREE.Mesh(new THREE.SphereGeometry(0.62, 10, 8), lam(sp.accent, { transparent: true, opacity: 0.25 }));
-    halo.position.y = 1.3;
-    g.add(core, halo);
-  } else { // humanoid
-    const inner = buildHumanoid(sp.color, sp.color, sp.id === "mystic" ? "staff" : "sword", 1, sp.accent);
-    // red eyes
-    inner.traverse((o) => { });
+    core.userData.noShadow = true;
+    const glow = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTexture("#aee6ff"), blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.8 }));
+    glow.position.y = 1.3;
+    glow.scale.set(2.4, 2.4, 1);
+    // little trailing flames
+    for (let i = 0; i < 3; i++) {
+      const wispTail = new THREE.Mesh(new THREE.ConeGeometry(0.1, 0.4, 6), toon(sp.accent, { emissive: sp.accent, emissiveIntensity: 1, transparent: true, opacity: 0.7 }));
+      wispTail.position.set((i - 1) * 0.22, 0.95, -0.15);
+      wispTail.rotation.x = Math.PI;
+      wispTail.userData.noShadow = true;
+      g.add(wispTail);
+    }
+    addFace(g, 1.36, 0.34, 0.8, 0x1a3448);
+    g.add(core, glow);
+  } else { // humanoid raiders/mystics — hooded, glowing eyes
+    const inner = buildHumanoid(sp.color, sp.color, sp.id === "mystic" ? "staff" : "sword", 1, sp.accent, { spikes: false });
+    for (const side of [-1, 1]) {
+      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.06, 6, 6), toon(0xff5c5c, { emissive: 0xff3b30, emissiveIntensity: 1.5 }));
+      eye.position.set(0.19 * side, 1.62, 0.54);
+      eye.userData.noShadow = true;
+      inner.add(eye);
+    }
+    const hood = new THREE.Mesh(new THREE.ConeGeometry(0.6, 0.75, 9), lam(sp.accent));
+    hood.position.y = 2.12;
+    inner.add(hood);
     g.add(inner);
   }
-  const shadow = new THREE.Mesh(new THREE.CircleGeometry(0.6, 12).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x1e3020, transparent: true, opacity: 0.28 }));
+  const shadow = new THREE.Mesh(new THREE.CircleGeometry(0.6, 12).rotateX(-Math.PI / 2), new THREE.MeshBasicMaterial({ color: 0x1e3020, transparent: true, opacity: 0.22 }));
   shadow.position.y = 0.04;
+  shadow.userData.noShadow = true;
   g.add(shadow);
   g.scale.setScalar(s);
-  return g;
+  return castAll(g);
 }
 
 // ---------------- spawn ----------------
@@ -270,8 +377,13 @@ function ensureDropVisual(drop) {
   beam.position.set(drop.pos.x, y + 1.6, drop.pos.z);
   const gem = new THREE.Mesh(new THREE.OctahedronGeometry(0.28, 0), new THREE.MeshBasicMaterial({ color: hex }));
   gem.position.set(drop.pos.x, y + 0.7, drop.pos.z);
-  G.three.scene.add(beam, gem);
-  dropVisuals.set(drop, { beam, gem });
+  const sparkle = new THREE.Sprite(new THREE.SpriteMaterial({
+    map: glowTexture("#" + hex.getHexString()), blending: THREE.AdditiveBlending, depthWrite: false, opacity: 0.7,
+  }));
+  sparkle.position.set(drop.pos.x, y + 0.7, drop.pos.z);
+  sparkle.scale.set(1.6, 1.6, 1);
+  G.three.scene.add(beam, gem, sparkle);
+  dropVisuals.set(drop, { beam, gem, sparkle });
 }
 
 export function pickupDrop(drop) {
@@ -507,7 +619,7 @@ export function updateEntities(dt) {
   for (const d of G.drops.slice()) {
     if (G.now > d.despawnAt) {
       const vis = dropVisuals.get(d);
-      if (vis) { th.scene.remove(vis.beam, vis.gem); dropVisuals.delete(d); }
+      if (vis) { th.scene.remove(vis.beam, vis.gem, vis.sparkle); dropVisuals.delete(d); }
       G.drops.splice(G.drops.indexOf(d), 1);
       continue;
     }
@@ -517,7 +629,7 @@ export function updateEntities(dt) {
     vis.gem.position.y = terrainHeight(d.pos.x, d.pos.z) + 0.7 + Math.sin(G.now * 3 + d.at) * 0.1;
   }
   for (const [d, vis] of dropVisuals) {
-    if (!G.drops.includes(d)) { th.scene.remove(vis.beam, vis.gem); dropVisuals.delete(d); }
+    if (!G.drops.includes(d)) { th.scene.remove(vis.beam, vis.gem, vis.sparkle); dropVisuals.delete(d); }
   }
 
   // projectiles
