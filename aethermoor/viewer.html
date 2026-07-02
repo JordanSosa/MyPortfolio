@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Aethermoor model viewer</title>
+  <style>html,body{margin:0;height:100%;background:#87c8ee}canvas{display:block}</style>
+</head>
+<body>
+  <script type="module">
+    // Dev-only GLB inspector: /viewer.html?model=/models/x/anim_walk.glb&angle=0.6&t=0.4
+    import * as THREE from "three";
+    import { GLTFLoader } from "three/addons/loaders/GLTFLoader.js";
+
+    const q = new URLSearchParams(location.search);
+    const modelUrl = q.get("model");
+    const angle = parseFloat(q.get("angle") || "0.5");
+    const animTime = parseFloat(q.get("t") || "0");
+    const toon = q.get("toon") === "1";
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    document.body.appendChild(renderer.domElement);
+
+    const scene = new THREE.Scene();
+    scene.background = new THREE.Color(0x87c8ee);
+    scene.add(new THREE.HemisphereLight(0xffffff, 0x99bb88, 1.4));
+    const sun = new THREE.DirectionalLight(0xfff3d6, 1.8);
+    sun.position.set(3, 6, 4);
+    scene.add(sun);
+    const ground = new THREE.Mesh(new THREE.CircleGeometry(6, 32).rotateX(-Math.PI / 2),
+      new THREE.MeshToonMaterial({ color: 0x8fd48a }));
+    scene.add(ground);
+
+    const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.01, 100);
+    let mixer = null;
+    const clock = new THREE.Clock();
+
+    window.__ready = false;
+    window.__error = null;
+    window.__clips = [];
+
+    new GLTFLoader().load(modelUrl, (gltf) => {
+      const obj = gltf.scene;
+      // normalize: stand on ground, ~1.8 units tall
+      const box = new THREE.Box3().setFromObject(obj);
+      const size = box.getSize(new THREE.Vector3());
+      const scale = 1.8 / Math.max(size.y, 0.001);
+      obj.scale.setScalar(scale);
+      const box2 = new THREE.Box3().setFromObject(obj);
+      obj.position.y -= box2.min.y;
+      obj.position.x -= (box2.min.x + box2.max.x) / 2;
+      obj.position.z -= (box2.min.z + box2.max.z) / 2;
+      if (toon) {
+        const ramp = (() => {
+          const d = new Uint8Array([90, 150, 215, 255]);
+          const t = new THREE.DataTexture(d, 4, 1, THREE.RedFormat);
+          t.minFilter = t.magFilter = THREE.NearestFilter;
+          t.needsUpdate = true;
+          return t;
+        })();
+        obj.traverse((o) => {
+          if (o.isMesh && o.material) {
+            const src = o.material;
+            o.material = new THREE.MeshToonMaterial({ map: src.map || null, color: src.color || 0xffffff, gradientMap: ramp });
+            o.material.skinning = true;
+          }
+        });
+      }
+      scene.add(obj);
+
+      window.__clips = gltf.animations.map((a) => ({ name: a.name, dur: a.duration }));
+      if (gltf.animations.length) {
+        mixer = new THREE.AnimationMixer(obj);
+        const action = mixer.clipAction(gltf.animations[0]);
+        action.play();
+        if (animTime > 0) mixer.update(animTime);
+      }
+      camera.position.set(Math.sin(angle) * 3.4, 1.7, Math.cos(angle) * 3.4);
+      camera.lookAt(0, 0.9, 0);
+      window.__ready = true;
+    }, undefined, (err) => { window.__error = String(err?.message || err); });
+
+    renderer.setAnimationLoop(() => {
+      const dt = clock.getDelta();
+      if (mixer && !q.has("t")) mixer.update(dt);
+      renderer.render(scene, camera);
+    });
+  </script>
+</body>
+</html>
