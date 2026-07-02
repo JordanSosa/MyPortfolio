@@ -119,9 +119,14 @@ async function rig(name, genTaskId, rigType = "biped") {
   if (riggable === false) throw new Error("Model is not riggable — regenerate with clearer limbs/T-pose.");
 
   console.log(`== rig: ${name} (${rigType})`);
-  const { task_id } = apiPost("/animations/rig", {
-    input: genTaskId, model: "rig-v2.0", rig_type: rigType, spec: "mixamo", out_format: "glb",
-  });
+  // v1.0: biped-only, 90+ presets; v2.5: non-biped creatures (quadruped etc.)
+  // NOTE: default (tripo) skeleton spec required for preset retargeting —
+  // mixamo-spec rigs fail retarget tasks instantly.
+  const rigModel = rigType === "biped" ? "v1.0-20240301" : "v2.5-20260210";
+  const payload = { input: genTaskId, model: rigModel, rig_type: rigType, out_format: "glb" };
+  const spec = process.argv.includes("--spec") ? process.argv[process.argv.indexOf("--spec") + 1] : null;
+  if (spec) payload.spec = spec;
+  const { task_id } = apiPost("/animations/rig", payload);
   const task = await poll(task_id, "rig");
   const dir = join(ROOT, "public/models", name);
   if (task.output?.model_url) download(task.output.model_url, join(dir, "rigged.glb"));

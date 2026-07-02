@@ -1,0 +1,27 @@
+{
+  "name": "blademaster",
+  "tasks": {
+    "generate": "e20fdd28-7e4a-4b0d-981e-91bd083f6b11",
+    "rigCheck": "b1eca51f-53c1-449d-a9e7-9dc0a5711b57",
+    "rig": "4cefe152-8970-42f4-866d-71bddfac0f28",
+    "retarget_0": "f299bea3-5b34-4231-841c-82f089144cf0"
+  },
+  "files": {
+    "base": "base.glb",
+    "rigged": "rigged.glb"
+  },
+  "anims": {
+    "idle": "anim_idle.glb",
+    "batch0": {
+      "file": "anim_batch0.glb",
+      "presets": [
+        "walk",
+        "run",
+        "slash",
+        "hurt"
+      ]
+    }
+  },
+  "prompt": "cute chibi anime warrior, oversized head, big expressive eyes, spiky dark brown hair, red tunic with gold trim, brown belt and small boots, empty hands, standing in T-pose, low poly game character, clean flat colors, bright pastel palette",
+  "rigType": "biped"
+}
