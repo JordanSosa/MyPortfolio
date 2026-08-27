@@ -17,6 +17,12 @@ Each project builds into its own sub-path; a landing page ties them together.
 | `/swallowed/` | [`swallowed/`](./swallowed/) | "Swallowed" — a first-person 3D journey through the digestive system (Vite + three.js + GSAP) |
 | `/aethermoor/` | [`aethermoor/`](./aethermoor/) | "Aethermoor" — a browser MMO vertical slice: Flyff × Path of Exile (Vite + three.js + WebAudio). See its [game design document](./aethermoor/GDD.md) |
 
+## Non-deployed folders
+
+| Path | What it is |
+| --- | --- |
+| [`business/`](./business/) | Operating pack for a low-touch Australian micro-SaaS — structure, task lists, runbooks. Documentation only; not part of the Pages build |
+
 ## How deployment works
 
 `.github/workflows/deploy-pages.yml` runs on every push to `master` that
