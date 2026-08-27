@@ -11,7 +11,7 @@ at that stage.
 ## Phase 0 — Decide *(1 week)*
 
 - [ ] Read `01-business-model.md`
-- [ ] Score three ideas with `03-idea-scorecard.md`, including one of your own
+- [ ] Score three ideas in [`worksheets/idea-scorecard.md`](./worksheets/idea-scorecard.md), including one of your own
 - [ ] Check the two automatic disqualifiers on the winner
 - [ ] Write the ICP in one sentence
 - [ ] Write the one-sentence product statement from `05`
@@ -25,6 +25,10 @@ at that stage.
 
 ## Phase 1 — Validate *(3 weeks, ~$250)*
 
+*Worksheets: [`prospect-list.md`](./worksheets/prospect-list.md),
+[`call-log.md`](./worksheets/call-log.md),
+[`validation-verdict.md`](./worksheets/validation-verdict.md)*
+
 ### Week 1
 - [ ] Build the 50-prospect list
 - [ ] Research three incumbents: pricing, features, complaints
@@ -35,7 +39,7 @@ at that stage.
 - [ ] Email 30 prospects requesting 15 minutes
 - [ ] Run 10 conversations
 - [ ] Log every call
-- [ ] Write the half-page verdict: is the pain real, urgent, budgeted?
+- [ ] Write the verdict: is the pain real, urgent, budgeted?
 
 ### Week 3
 - [ ] Register the domain
@@ -45,6 +49,8 @@ at that stage.
 - [ ] Go back to all 50 prospects
 - [ ] Post in the two places the ICP actually gathers
 - [ ] Optional: $150 of high-intent search ads
+
+- [ ] Complete [`worksheets/validation-verdict.md`](./worksheets/validation-verdict.md)
 
 > **GATE 1:** 5+ deposits, or 3 signed paid pilots. **No money = no build.**
 > → Phase 2.
@@ -175,6 +181,10 @@ at that stage.
 ## Phase 5 — Steady state *(ongoing, 10 hrs/week)*
 
 Switch to `10-operating-rhythm.md`. The task list is now a calendar.
+
+*Worksheets: [`support-log.md`](./worksheets/support-log.md),
+[`metrics.md`](./worksheets/metrics.md),
+[`decision-log.md`](./worksheets/decision-log.md)*
 
 ### Weekly
 - [ ] Metrics review — the six numbers

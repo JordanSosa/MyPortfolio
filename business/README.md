@@ -63,6 +63,12 @@ the order you need them.
 | [`18-risk-register.md`](./18-risk-register.md) | What kills this business, and the mitigation for each |
 | [`19-exit-plan.md`](./19-exit-plan.md) | Building it saleable from day one |
 
+**Worksheets — the files you actually fill in**
+
+| File | What it does |
+| --- | --- |
+| [`worksheets/`](./worksheets/) | Fillable artefacts the task list asks for: idea scorecard, prospect list, call log, validation verdict, support log, metrics tracker, decision log |
+
 ## Placeholders
 
 These appear throughout. Fill them once you have picked an idea:
@@ -80,7 +86,8 @@ These appear throughout. Fill them once you have picked an idea:
    weeks; a failed build costs six months.
 3. Work `15-task-list-master.md` top to bottom. It is the single source of
    truth for what is done.
-4. Once live, the only file you open regularly is `10-operating-rhythm.md`.
+4. Once live, the only files you open regularly are `10-operating-rhythm.md`
+   and the worksheets in [`worksheets/`](./worksheets/).
 
 ## A note on the numbers in here
 

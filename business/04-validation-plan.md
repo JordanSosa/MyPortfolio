@@ -25,7 +25,8 @@ writing:
       *"Australian accounting firms with 3–15 staff who do company secretarial
       work for 50+ client entities and currently track ASIC deadlines in a
       spreadsheet or in CAS 360."*
-- [ ] Build a list of **50 named prospects** in a spreadsheet: business name,
+- [ ] Build a list of **50 named prospects** in
+      [`worksheets/prospect-list.md`](./worksheets/prospect-list.md): business name,
       website, one decision-maker, email, source, notes. Public sources only —
       association directories, professional body member lists, LinkedIn,
       Google Maps.
@@ -62,8 +63,9 @@ diffuse. Stop and re-scope.
       what they pay, who decides, and what happens if nothing changes. **Do
       not describe your idea until the last two minutes**, and when you do,
       describe the outcome, not the software.
-- [ ] Log every call in a single doc: quotes, current tooling, current spend,
-      severity 1–5.
+- [ ] Log every call in [`worksheets/call-log.md`](./worksheets/call-log.md) —
+      it carries the question script, and the rule about not pitching until the
+      last two minutes.
 - [ ] After call 10, write half a page: is the pain real, urgent, and
       budgeted? Any two of three is enough. One of three is not.
 
@@ -95,6 +97,10 @@ diffuse. Stop and re-scope.
 **Cost: ~$20 domain + ~$150 optional ads.**
 
 ## Scoring day 21
+
+Fill in [`worksheets/validation-verdict.md`](./worksheets/validation-verdict.md)
+**before** you decide anything. Writing the numbers down first is what stops
+you negotiating with yourself afterwards.
 
 | Result | Meaning | Action |
 | --- | --- | --- |

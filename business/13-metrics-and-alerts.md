@@ -67,8 +67,10 @@ Do not build one. Use what you have:
 
 - **Stripe** gives MRR, churn and failed payments out of the box
 - **One SQL query** for signups, activation and usage
-- **A spreadsheet**, one row per month, updated monthly — this is your
-  historical record and the thing an acquirer will eventually ask for
+- **[`worksheets/metrics.md`](./worksheets/metrics.md)**, one row per month —
+  your historical record, and the thing an acquirer will eventually ask for.
+  Kept in the repo, its commit history is the proof it wasn't reconstructed
+  later
 - **A weekly email to yourself** with the six numbers, sent by a scheduled job.
   This turns the Monday review from a task into a read.
 

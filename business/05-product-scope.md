@@ -71,6 +71,10 @@ Every request gets logged. Nothing gets built on request.
 4. Charge for it if it only serves one segment: a higher tier, not a
    configuration flag.
 
+Record this and the other standing policies in
+[`worksheets/decision-log.md`](./worksheets/decision-log.md), so they are
+answers you already have rather than judgement calls made under pressure.
+
 The three-customer rule is the single highest-leverage policy in this pack. It
 prevents the most common failure mode of solo SaaS — a product that becomes an
 unmaintainable configuration matrix built by whoever emailed most recently.

@@ -97,8 +97,8 @@ handled by `14-runbooks.md`.
 
 ## The support log
 
-One row per ticket, in a spreadsheet. Two minutes a week to maintain, and it is
-where your roadmap comes from.
+One row per ticket, in [`worksheets/support-log.md`](./worksheets/support-log.md).
+Two minutes a week to maintain, and it is where your roadmap comes from.
 
 | Date | Customer | Category | Minutes | Root cause | Fix layer | Fixed? |
 | --- | --- | --- | --- | --- | --- | --- |

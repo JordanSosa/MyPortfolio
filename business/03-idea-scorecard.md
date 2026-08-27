@@ -80,6 +80,9 @@ Regardless of total, do not proceed if either is true:
 
 ## Blank scorecard
 
+Fillable version, with room for three ideas and the 20-names check:
+[`worksheets/idea-scorecard.md`](./worksheets/idea-scorecard.md).
+
 ```
 Idea: ......................................................
 ICP (one sentence): ........................................
