@@ -6,6 +6,7 @@ name: Deploy site to GitHub Pages
 #   /corp-sec-desk/   -> corp-sec-desk
 #   /swallowed/       -> swallowed
 #   /aethermoor/      -> aethermoor
+#   /bin-chicken/     -> bin-chicken
 on:
   push:
     branches: [master]
@@ -14,6 +15,7 @@ on:
       - "corp-sec-desk/**"
       - "swallowed/**"
       - "aethermoor/**"
+      - "bin-chicken/**"
       - ".github/workflows/deploy-pages.yml"
   workflow_dispatch:
 
@@ -43,6 +45,7 @@ jobs:
             corp-sec-desk/package-lock.json
             swallowed/package-lock.json
             aethermoor/package-lock.json
+            bin-chicken/package-lock.json
 
       - name: Build corp-sec-desk
         working-directory: corp-sec-desk
@@ -62,6 +65,12 @@ jobs:
         env:
           BASE_PATH: ${{ env.SITE_ROOT }}/aethermoor/
 
+      - name: Build bin-chicken
+        working-directory: bin-chicken
+        run: npm ci && npm run build
+        env:
+          BASE_PATH: ${{ env.SITE_ROOT }}/bin-chicken/
+
       - name: Assemble site
         run: |
           rm -rf _site
@@ -70,6 +79,7 @@ jobs:
           cp -r corp-sec-desk/dist _site/corp-sec-desk
           cp -r swallowed/dist _site/swallowed
           cp -r aethermoor/dist _site/aethermoor
+          cp -r bin-chicken/dist _site/bin-chicken
 
       - uses: actions/upload-pages-artifact@v3
         with:

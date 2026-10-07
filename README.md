@@ -15,12 +15,13 @@ Each project builds into its own sub-path; a landing page ties them together.
 | `/` | [`homepage/`](./homepage/) | Landing page linking to each project |
 | `/corp-sec-desk/` | [`corp-sec-desk/`](./corp-sec-desk/) | Fixed-fee ASIC corporate secretarial one-pager (Vite + three.js + GSAP) |
 | `/swallowed/` | [`swallowed/`](./swallowed/) | "Swallowed" — a first-person 3D journey through the digestive system (Vite + three.js + GSAP) |
+| `/bin-chicken/` | [`bin-chicken/`](./bin-chicken/) | "Bin Chicken" — a stealth arcade game: steal picnic food as an Australian white ibis (Vite + three.js + WebAudio) |
 | `/aethermoor/` | [`aethermoor/`](./aethermoor/) | "Aethermoor" — a browser MMO vertical slice: Flyff × Path of Exile (Vite + three.js + WebAudio). See its [game design document](./aethermoor/GDD.md) |
 
 ## How deployment works
 
 `.github/workflows/deploy-pages.yml` runs on every push to `master` that
-touches `homepage/`, `corp-sec-desk/`, `swallowed/`, or `aethermoor/`. It:
+touches `homepage/`, `corp-sec-desk/`, `swallowed/`, `aethermoor/`, or `bin-chicken/`. It:
 
 1. Builds each Vite project with its `BASE_PATH` set to its sub-path
    (e.g. `/MyPortfolio/swallowed/`) so asset URLs resolve correctly.
@@ -41,7 +42,7 @@ Pages must be enabled once at **Settings → Pages → Source: GitHub Actions**.
 ## Working on a project locally
 
 ```sh
-cd swallowed   # or corp-sec-desk
+cd swallowed   # or corp-sec-desk, aethermoor, bin-chicken
 npm install
 npm run dev
 ```

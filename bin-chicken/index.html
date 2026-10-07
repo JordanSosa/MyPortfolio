@@ -1,0 +1,102 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+  <title>Bin Chicken</title>
+  <meta name="description" content="Bin Chicken: a stealth arcade game. You are an Australian white ibis in a harbourside park, and every picnic is a heist." />
+  <meta name="theme-color" content="#9fd8f5" />
+  <script type="module" src="/src/main.js"></script>
+</head>
+<body data-phase="title">
+  <div id="stage" aria-hidden="true"></div>
+  <div id="fx" aria-hidden="true"></div>
+
+  <!-- In-game HUD -->
+  <div id="hud">
+    <div class="hud-score">
+      <span class="label">Score</span>
+      <span id="score" class="score">0</span>
+      <div id="combo" class="combo" hidden><span>x2 combo</span><i id="combo-bar"></i></div>
+    </div>
+    <div class="hud-timer"><span id="timer" class="timer">2:30</span></div>
+    <div class="hud-right">
+      <button type="button" id="mute-btn" class="chip" aria-pressed="false">Sound on</button>
+      <button type="button" id="pause-btn" class="chip" aria-label="Pause">Pause</button>
+    </div>
+    <div class="hud-flaps" aria-label="Flaps">
+      <span class="label">Flaps</span>
+      <span class="pip"></span><span class="pip"></span><span class="pip"></span>
+    </div>
+    <div id="hidden-tag" class="hidden-tag" hidden>Hidden in the bushes</div>
+    <div id="prompt" class="prompt" hidden>
+      <span id="prompt-text"></span>
+      <span id="hold" class="hold" hidden></span>
+    </div>
+  </div>
+
+  <!-- Touch controls -->
+  <div id="touch" aria-hidden="true">
+    <div id="stick-zone"></div>
+    <div class="stick"><div id="knob" class="knob"></div></div>
+    <div class="tbtns">
+      <button type="button" id="t-honk" class="tbtn small">Honk</button>
+      <button type="button" id="t-flap" class="tbtn">Flap</button>
+      <button type="button" id="t-grab" class="tbtn big">✋</button>
+    </div>
+  </div>
+
+  <!-- Title -->
+  <section id="title" class="screen">
+    <div class="card">
+      <p class="kicker">A harbourside heist</p>
+      <h1 class="logo">Bin<br />Chicken</h1>
+      <p class="blurb">You are an Australian white ibis. The park is full of picnics, and nobody is watching their chips. Mostly.</p>
+      <ul class="how">
+        <li><b>Sneak</b> up outside the yellow view cones and snatch food.</li>
+        <li><b>Scoff it</b> somewhere safe. Get caught and you drop it.</li>
+        <li><b>Raid bins</b> for scraps, and <b>hide in bushes</b> to lose a chaser.</li>
+        <li>Chain feeds within 10 seconds for a combo multiplier.</li>
+      </ul>
+      <dl class="keys">
+        <div><dt><kbd>WASD</kbd></dt><dd>Waddle</dd></div>
+        <div><dt><kbd>Shift</kbd></dt><dd>Run</dd></div>
+        <div><dt><kbd>E</kbd></dt><dd>Snatch / hold to eat</dd></div>
+        <div><dt><kbd>Space</kbd></dt><dd>Flap, hold to glide</dd></div>
+        <div><dt><kbd>Q</kbd></dt><dd>Honk</dd></div>
+        <div><dt><kbd>Esc</kbd></dt><dd>Pause</dd></div>
+      </dl>
+      <button type="button" id="start" class="cta">Start the feast</button>
+      <p id="best-title" class="best"></p>
+    </div>
+  </section>
+
+  <!-- Pause -->
+  <section id="pause" class="screen" hidden>
+    <div class="card small">
+      <h2 class="logo sm">Paused</h2>
+      <button type="button" id="resume" class="cta">Resume</button>
+      <button type="button" id="quit" class="ghost">Quit to title</button>
+    </div>
+  </section>
+
+  <!-- Results -->
+  <section id="over" class="screen" hidden>
+    <div class="card">
+      <p class="kicker">Time's up</p>
+      <p class="final"><span id="final-score">0</span><small>points</small></p>
+      <h2 id="rank-name" class="logo sm">Bin Chicken</h2>
+      <p id="rank-blurb" class="blurb"></p>
+      <ul class="stats">
+        <li><b id="stat-eaten">0</b><span>meals stolen</span></li>
+        <li><b id="stat-bins">0</b><span>bins raided</span></li>
+        <li><b id="stat-caught">0</b><span>times whacked</span></li>
+      </ul>
+      <p id="best" class="best"></p>
+      <button type="button" id="again" class="cta">Again</button>
+    </div>
+  </section>
+
+  <noscript><p class="noscript">Bin Chicken is a 3D browser game and needs JavaScript.</p></noscript>
+</body>
+</html>

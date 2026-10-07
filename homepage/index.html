@@ -4,7 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>Jordan Sosa — Interactive builds</title>
-  <meta name="description" content="A small collection of interactive web builds — a corporate-secretarial one-pager and a 3D journey through the digestive system." />
+  <meta name="description" content="A small collection of interactive web builds — browser games, a 3D journey through the digestive system and a corporate-secretarial one-pager." />
   <style>
     :root {
       --bg: #0e0f12;
@@ -100,6 +100,14 @@
         radial-gradient(60px 60px at 78% 22%, #ffd23e 0%, transparent 55%),
         linear-gradient(180deg, #7ec3ef 0%, #b7e3f7 55%, #6fb46f 100%);
     }
+    .thumb.binchicken {
+      background:
+        radial-gradient(26px 34px at 62% 52%, #f2eee3 0%, #f2eee3 90%, transparent 100%),
+        radial-gradient(9px 9px at 70% 30%, #1f1c1a 0%, #1f1c1a 90%, transparent 100%),
+        radial-gradient(40px 22px at 28% 70%, #d93a2f 0%, #d93a2f 60%, transparent 62%),
+        radial-gradient(30px 14px at 28% 58%, #f4c542 0%, #f4c542 60%, transparent 62%),
+        repeating-conic-gradient(#86c95f 0 25%, #79bd55 0 50%) 0 0 / 28px 28px;
+    }
     .thumb.swallowed {
       background:
         radial-gradient(120px 120px at 70% 120%, #fbfaf6 0%, transparent 45%),
@@ -159,6 +167,18 @@
     </header>
 
     <main class="projects">
+      <a class="card" href="./bin-chicken/">
+        <div class="thumb binchicken" aria-hidden="true"></div>
+        <h2>Bin Chicken</h2>
+        <p>A stealth arcade game: you're an Australian white ibis in a harbourside park. Slip past picnickers' view cones, snatch the hot chips, raid the bins, and outrun the BBQ dad.</p>
+        <div class="meta">
+          <span class="tag">three.js</span>
+          <span class="tag">WebAudio</span>
+          <span class="tag">Game</span>
+        </div>
+        <span class="go">Start the heist →</span>
+      </a>
+
       <a class="card" href="./aethermoor/">
         <div class="thumb aethermoor" aria-hidden="true"></div>
         <h2>Aethermoor</h2>
