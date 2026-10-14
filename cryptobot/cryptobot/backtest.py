@@ -68,7 +68,8 @@ class Result:
 def simulate(targets: pd.DataFrame, close: pd.DataFrame, adv_usd: pd.DataFrame,
              cost: CostModel | None = None, band: float = 0.0, lag: int = 0,
              delist_haircut: float = 0.10, start=None, end=None,
-             cash_rate: pd.Series | None = None, min_trade: float = 0.0) -> Result:
+             cash_rate: pd.Series | None = None, min_trade: float = 0.0,
+             max_participation: float | None = None) -> Result:
     cost = cost or CostModel()
     cols = targets.columns
     close = close.reindex(columns=cols)
@@ -91,6 +92,7 @@ def simulate(targets: pd.DataFrame, close: pd.DataFrame, adv_usd: pd.DataFrame,
     cr = (np.zeros(T) if cash_rate is None else
           cash_rate.reindex(close.index).ffill().fillna(0.0).values / 365.0)
     h = np.zeros(N)
+    equity = 1.0                                        # for the optional liquidity cap
     out_r = np.zeros(T)
     out_g = np.zeros(T)
     out_to = np.zeros(T)
@@ -121,6 +123,10 @@ def simulate(targets: pd.DataFrame, close: pd.DataFrame, adv_usd: pd.DataFrame,
             s = tgt.sum()
             if s > 1:
                 tgt = tgt / s
+            if max_participation is not None and cost.aum_usd > 0:
+                # no position larger than max_participation x the coin's daily volume
+                adv_t = np.where(np.isfinite(adv[t]), adv[t], 0.0)
+                tgt = np.minimum(tgt, max_participation * adv_t / (cost.aum_usd * equity))
             tgt = np.where(alive, tgt, h)               # cannot trade during a data gap
             diff = tgt - h
             trade = (np.abs(diff) > band) | ((tgt == 0) & (h > 0)) | ((h == 0) & (tgt > 0))
@@ -134,6 +140,7 @@ def simulate(targets: pd.DataFrame, close: pd.DataFrame, adv_usd: pd.DataFrame,
                 n_trades += int(trade.sum())
         out_g[t] = pnl
         out_r[t] = (1 + pnl) * (1 - cost_t) - 1
+        equity *= 1 + out_r[t]
         out_to[t] = to_t
         out_c[t] = cost_t
         W[t] = h

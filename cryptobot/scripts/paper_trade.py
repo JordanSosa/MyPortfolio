@@ -27,10 +27,11 @@ import pandas as pd
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
-from cryptobot.live import (LiveBroker, PaperAccount, already_done, append_csv,  # noqa: E402
-                            build_live_panel, check_fresh, history_days, latest_targets,
-                            load_strategy, mark_done, min_trade_of, now_utc, plan_orders,
-                            run_lock)
+from cryptobot.execution import liquidity_cap  # noqa: E402
+from cryptobot.live import (LiveBroker, PaperAccount, account_id, already_done,  # noqa: E402
+                            append_csv, build_live_panel, check_complete, check_fresh,
+                            claim_account, history_days, latest_targets, load_strategy,
+                            mark_done, min_trade_of, now_utc, plan_orders, run_lock)
 from cryptobot.strategy import EnsembleParams, single_asset_weights  # noqa: E402
 
 DEFAULT_STRATEGY = ROOT / "frozen_config_v4.json"
@@ -66,6 +67,8 @@ def main():
                     help="volatility target: conservative 20%%, balanced 35%% (frozen default), "
                          "growth 50%%, aggressive 75%%")
     ap.add_argument("--allow-stale", action="store_true", help="testing only")
+    ap.add_argument("--take-over", action="store_true",
+                    help="live: let this strategy setting take over an account run by another")
     a = ap.parse_args()
 
     cfg = ROOT / "configs" / f"{a.asset.upper()}.json" if a.asset else Path(a.strategy)
@@ -77,11 +80,20 @@ def main():
     tag = f"{a.exchange}-{a.asset.upper()}" if a.asset else f"{a.exchange}-{version_of(p)}"
     if not a.asset and a.risk != "balanced":
         tag += f"-{a.risk}"
-    out = ROOT / "reports" / ("live" if a.live else "paper") / tag
+    if a.live:
+        # one state directory (lock, last bar, owner) per real exchange ACCOUNT,
+        # whatever strategy setting is pointed at it
+        out = ROOT / "reports" / "live" / f"{a.exchange}-{account_id(os.environ['API_KEY'])}"
+    else:
+        out = ROOT / "reports" / "paper" / tag
 
     with run_lock(out / ".lock"):
         ex = None
         held: list[str] = []
+        acct = None
+        if not a.live:
+            acct = PaperAccount.load(out / "state.json", a.capital)
+            held = list(acct.units)
         if a.exchange == "binance-archive":
             if a.live:
                 raise SystemExit("--live needs a real exchange, not the archive")
@@ -96,10 +108,10 @@ def main():
             if ca:  # corporate / sandbox TLS proxies
                 ex.validateServerSsl = ca
             if a.live:
-                held = [f"{c}USDT" for c, q in ex.fetch_balance()["total"].items() if q and c != "USDT"]
-            elif (out / "state.json").exists():
-                held = list(json.loads((out / "state.json").read_text())["units"])
-            n = 0 if a.asset else 80
+                ex.load_markets()
+                held = [f"{c}USDT" for c, q in ex.fetch_balance()["total"].items()
+                        if q and c != "USDT" and f"{c}/USDT" in ex.markets]
+            n = 0 if a.asset else 150
             extra = held + ([a.asset.upper()] if a.asset else [])
             panel = build_live_panel(ex, n_symbols=n, days=history_days(p), extra=extra)
 
@@ -117,6 +129,9 @@ def main():
             return
         if not a.allow_stale:
             check_fresh(t)
+        # never trade on a partial panel (a failed BTC fetch would silently
+        # switch off the regime filter; a missing held coin mis-values the account)
+        check_complete(panel["close"], held, grace=acct.missing if acct else None)
         if already_done(out, t):
             print("already processed this bar; nothing to do")
             return
@@ -124,27 +139,37 @@ def main():
         tradable = prices.dropna().index
         last_known = panel["close"].ffill().iloc[-1]
         if a.live:
+            claim_account(out, tag, a.take_over)
             broker = LiveBroker(ex)
-            nav, cur = broker.positions(prices)
+            nav, cur = broker.positions(prices, min_trade_of(p))
+            if broker.dust:
+                print(f"dust (treated as zero): {broker.dust}")
+            if broker.unpriced_inactive:
+                print(f"WARNING held coins without an active market (not traded): "
+                      f"{broker.unpriced_inactive}")
+            target = liquidity_cap(target, adv, nav)
             deltas = plan_orders(target, cur, p.band, min_trade_of(p), tradable)
             fills = broker.execute(deltas, target, prices, nav)
-            nav, _ = broker.positions(prices)
         else:
-            acct = PaperAccount.load(out / "state.json", a.capital)
-            fills = acct.liquidate_missing(prices, last_known)
-            px = prices.dropna()
-            deltas = plan_orders(target, acct.weights(px), p.band, min_trade_of(p), tradable)
-            fills += acct.execute(deltas, px, adv)
+            fills = acct.update_gaps(prices, last_known, t)
+            nav = acct.nav(prices)
+            target = liquidity_cap(target, adv, nav)
+            deltas = plan_orders(target, acct.weights(prices), p.band, min_trade_of(p), tradable)
+            fills += acct.execute(deltas, prices.dropna(), adv)
             acct.save()
-            nav = acct.nav(px)
+        # record what happened BEFORE marking the bar done, so a crash below can
+        # never hide executed orders behind "already processed"
+        stamp = {"run_at": now_utc(), "bar": str(t.date()), "strategy": tag}
+        append_csv(out / "trades.csv", [{**stamp, **f} for f in fills])
+        append_csv(out / "targets.csv", [{**stamp, "symbol": s, "weight": round(float(w), 5)}
+                                         for s, w in target.items()])
         mark_done(out, t)
-
-    stamp = {"run_at": now_utc(), "bar": str(t.date())}
-    append_csv(out / "equity.csv", [{**stamp, "nav": round(nav, 2),
-                                     "exposure": round(float(target.sum()), 4)}])
-    append_csv(out / "trades.csv", [{**stamp, **f} for f in fills])
-    append_csv(out / "targets.csv", [{**stamp, "symbol": s, "weight": round(float(w), 5)}
-                                     for s, w in target.items()])
+        try:
+            nav = broker.positions(prices, min_trade_of(p))[0] if a.live else acct.nav(prices)
+        except Exception as e:  # noqa: BLE001 - NAV is informational after trading
+            print(f"post-trade NAV unavailable ({e}); logging pre-trade NAV")
+        append_csv(out / "equity.csv", [{**stamp, "nav": round(nav, 2),
+                                         "exposure": round(float(target.sum()), 4)}])
     print(f"NAV {nav:,.2f}  orders {len(fills)}")
 
 

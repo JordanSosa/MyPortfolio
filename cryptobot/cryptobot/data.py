@@ -33,8 +33,71 @@ COLS = ["open_time", "open", "high", "low", "close", "volume", "close_time",
 STABLES = {"USDC", "BUSD", "TUSD", "USDP", "PAX", "DAI", "FDUSD", "USDS", "USDSB", "SUSD",
            "UST", "USTC", "EUR", "GBP", "AUD", "TRY", "BRL", "RUB", "UAH", "NGN", "ZAR",
            "BIDR", "IDRT", "BVND", "AEUR", "EURI", "FRAX", "USD1", "XUSD", "BFUSD", "RLUSD",
-           "PAXG", "WBTC", "WBETH", "BETH", "BNSOL", "USDE", "U", "BKRW", "LUSD"}
-LEVERAGED = re.compile(r"(UP|DOWN|BULL|BEAR)USDT$")
+           "PAXG", "XAUT", "WBTC", "WBETH", "BETH", "BNSOL", "USDE", "U", "BKRW", "LUSD"}
+_LEV = re.compile(r"^(?P<base>[A-Z0-9]*)(UP|DOWN|BULL|BEAR)$")
+
+
+def is_leveraged(base: str, known_bases) -> bool:
+    """Binance leveraged tokens are <UNDERLYING>UP/DOWN/BULL/BEAR (plus the bare
+    BULL/BEAR BTC tokens). A real coin that merely ends in those letters (JUP,
+    SYRUP) is kept: its prefix is not itself a listed coin."""
+    m = _LEV.match(base)
+    if not m:
+        return False
+    under = m.group("base")
+    return under == "" or under in known_bases
+
+
+# kept for backwards compatibility with code that only has one symbol at hand
+LEVERAGED = re.compile(r"^(BTC|ETH|BNB|XRP|ADA|LINK|DOT|LTC|BCH|EOS|XTZ|TRX|XLM|FIL|UNI|SUSHI|AAVE|"
+                       r"YFI|SXP|1INCH)?(UP|DOWN|BULL|BEAR)USDT$")
+
+
+def split_discontinuities(panel: dict, max_ratio: float = 8.0, min_gap: int = 3,
+                          max_bridge: int = 30) -> dict:
+    """Split price series that join two different assets: redenominations,
+    token swaps and re-used tickers (e.g. LUNA -> Terra 2.0 on 2022-05-31 under
+    the same symbol, x177,400 across an 18-day gap). A break is a price ratio
+    beyond ``max_ratio`` (either way) across a trading gap of ``min_gap``+ days,
+    or any gap longer than ``max_bridge`` days.
+
+    The latest segment keeps the real symbol (so live orders map correctly);
+    earlier segments become ``<SYMBOL>~1``, ``~2``... and end like delistings.
+    Real one-day crashes (no gap) are untouched."""
+    close = panel["close"]
+    breaks = {}
+    for c in close.columns:
+        s = close[c].dropna()
+        if len(s) < 2:
+            continue
+        gap = s.index.to_series().diff().dt.days
+        jump = np.abs(np.log(s / s.shift(1)))
+        b = s.index[((gap >= min_gap) & (jump > np.log(max_ratio))) | (gap > max_bridge)]
+        if len(b):
+            breaks[c] = list(b)
+    if not breaks:
+        return panel
+    out = {k: (v.copy() if isinstance(v, pd.DataFrame) else v) for k, v in panel.items()}
+    listed = dict(panel["listed"]) if "listed" in panel else {}
+    for c, bs in breaks.items():
+        edges = [close.index[0]] + bs
+        for i in range(len(bs)):
+            name = f"{c}~{i + 1}"
+            lo, hi = edges[i], bs[i]
+            for k, v in out.items():
+                if isinstance(v, pd.DataFrame) and c in v.columns:
+                    seg = v[c].where((v.index >= lo) & (v.index < hi))
+                    v[name] = seg
+            first = close[c].loc[lo:hi].first_valid_index()
+            if first is not None:
+                listed[name] = first
+        for k, v in out.items():
+            if isinstance(v, pd.DataFrame) and c in v.columns:
+                v[c] = v[c].where(v.index >= bs[-1])
+        listed[c] = bs[-1]
+    if listed:
+        out["listed"] = pd.Series(listed)
+    return out
 
 
 def _list_prefixes(prefix: str) -> list[str]:
@@ -57,12 +120,13 @@ def list_usdt_symbols() -> list[str]:
     filters downstream as well as by the explicit check here.
     """
     syms = _list_prefixes("data/spot/monthly/klines/")
+    bases = {s[:-4] for s in syms if s.endswith("USDT")}
     out = []
     for s in syms:
-        if not s.endswith("USDT") or LEVERAGED.search(s):
+        if not s.endswith("USDT"):
             continue
         base = s[:-4]
-        if base in STABLES or base.endswith("BUSD"):
+        if is_leveraged(base, bases) or base in STABLES or base.endswith("BUSD"):
             continue
         out.append(s)
     return out
@@ -152,7 +216,7 @@ def load_panel(interval: str = "1d", symbols: list[str] | None = None,
     # metadata: true first-trading date of every symbol (independent of any
     # later slicing of the price window - see strategy.equity_like)
     panel["listed"] = pd.Series({s: df.index[0] for s, df in frames.items() if len(df)})
-    return panel
+    return split_discontinuities(panel)
 
 
 def slice_panel(panel: dict, start=None, end=None) -> dict:
@@ -253,7 +317,33 @@ def refresh_symbol(symbol: str, interval: str = "1d") -> int:
         df = pd.concat([df, new])
         df = df[~df.index.duplicated(keep="last")].sort_index()
         df.to_parquet(path)
-    return len(frames) + topup_daily(symbol, interval)
+    added = len(frames) + topup_daily(symbol, interval)
+    return added + _refill_recent_holes(symbol, interval)
+
+
+def _refill_recent_holes(symbol: str, interval: str = "1d", days: int = 60) -> int:
+    """Re-try daily files for dates missing inside the last ``days`` days of a
+    cached series (a daily file that 404'd once would otherwise never be
+    fetched again). Only applies to the daily interval."""
+    if interval != "1d":
+        return 0
+    path = DATA_DIR / interval / f"{symbol}.parquet"
+    df = pd.read_parquet(path)
+    lo = max(df.index[0], df.index[-1] - pd.Timedelta(days=days))
+    want = pd.date_range(lo, df.index[-1], freq="D")
+    missing = want.difference(df.index)
+    frames = []
+    for d in missing:
+        f = _fetch_zip(f"{BASE}/daily/klines/{symbol}/{interval}/{symbol}-{interval}-{d.strftime('%Y-%m-%d')}.zip")
+        if f is not None and len(f):
+            frames.append(f)
+    if not frames:
+        return 0
+    new = _clean(pd.concat(frames, ignore_index=True))
+    out = pd.concat([df, new])
+    out = out[~out.index.duplicated(keep="last")].sort_index()
+    out.to_parquet(path)
+    return len(frames)
 
 
 def _clean(df: pd.DataFrame) -> pd.DataFrame:

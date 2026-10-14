@@ -142,8 +142,11 @@ def equity_like(close: pd.DataFrame, listed: pd.Series | None = None) -> pd.Data
     wk = np.repeat((close.index.dayofweek >= 5)[:, None], len(cands), axis=1)
     we = r.where(wk)
     wd = r.where(~wk)
-    ratio = (we.cumsum() / we.notna().cumsum()) / (wd.cumsum() / wd.notna().cumsum())
-    n_we = we.notna().cumsum()
+    # expanding means; fillna(0) before cumsum - a plain cumsum leaves NaN on
+    # every row where that day's value is NaN, which made the ratio NaN always
+    n_we, n_wd = we.notna().cumsum(), wd.notna().cumsum()
+    ratio = ((we.fillna(0).cumsum() / n_we.replace(0, np.nan))
+             / (wd.fillna(0).cumsum() / n_wd.replace(0, np.nan)))
     mask[cands] = (ratio < 0.5) | (n_we < 8) | ratio.isna()
     return mask
 
@@ -242,12 +245,22 @@ def target_weights(panel: dict, p: Params, feats: dict | None = None,
 
 
 # ------------------------------------------------------------------ v4: ensemble
-def ensemble_weights(panel: dict, ep: EnsembleParams, feats_cache: dict | None = None
-                     ) -> pd.DataFrame:
+def ensemble_weights(panel: dict, ep: EnsembleParams, feats_cache: dict | None = None,
+                     exclude=None) -> pd.DataFrame:
     """Equal-weight average of every (universe size, top-k, lookback set,
-    rebalance tranche) member's target weights."""
+    rebalance tranche) member's target weights.
+
+    ``exclude`` (research only): symbols (list) or a boolean DataFrame mask of
+    coin-days that may not be held. Excluded coins still feed the BTC regime
+    filter, e.g. an alt-only variant excludes BTC and ETH from trading."""
     close = panel["close"]
     excluded = equity_like(close, panel.get("listed")) if ep.exclude_equities else None
+    if exclude is not None:
+        extra = (exclude.reindex_like(close).fillna(False).astype(bool)
+                 if isinstance(exclude, pd.DataFrame)
+                 else pd.DataFrame(np.repeat(close.columns.isin(list(exclude))[None, :],
+                                             len(close), axis=0), close.index, close.columns))
+        excluded = extra if excluded is None else (excluded | extra)
     acc = np.zeros(close.shape)
     n = 0
     for lbs in ep.lookback_sets:

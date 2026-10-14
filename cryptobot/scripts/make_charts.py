@@ -114,6 +114,52 @@ def v4_charts():
                    end_labels=False)
 
 
+
+
+def altcoin_chart():
+    """Every altcoin that was ever in the top-50 universe: annual return from
+    holding it vs running the trend engine on it alone."""
+    f = R / "altcoins_one_coin_binance.csv"
+    if not f.exists():
+        return
+    d = pd.read_csv(f)
+    d = d[~d.coin.isin(["BTCUSDT", "ETHUSDT"])]
+    x = (d.hold_CAGR * 100).clip(-100, 200)
+    y = (d.trend_regime_CAGR * 100).clip(-100, 200)
+    fig, ax = plt.subplots(figsize=(8.5, 6.2), dpi=150, facecolor=SURF)
+    style(ax)
+    ax.grid(axis="x", color=GRID, linewidth=0.8)
+    ax.plot([-100, 200], [-100, 200], color="#8a8984", lw=1, ls="--", zorder=1)
+    ax.text(104, 96, "same return\n(dashed line)", color=INK2, fontsize=8, va="top")
+    ax.axhline(0, color="#bbbbb5", lw=0.8, zorder=1)
+    ax.axvline(0, color="#bbbbb5", lw=0.8, zorder=1)
+    live = ~d.delisted.values
+    ax.scatter(x[live], y[live], s=18, color=BLUE, alpha=0.75, edgecolor=SURF, linewidth=0.6,
+               label="still listed", zorder=3)
+    ax.scatter(x[~live], y[~live], s=18, color=ORANGE, alpha=0.75, edgecolor=SURF, linewidth=0.6,
+               label="delisted / redenominated", zorder=3)
+    for coin in ["SOLUSDT", "AVAXUSDT", "DOTUSDT", "DOGEUSDT", "LINKUSDT", "FTTUSDT~1", "LUNAUSDT", "FTMUSDT"]:
+        r = d[d.coin == coin]
+        if len(r):
+            r = r.iloc[0]
+            label = {"FTTUSDT~1": "FTT (pre-FTX collapse)", "LUNAUSDT": "LUNA 2.0"}.get(
+                coin, coin.replace("USDT", ""))
+            ax.annotate(label,
+                        (min(max(r.hold_CAGR * 100, -100), 200), min(max(r.trend_regime_CAGR * 100, -100), 200)),
+                        xytext=(5, 4), textcoords="offset points", fontsize=8, color=INK)
+    ax.set_xlim(-102, 202)
+    ax.set_ylim(-40, 120)
+    ax.set_xlabel("Hold the coin: annual return (%)", color=INK2, fontsize=10)
+    ax.set_ylabel("Trend engine on the coin alone: annual return (%)", color=INK2, fontsize=10)
+    ax.legend(frameon=False, fontsize=9, loc="lower right", labelcolor=INK)
+    ax.set_title(f"{len(d)} altcoins on Binance, each from one year after listing (net of costs)",
+                 loc="left", fontsize=11, color=INK)
+    fig.tight_layout()
+    fig.savefig(R / "altcoins_scatter.png", facecolor=SURF)
+    plt.close(fig)
+
+
 if __name__ == "__main__":
     v3_charts()
     v4_charts()
+    altcoin_chart()

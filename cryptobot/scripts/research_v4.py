@@ -351,9 +351,36 @@ def stage_parity(a):
         if i % 50 == 0:
             print(f"  {i}/{len(days)} worst so far {worst:.2e} ({time.time()-t0:.0f}s)")
     out = {"days_checked": len(days), "step": a.step, "window_days": ep.max_lookback * 2 + 160,
-           "max_abs_weight_diff": worst}
+           "max_abs_weight_diff": worst, "execution": execution_parity(panel, ep, full)}
     (REPORTS / "v4_parity.json").write_text(json.dumps(out, indent=2))
     print(json.dumps(out, indent=2))
+
+
+def execution_parity(panel: dict, ep: EnsembleParams, w: pd.DataFrame) -> dict:
+    """Drive the live PaperAccount + plan_orders path day by day over the
+    holdout with historical closes (gap handling and delistings included) and
+    compare its NAV with the simulator's."""
+    from cryptobot.live import PaperAccount, plan_orders
+    start = pd.Timestamp(HOLDOUT_START, tz="UTC")
+    cost = CostModel(aum_usd=AUM)
+    sim = run_v4(panel, ep, cost, weights=w, start=start)
+    acct = PaperAccount(Path("/dev/null"), 1.0, {}, cost)
+    close, adv = panel["close"], adv_of(panel, ep.adv_window)
+    last_known = close.ffill()
+    navs = []
+    for d in close.index[close.index >= start]:
+        px = close.loc[d]
+        acct.update_gaps(px, last_known.loc[d], d)
+        deltas = plan_orders(w.loc[d], acct.weights(px), ep.band, ep.min_trade,
+                             tradable=px.dropna().index)
+        acct.execute(deltas, px.dropna(), adv.loc[d])
+        navs.append(acct.nav(px))
+    paper = pd.Series(navs, close.index[close.index >= start])
+    pr = paper.pct_change().fillna(paper.iloc[0] - 1)
+    return {"paper_final_nav": float(paper.iloc[-1]),
+            "sim_final_nav": float((1 + sim.returns).prod()),
+            "nav_tracking_error_ann": float((pr - sim.returns).std() * np.sqrt(365)),
+            "max_daily_return_diff": float((pr - sim.returns).abs().max())}
 
 
 if __name__ == "__main__":

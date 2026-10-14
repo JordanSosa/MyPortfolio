@@ -2,12 +2,12 @@
   "v4": {
     "start": "2014-01-01",
     "end": "2026-10-13",
-    "CAGR": 0.33,
-    "vol": 0.2177,
-    "Sharpe": 1.4194,
+    "CAGR": 0.3232,
+    "vol": 0.2168,
+    "Sharpe": 1.4006,
     "MaxDD": -0.3168,
-    "Calmar": 1.042,
-    "total_return": 37.4106,
+    "Calmar": 1.0204,
+    "total_return": 34.9598,
     "years": 12.8,
     "positive_years": "9/13"
   },

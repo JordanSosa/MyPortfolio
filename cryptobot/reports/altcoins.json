@@ -1,0 +1,671 @@
+{
+  "attribution_binance_2019_2026": {
+    "gross_pnl_sum": 2.0685,
+    "groups": {
+      "BTC": {
+        "share_of_pnl": 0.207,
+        "avg_weight": 0.0445
+      },
+      "ETH": {
+        "share_of_pnl": 0.072,
+        "avg_weight": 0.0171
+      },
+      "alts: top-10": {
+        "share_of_pnl": 0.456,
+        "avg_weight": 0.1258
+      },
+      "alts: 11-30": {
+        "share_of_pnl": 0.256,
+        "avg_weight": 0.0542
+      },
+      "alts: 31+": {
+        "share_of_pnl": 0.009,
+        "avg_weight": 0.0082
+      }
+    },
+    "top_contributors": {
+      "BTCUSDT": 0.4279,
+      "BNBUSDT": 0.3276,
+      "SOLUSDT": 0.1824,
+      "ETHUSDT": 0.1494,
+      "DOGEUSDT": 0.1409,
+      "TRXUSDT": 0.136,
+      "THETAUSDT": 0.1316,
+      "LINKUSDT": 0.0915,
+      "LUNAUSDT~1": 0.0798,
+      "ZECUSDT": 0.0713
+    },
+    "worst_contributors": {
+      "OMUSDT": -0.0604,
+      "NEOUSDT": -0.052,
+      "AVAXUSDT": -0.023,
+      "NEARUSDT": -0.0196,
+      "HBARUSDT": -0.0132,
+      "MKRUSDT": -0.012,
+      "SHIBUSDT": -0.0118,
+      "MATICUSDT": -0.0102
+    },
+    "by_year": {
+      "2019": {
+        "BTC+ETH": 0.0968,
+        "alts": -0.0054
+      },
+      "2020": {
+        "BTC+ETH": 0.1882,
+        "alts": 0.3835
+      },
+      "2021": {
+        "BTC+ETH": 0.1353,
+        "alts": 0.6221
+      },
+      "2022": {
+        "BTC+ETH": -0.0038,
+        "alts": -0.1221
+      },
+      "2023": {
+        "BTC+ETH": 0.011,
+        "alts": 0.2461
+      },
+      "2024": {
+        "BTC+ETH": 0.1183,
+        "alts": 0.2736
+      },
+      "2025": {
+        "BTC+ETH": 0.0283,
+        "alts": -0.0608
+      },
+      "2026": {
+        "BTC+ETH": 0.0033,
+        "alts": 0.1541
+      }
+    },
+    "coins_ever_held": 245,
+    "share_of_held_coins_profitable": 0.322
+  },
+  "one_coin_binance": {
+    "trend_with_btc_regime": {
+      "all_alts": {
+        "n_coins": 277,
+        "n_delisted": 87,
+        "median_sharpe": {
+          "hold": 0.19,
+          "trend": 0.29
+        },
+        "median_CAGR": {
+          "hold": -0.368,
+          "trend": 0.042
+        },
+        "median_maxDD": {
+          "hold": -0.965,
+          "trend": -0.301
+        },
+        "share_trend_sharpe_beats_hold": 0.581,
+        "share_trend_return_beats_hold": 0.899,
+        "share_trend_smaller_drawdown": 1.0,
+        "share_hold_lost_money": 0.845,
+        "share_trend_lost_money": 0.372,
+        "share_trend_sharpe_above_0.5": 0.296
+      },
+      "liquid_alts_adv_ge_20M": {
+        "n_coins": 22,
+        "n_delisted": 3,
+        "median_sharpe": {
+          "hold": 0.56,
+          "trend": 0.7
+        },
+        "median_CAGR": {
+          "hold": 0.101,
+          "trend": 0.159
+        },
+        "median_maxDD": {
+          "hold": -0.912,
+          "trend": -0.298
+        },
+        "share_trend_sharpe_beats_hold": 0.636,
+        "share_trend_return_beats_hold": 0.545,
+        "share_trend_smaller_drawdown": 1.0,
+        "share_hold_lost_money": 0.455,
+        "share_trend_lost_money": 0.227,
+        "share_trend_sharpe_above_0.5": 0.682
+      },
+      "delisted_alts": {
+        "n_coins": 87,
+        "n_delisted": 87,
+        "median_sharpe": {
+          "hold": 0.21,
+          "trend": 0.29
+        },
+        "median_CAGR": {
+          "hold": -0.424,
+          "trend": 0.042
+        },
+        "median_maxDD": {
+          "hold": -0.973,
+          "trend": -0.271
+        },
+        "share_trend_sharpe_beats_hold": 0.575,
+        "share_trend_return_beats_hold": 0.828,
+        "share_trend_smaller_drawdown": 1.0,
+        "share_hold_lost_money": 0.816,
+        "share_trend_lost_money": 0.356,
+        "share_trend_sharpe_above_0.5": 0.322
+      },
+      "BTCUSDT": {
+        "hold_Sharpe": 0.817,
+        "trend_regime_Sharpe": 1.142,
+        "hold_CAGR": 0.364,
+        "trend_regime_CAGR": 0.341,
+        "hold_MaxDD": -0.766,
+        "trend_regime_MaxDD": -0.331
+      },
+      "ETHUSDT": {
+        "hold_Sharpe": 0.724,
+        "trend_regime_Sharpe": 0.951,
+        "hold_CAGR": 0.287,
+        "trend_regime_CAGR": 0.262,
+        "hold_MaxDD": -0.793,
+        "trend_regime_MaxDD": -0.32
+      }
+    },
+    "trend_pure": {
+      "all_alts": {
+        "n_coins": 277,
+        "n_delisted": 87,
+        "median_sharpe": {
+          "hold": 0.19,
+          "trend": 0.22
+        },
+        "median_CAGR": {
+          "hold": -0.368,
+          "trend": 0.023
+        },
+        "median_maxDD": {
+          "hold": -0.965,
+          "trend": -0.331
+        },
+        "share_trend_sharpe_beats_hold": 0.52,
+        "share_trend_return_beats_hold": 0.895,
+        "share_trend_smaller_drawdown": 1.0,
+        "share_hold_lost_money": 0.845,
+        "share_trend_lost_money": 0.419,
+        "share_trend_sharpe_above_0.5": 0.264
+      },
+      "liquid_alts_adv_ge_20M": {
+        "n_coins": 22,
+        "n_delisted": 3,
+        "median_sharpe": {
+          "hold": 0.56,
+          "trend": 0.66
+        },
+        "median_CAGR": {
+          "hold": 0.101,
+          "trend": 0.173
+        },
+        "median_maxDD": {
+          "hold": -0.912,
+          "trend": -0.324
+        },
+        "share_trend_sharpe_beats_hold": 0.545,
+        "share_trend_return_beats_hold": 0.545,
+        "share_trend_smaller_drawdown": 1.0,
+        "share_hold_lost_money": 0.455,
+        "share_trend_lost_money": 0.182,
+        "share_trend_sharpe_above_0.5": 0.636
+      },
+      "delisted_alts": {
+        "n_coins": 87,
+        "n_delisted": 87,
+        "median_sharpe": {
+          "hold": 0.21,
+          "trend": 0.21
+        },
+        "median_CAGR": {
+          "hold": -0.424,
+          "trend": 0.022
+        },
+        "median_maxDD": {
+          "hold": -0.973,
+          "trend": -0.308
+        },
+        "share_trend_sharpe_beats_hold": 0.529,
+        "share_trend_return_beats_hold": 0.816,
+        "share_trend_smaller_drawdown": 1.0,
+        "share_hold_lost_money": 0.816,
+        "share_trend_lost_money": 0.437,
+        "share_trend_sharpe_above_0.5": 0.299
+      },
+      "BTCUSDT": {
+        "hold_Sharpe": 0.817,
+        "trend_Sharpe": 1.142,
+        "hold_CAGR": 0.364,
+        "trend_CAGR": 0.341,
+        "hold_MaxDD": -0.766,
+        "trend_MaxDD": -0.331
+      },
+      "ETHUSDT": {
+        "hold_Sharpe": 0.724,
+        "trend_Sharpe": 0.834,
+        "hold_CAGR": 0.287,
+        "trend_CAGR": 0.234,
+        "hold_MaxDD": -0.793,
+        "trend_MaxDD": -0.429
+      }
+    }
+  },
+  "portfolios_binance": {
+    "2019-2024 (development)": {
+      "v4 (as frozen)": {
+        "start": "2019-01-01",
+        "end": "2024-12-31",
+        "CAGR": 0.3386,
+        "vol": 0.2227,
+        "Sharpe": 1.4213,
+        "Sortino": 2.1494,
+        "MaxDD": -0.3168,
+        "Calmar": 1.0688,
+        "longest_DD_days": 759,
+        "total_return": 4.7611,
+        "turnover_ann": 3.9037,
+        "avg_exposure": 0.241,
+        "cost_drag_ann": 0.0067
+      },
+      "v4 alts only (no BTC, ETH)": {
+        "start": "2019-01-01",
+        "end": "2024-12-31",
+        "CAGR": 0.2463,
+        "vol": 0.2035,
+        "Sharpe": 1.1838,
+        "Sortino": 1.7933,
+        "MaxDD": -0.2633,
+        "Calmar": 0.9354,
+        "longest_DD_days": 772,
+        "total_return": 2.7515,
+        "turnover_ann": 3.7393,
+        "avg_exposure": 0.2092,
+        "cost_drag_ann": 0.0071
+      },
+      "v4 without the 15 largest coins": {
+        "start": "2019-01-01",
+        "end": "2024-12-31",
+        "CAGR": 0.2571,
+        "vol": 0.1684,
+        "Sharpe": 1.4427,
+        "Sortino": 2.3081,
+        "MaxDD": -0.2204,
+        "Calmar": 1.1666,
+        "longest_DD_days": 773,
+        "total_return": 2.9521,
+        "turnover_ann": 5.0506,
+        "avg_exposure": 0.1543,
+        "cost_drag_ann": 0.0126
+      },
+      "BTC buy & hold": {
+        "start": "2019-01-01",
+        "end": "2024-12-31",
+        "CAGR": 0.7122,
+        "vol": 0.6563,
+        "Sharpe": 1.1538,
+        "Sortino": 1.7092,
+        "MaxDD": -0.7663,
+        "Calmar": 0.9294,
+        "longest_DD_days": 846,
+        "total_return": 24.271
+      },
+      "equal-weight top-10 alts (monthly)": {
+        "start": "2019-01-01",
+        "end": "2024-12-31",
+        "CAGR": 0.2279,
+        "vol": 0.8724,
+        "Sharpe": 0.683,
+        "Sortino": 0.9564,
+        "MaxDD": -0.9169,
+        "Calmar": 0.2486,
+        "longest_DD_days": 1149,
+        "total_return": 2.4321
+      }
+    },
+    "2025-2026 (holdout)": {
+      "v4 (as frozen)": {
+        "start": "2025-01-01",
+        "end": "2026-10-13",
+        "CAGR": 0.0423,
+        "vol": 0.1925,
+        "Sharpe": 0.3121,
+        "Sortino": 0.4314,
+        "MaxDD": -0.2355,
+        "Calmar": 0.1797,
+        "longest_DD_days": 611,
+        "total_return": 0.0767,
+        "turnover_ann": 6.3582,
+        "avg_exposure": 0.2799,
+        "cost_drag_ann": 0.0096
+      },
+      "v4 alts only (no BTC, ETH)": {
+        "start": "2025-01-01",
+        "end": "2026-10-13",
+        "CAGR": 0.0535,
+        "vol": 0.1839,
+        "Sharpe": 0.3764,
+        "Sortino": 0.5016,
+        "MaxDD": -0.2205,
+        "Calmar": 0.2426,
+        "longest_DD_days": 595,
+        "total_return": 0.0974,
+        "turnover_ann": 5.7582,
+        "avg_exposure": 0.2365,
+        "cost_drag_ann": 0.009
+      },
+      "v4 without the 15 largest coins": {
+        "start": "2025-01-01",
+        "end": "2026-10-13",
+        "CAGR": -0.056,
+        "vol": 0.1552,
+        "Sharpe": -0.2926,
+        "Sortino": -0.3788,
+        "MaxDD": -0.2247,
+        "Calmar": -0.2491,
+        "longest_DD_days": 634,
+        "total_return": -0.0976,
+        "turnover_ann": 5.329,
+        "avg_exposure": 0.137,
+        "cost_drag_ann": 0.0099
+      },
+      "BTC buy & hold": {
+        "start": "2025-01-01",
+        "end": "2026-10-13",
+        "CAGR": -0.064,
+        "vol": 0.433,
+        "Sharpe": 0.0635,
+        "Sortino": 0.0917,
+        "MaxDD": -0.5297,
+        "Calmar": -0.1208,
+        "longest_DD_days": 372,
+        "total_return": -0.1112
+      },
+      "equal-weight top-10 alts (monthly)": {
+        "start": "2025-01-01",
+        "end": "2026-10-13",
+        "CAGR": -0.4296,
+        "vol": 0.6921,
+        "Sharpe": -0.4634,
+        "Sortino": -0.6459,
+        "MaxDD": -0.7676,
+        "Calmar": -0.5597,
+        "longest_DD_days": 634,
+        "total_return": -0.6326
+      }
+    }
+  },
+  "attribution_bitfinex_2014_2018": {
+    "gross_pnl_sum": 2.0087,
+    "groups": {
+      "BTC": {
+        "share_of_pnl": 0.353,
+        "avg_weight": 0.12
+      },
+      "ETH": {
+        "share_of_pnl": 0.268,
+        "avg_weight": 0.0209
+      },
+      "alts: top-10": {
+        "share_of_pnl": 0.39,
+        "avg_weight": 0.0698
+      },
+      "alts: 11-30": {
+        "share_of_pnl": -0.01,
+        "avg_weight": 0.0022
+      },
+      "alts: 31+": {
+        "share_of_pnl": -0.0,
+        "avg_weight": 0.0001
+      }
+    },
+    "top_contributors": {
+      "BTCUSDT": 0.7085,
+      "ETHUSDT": 0.5385,
+      "LTCUSDT": 0.2664,
+      "ETCUSDT": 0.1759,
+      "XMRUSDT": 0.1515,
+      "DRKUSDT": 0.0564,
+      "DSHUSDT": 0.0466,
+      "ZECUSDT": 0.046,
+      "ETPUSDT": 0.0222,
+      "BFXUSDT": 0.0194
+    },
+    "worst_contributors": {
+      "NECUSDT": -0.0032,
+      "BCCUSDT": -0.0031,
+      "EOSUSDT": -0.0027,
+      "IOTUSDT": -0.0024,
+      "OMGUSDT": -0.0017,
+      "RRTUSDT": -0.0017,
+      "DATUSDT": -0.0015,
+      "ZRXUSDT": -0.0013
+    },
+    "by_year": {
+      "2014": {
+        "BTC+ETH": -0.0832,
+        "alts": -0.0352
+      },
+      "2015": {
+        "BTC+ETH": 0.1472,
+        "alts": 0.1538
+      },
+      "2016": {
+        "BTC+ETH": 0.2249,
+        "alts": 0.0191
+      },
+      "2017": {
+        "BTC+ETH": 1.0295,
+        "alts": 0.7035
+      },
+      "2018": {
+        "BTC+ETH": -0.0712,
+        "alts": -0.0795
+      }
+    },
+    "coins_ever_held": 37,
+    "share_of_held_coins_profitable": 0.324
+  },
+  "one_coin_bitfinex": {
+    "trend_with_btc_regime": {
+      "all_alts": {
+        "n_coins": 11,
+        "n_delisted": 0,
+        "median_sharpe": {
+          "hold": -0.14,
+          "trend": 0.19
+        },
+        "median_CAGR": {
+          "hold": -0.659,
+          "trend": 0.019
+        },
+        "median_maxDD": {
+          "hold": -0.917,
+          "trend": -0.157
+        },
+        "share_trend_sharpe_beats_hold": 0.727,
+        "share_trend_return_beats_hold": 0.909,
+        "share_trend_smaller_drawdown": 1.0,
+        "share_hold_lost_money": 0.818,
+        "share_trend_lost_money": 0.455,
+        "share_trend_sharpe_above_0.5": 0.455
+      },
+      "liquid_alts_adv_ge_20M": {
+        "n_coins": 2,
+        "n_delisted": 0,
+        "median_sharpe": {
+          "hold": -0.3,
+          "trend": 0.06
+        },
+        "median_CAGR": {
+          "hold": -0.699,
+          "trend": 0.023
+        },
+        "median_maxDD": {
+          "hold": -0.863,
+          "trend": -0.065
+        },
+        "share_trend_sharpe_beats_hold": 0.5,
+        "share_trend_return_beats_hold": 1.0,
+        "share_trend_smaller_drawdown": 1.0,
+        "share_hold_lost_money": 1.0,
+        "share_trend_lost_money": 0.5,
+        "share_trend_sharpe_above_0.5": 0.5
+      },
+      "delisted_alts": {},
+      "BTCUSDT": {
+        "hold_Sharpe": 0.78,
+        "trend_regime_Sharpe": 1.325,
+        "hold_CAGR": 0.354,
+        "trend_regime_CAGR": 0.485,
+        "hold_MaxDD": -0.829,
+        "trend_regime_MaxDD": -0.28
+      },
+      "ETHUSDT": {
+        "hold_Sharpe": 1.597,
+        "trend_regime_Sharpe": 2.655,
+        "hold_CAGR": 2.396,
+        "trend_regime_CAGR": 1.808,
+        "hold_MaxDD": -0.938,
+        "trend_regime_MaxDD": -0.206
+      }
+    },
+    "trend_pure": {
+      "all_alts": {
+        "n_coins": 11,
+        "n_delisted": 0,
+        "median_sharpe": {
+          "hold": -0.14,
+          "trend": 0.17
+        },
+        "median_CAGR": {
+          "hold": -0.659,
+          "trend": 0.008
+        },
+        "median_maxDD": {
+          "hold": -0.917,
+          "trend": -0.165
+        },
+        "share_trend_sharpe_beats_hold": 0.818,
+        "share_trend_return_beats_hold": 0.909,
+        "share_trend_smaller_drawdown": 1.0,
+        "share_hold_lost_money": 0.818,
+        "share_trend_lost_money": 0.455,
+        "share_trend_sharpe_above_0.5": 0.364
+      },
+      "liquid_alts_adv_ge_20M": {
+        "n_coins": 2,
+        "n_delisted": 0,
+        "median_sharpe": {
+          "hold": -0.3,
+          "trend": -0.42
+        },
+        "median_CAGR": {
+          "hold": -0.699,
+          "trend": -0.036
+        },
+        "median_maxDD": {
+          "hold": -0.863,
+          "trend": -0.113
+        },
+        "share_trend_sharpe_beats_hold": 0.5,
+        "share_trend_return_beats_hold": 1.0,
+        "share_trend_smaller_drawdown": 1.0,
+        "share_hold_lost_money": 1.0,
+        "share_trend_lost_money": 0.5,
+        "share_trend_sharpe_above_0.5": 0.0
+      },
+      "delisted_alts": {},
+      "BTCUSDT": {
+        "hold_Sharpe": 0.78,
+        "trend_Sharpe": 1.325,
+        "hold_CAGR": 0.354,
+        "trend_CAGR": 0.485,
+        "hold_MaxDD": -0.829,
+        "trend_MaxDD": -0.28
+      },
+      "ETHUSDT": {
+        "hold_Sharpe": 1.597,
+        "trend_Sharpe": 2.531,
+        "hold_CAGR": 2.396,
+        "trend_CAGR": 1.771,
+        "hold_MaxDD": -0.938,
+        "trend_MaxDD": -0.22
+      }
+    }
+  },
+  "portfolios_bitfinex": {
+    "2017-2018 (alts available)": {
+      "v4 (as frozen)": {
+        "start": "2017-01-01",
+        "end": "2018-12-31",
+        "CAGR": 1.0652,
+        "vol": 0.2781,
+        "Sharpe": 2.7483,
+        "Sortino": 4.5073,
+        "MaxDD": -0.2138,
+        "Calmar": 4.9827,
+        "longest_DD_days": 358,
+        "total_return": 3.2652,
+        "turnover_ann": 3.8754,
+        "avg_exposure": 0.2386,
+        "cost_drag_ann": 0.0189
+      },
+      "v4 alts only (no BTC, ETH)": {
+        "start": "2017-01-01",
+        "end": "2018-12-31",
+        "CAGR": 0.6253,
+        "vol": 0.2636,
+        "Sharpe": 1.9743,
+        "Sortino": 3.2993,
+        "MaxDD": -0.2,
+        "Calmar": 3.127,
+        "longest_DD_days": 376,
+        "total_return": 1.6417,
+        "turnover_ann": 3.496,
+        "avg_exposure": 0.1734,
+        "cost_drag_ann": 0.0226
+      },
+      "v4 without the 15 largest coins": {
+        "start": "2017-01-01",
+        "end": "2018-12-31",
+        "CAGR": -0.0315,
+        "vol": 0.0263,
+        "Sharpe": -1.2055,
+        "Sortino": -1.4754,
+        "MaxDD": -0.0721,
+        "Calmar": -0.437,
+        "longest_DD_days": 239,
+        "total_return": -0.062,
+        "turnover_ann": 0.6698,
+        "avg_exposure": 0.0076,
+        "cost_drag_ann": 0.0058
+      },
+      "BTC buy & hold": {
+        "start": "2017-01-01",
+        "end": "2018-12-31",
+        "CAGR": 0.9907,
+        "vol": 0.9114,
+        "Sharpe": 1.2097,
+        "Sortino": 1.7998,
+        "MaxDD": -0.8292,
+        "Calmar": 1.1948,
+        "longest_DD_days": 380,
+        "total_return": 2.9629
+      },
+      "equal-weight top-10 alts (monthly)": {
+        "start": "2017-01-01",
+        "end": "2018-12-31",
+        "CAGR": 0.6084,
+        "vol": 1.1621,
+        "Sharpe": 0.9835,
+        "Sortino": 1.5116,
+        "MaxDD": -0.9223,
+        "Calmar": 0.6597,
+        "longest_DD_days": 376,
+        "total_return": 1.5871
+      }
+    }
+  }
+}

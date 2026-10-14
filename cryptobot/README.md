@@ -24,13 +24,13 @@ holding crypto.
   coins included) it made **+42% a year at a −21% worst drawdown**. BTC made
   +39% a year at −83%. It passed all six pre-registered criteria.
 * **Combined record.** Over all records (12.8 years, 2014 → 2026) it compounds
-  at 33% a year with Sharpe 1.42 and a worst drawdown of −32%.
+  at 32% a year with Sharpe 1.40 and a worst drawdown of −32%.
 
 **What it is not.**
 
 * **It doesn't beat BTC in roaring bull markets.** In 2017 it made +407%
   while BTC made +1,325%. It trades upside for survival.
-* **It earns little in choppy markets.** In 2025-26 it made only +6.8% in
+* **It earns little in choppy markets.** In 2025-26 it made only +7.7% in
   21 months (BTC −11%, alts −53%).
 * **The live record is still short.** The forward test started on
   2026-10-14, so there is little live evidence yet.
@@ -45,8 +45,8 @@ scale up only while results stay inside the expected band.
 | Tier | Data | v4 Sharpe | v4 CAGR | v4 MaxDD | BTC Sharpe / MaxDD | Status |
 | --- | --- | --- | --- | --- | --- | --- |
 | **Fresh (primary test)** | Bitfinex 2014-2018, 113 pairs incl. delisted, 0.2% fees | **1.72** | **42.1%** | **−21.4%** | 0.82 / −82.9% | untouched, run once, **all 6 criteria passed** |
-| Development | Binance 2019-2024 | 1.47 | 35.5% | −31.7% | 1.15 / −76.6% | in-sample at the design level |
-| Holdout | Binance 2025-01 → 2026-10 | 0.29 | 3.8% | −24.4% | 0.06 / −53.0% | contaminated (seen before v4 existed), not used for decisions |
+| Development | Binance 2019-2024 | 1.42 | 33.9% | −31.7% | 1.15 / −76.6% | in-sample at the design level |
+| Holdout | Binance 2025-01 → 2026-10 | 0.31 | 4.2% | −23.5% | 0.06 / −53.0% | contaminated (seen before v4 existed), not used for decisions |
 | Forward | live paper ledgers | – | – | – | – | started 2026-10-14 |
 
 Pre-registered fresh-data criteria (`reports/v4_fresh_bitfinex.json`), all ✅:
@@ -63,13 +63,19 @@ Pre-registered fresh-data criteria (`reports/v4_fresh_bitfinex.json`), all ✅:
 Other checks:
 
 * **Cost and timing robustness.** Cost drag is 0.67% a year at 3.9× annual
-  turnover. Sharpe stays at 1.41–1.47 whether fills happen at the close or
+  turnover. Sharpe stays at 1.40–1.43 whether fills happen at the close or
   1, 4 or 12 hours later (hourly data, `reports/v4_exec_delay.json`).
+* **Liquidity.** It still passes all six criteria when positions are capped
+  at 10% or even 2% of each coin's daily volume
+  (`reports/v4_capacity_liquidity.json`).
 * **Live engine = backtest.** On all 651 holdout days, signals matched to
-  7e-15. Paper-account NAV tracks the simulator to 0.012% a year
+  about 1e-14. Paper-account NAV tracks the simulator to 0.06% a year
   (`reports/v4_parity.json`).
-* **No single lucky setting.** The ensemble beats its median member (1.47 vs
-  1.34). On random half-universes, Sharpe ranges 1.19–1.58.
+* **No single lucky setting.** The ensemble beats its median member (1.42 vs
+  1.34). On random half-universes, Sharpe ranges 1.28–1.75.
+* **Independent review.** A separate review of the live engine found 3
+  high-severity defects (section 2b of [`AUDIT.md`](AUDIT.md)). All are fixed
+  and covered by tests (35 in total).
 
 ## Risk profiles: the one dial
 
@@ -80,9 +86,9 @@ scale together.
 | Profile | Vol target | Fresh 2014-18: CAGR / MaxDD | Dev 2019-24: CAGR / MaxDD |
 | --- | --- | --- | --- |
 | conservative | 20% | 26% / −13% | 16% / −16% |
-| **balanced (default, validated)** | **35%** | **42% / −21%** | **36% / −32%** |
-| growth | 50% | 54% / −36% | 49% / −41% |
-| aggressive | 75% | 69% / −38% | 63% / −56% |
+| **balanced (default, validated)** | **35%** | **42% / −21%** | **34% / −32%** |
+| growth | 50% | 54% / −36% | 49% / −42% |
+| aggressive | 75% | 69% / −38% | 62% / −56% |
 
 Only "balanced" was the pre-registered configuration; the other rows are
 informational. Choose the drawdown you can sit through without switching the
@@ -128,15 +134,71 @@ volatility-managed portfolios (Moreira & Muir 2017).
 ```bash
 cd cryptobot
 pip install -r requirements.txt
-python -m pytest -q tests                      # 23 tests incl. look-ahead and live-order logic
+python -m pytest -q tests                      # 35 tests incl. look-ahead and live-order logic
 python scripts/download_data.py --hourly --bitfinex --tbill   # ~2 h first time (674 Binance symbols, hourly bars, Bitfinex)
 python scripts/research_v4.py dev              # development evaluation (Binance <= 2024)
 python scripts/research_v4.py fresh            # Bitfinex 2014-18 validation set
 python scripts/research_v4.py holdout          # 2025 → today
 python scripts/research_v4.py exec             # execution-delay test (needs 1h data)
 python scripts/research_v4.py parity           # live-engine replay (~45 min)
+python scripts/altcoin_analysis.py            # where the profit comes from; every altcoin on its own
+python scripts/v4_extras.py                    # capacity and liquidity sensitivity
 python scripts/make_charts.py
 ```
+
+## How it does on altcoins
+
+![altcoins](reports/altcoins_scatter.png)
+
+These results come from `scripts/altcoin_analysis.py` (`reports/altcoins.json`)
+and use data already seen during development, so they describe behaviour.
+
+* **Altcoins are where the money is made, through the rotation.** 72% of
+  v4's gross profit on Binance 2019-26 came from altcoins: 46% from the 10
+  largest, 26% from those ranked 11-30. BTC contributed 21% and ETH 7%.
+  * It held 245 different coins, and only 32% of them made money. A few
+    strong trends pay for many small, quickly cut losses.
+  * Top earners were BTC, BNB, SOL, ETH, DOGE, TRX, THETA and LINK. LUNA
+    before its collapse was also profitable: the bot sold it on 6 May 2022, a
+    week before the crash.
+  * The worst single coin was OM, −6% of capital, in its April 2025 one-day
+    crash.
+* **On a single altcoin the engine is mostly a seatbelt.** This covers 277
+  coins that were ever in the top-50, including 87 delisted or redenominated,
+  each from one year after listing:
+
+  | Median per coin | Hold the coin | Trend engine on it alone |
+  | --- | --- | --- |
+  | Return per year | **−37%** | **+4%** |
+  | Worst drawdown | −96.5% | −30% |
+  | Coins where you lost money | 84.5% | 37% |
+
+  * The engine had the smaller drawdown on *every* coin.
+  * Its median Sharpe on one alt is only 0.29, and above 0.5 for just 30% of
+    coins. Most alts trend up briefly, then bleed for years.
+  * Liquid large caps (median volume ≥ $20M a day) do better: median +16% a
+    year at −30% drawdown, against +10% at −91% for holding them. Examples:
+    SOL 39% vs 20% (holding), ADA 27% vs 15%, AVAX +14% vs −32%, DOT +6% vs
+    −44%.
+  * Holding still won for the biggest manias: DOGE 77% a year (vs 44%), BNB,
+    FTM, MATIC.
+* **An alt-only portfolio works, but BTC and ETH help.** v4 forbidden from
+  buying BTC/ETH (they still drive the regime filter):
+
+  | Period | Alt-only v4 | Full v4 | Equal-weight top-10 alts |
+  | --- | --- | --- | --- |
+  | Binance 2019-24 | Sharpe 1.18, 25%/yr, −26% DD | 1.42, 34%/yr, −32% | 0.68, 23%/yr, −92% |
+  | Bitfinex 2017-18 | 1.97, 63%/yr, −20% | 2.75, 107%/yr, −21% | 0.98, 61%/yr, −92% |
+  | Binance 2025-26 | +9.7% total | +7.7% | −63% |
+
+* **Small caps alone don't work.** Without the 15 largest coins the strategy
+  made Sharpe 1.44 in the 2019-24 bull years. It then lost 9.8% in 2025-26,
+  and barely traded on Bitfinex.
+
+**In practice:** run the portfolio. Don't point the engine at one favourite
+altcoin, and don't restrict it to small caps. Its edge on altcoins is mostly
+avoiding their crashes, and that only adds up to strong returns when it is
+spread across many coins.
 
 ## Forward testing (started 2026-10-14)
 
@@ -170,21 +232,31 @@ python scripts/paper_trade.py --exchange binance --live         # balanced profi
 python scripts/paper_trade.py --exchange binance --live --risk growth
 ```
 
-* **Schedule.** Daily, after 00:05 UTC. The bot refuses stale data, holds a
-  lock, never trades the same bar twice, and logs every order to
-  `reports/live/...`.
+* **Schedule.** Daily, after 00:05 UTC.
+* **What it refuses to do.**
+  * It won't trade on stale or incomplete data. BTC, every held coin and at
+    least 95% of the universe must be priced.
+  * It holds a lock, never trades the same bar twice, and logs every order
+    attempt to `reports/live/<exchange>-<account>/` before marking the day
+    done.
+* **One account, one setting.** An account belongs to one strategy setting.
+  Switching from `balanced` to `growth` needs `--take-over`.
 * **Capital.**
   * v4 holds 10–25 small positions and skips trades under 0.2% of NAV.
   * With Binance's ~$5 minimum order, use **at least $5,000**, otherwise many
     positions cannot be opened.
   * Under the cost model, capacity is not a constraint for private accounts:
-    dev Sharpe is 1.47 at $10k–$100k, 1.46 at $1M and 1.43 at $10M.
+    dev Sharpe is 1.42 at $10k–$100k, 1.41 at $1M and 1.38 at $10M.
+  * No position exceeds 10% of a coin's daily volume.
 * **Account.** Use a dedicated sub-account. The bot sells any coin it does not
   want, including coins you bought by hand.
-* **Idle cash (optional, manual).** About 75% of the account is usually USDT.
-  Parking it in flexible savings at T-bill-like rates (modelled as T-bill −
-  0.5 pp) added +1.6% a year over 2019-24 and +2.5% a year over 2025-26. It
-  also adds exchange counterparty risk, and the bot does not automate it.
+* **Keep everything in the spot wallet.** About 75% of the account is
+  usually idle USDT.
+  * Do not move it into savings products: the bot values the account from the
+    spot wallet. Funds it cannot see make every position look oversized, and
+    it would sell them down.
+  * Interest on idle cash would have added about 2% a year (modelled at
+    T-bill − 0.5 pp), but it is not part of the strategy.
 
 **Kill-switch rules (stop and re-validate):**
 
@@ -250,15 +322,19 @@ following: BTC trend made Sharpe 1.39 on Bitfinex 2014-18, but about 0 in
   * Kept as a comparison: `frozen_config.json`, `reports/walk_forward*.json`,
     `reports/holdout.json`.
 * **Audit → v4.** Everything found and fixed is in [`AUDIT.md`](AUDIT.md),
-  including 13 code defects, the most important being in the live order
-  handling.
+  * 13 defects found by my own two passes.
+  * 11 findings from an independent review, 3 of them high-severity live-order
+    and valuation issues.
+  * Data fixes: re-used tickers such as LUNA, redenominations, and a filter
+    that wrongly dropped JUP.
+  * Every fix is tested.
 
 ## Limitations, stated plainly
 
 * **No backtest proves future profits.** Even untouched historical data is
   not live trading. The forward ledgers will tell.
 * **Regime dependence.** Most of the return comes in strong bull trends;
-  choppy years are roughly flat (2019 +6%, 2025 −7%).
+  choppy years are roughly flat (2019 +6%, 2025 −6.5%).
 * **Not modelled:** exchange failure, USDT de-peg, account freezes, and
   taxes. Australian CGT applies to every disposal, and most holdings are held
   for under 12 months.
@@ -268,15 +344,17 @@ following: BTC trend made Sharpe 1.39 on Bitfinex 2014-18, but about 0 in
 
 ```
 cryptobot/
-  data.py           Binance archive download (incl. delisted), refresh, T-bill rates
+  data.py           Binance archive download (incl. delisted), refresh, discontinuity splits, T-bill rates
   data_bitfinex.py  independent survivorship-free Bitfinex dataset (validation)
   strategy.py       signals, selection, sizing, v4 ensemble <- all trading logic
   backtest.py       daily simulator: drift, band, min trade, gaps, delistings, costs, cash yield
   metrics.py        Sharpe/Calmar/..., PSR, Deflated Sharpe, PBO (CSCV), block bootstrap
   research.py       v3 grid / walk-forward helpers
-  live.py           market data, order planning, paper account, hardened live broker
+  live.py           market data, completeness checks, order planning, paper account, live broker
+  execution.py      liquidity cap shared by simulator and live engine
 scripts/            research_v4 (dev/fresh/holdout/exec/parity), paper_trade, forward_report,
-                    audit_diagnostics, tune_asset, make_charts, v3 research scripts
+                    altcoin_analysis, v4_extras, audit_diagnostics, tune_asset, make_charts,
+                    v3 research scripts
 reports/            every number quoted here (JSON/CSV/PNG), incl. failed iterations
 frozen_config_v4.json  the recommended strategy (hash-checked)
 frozen_config.json     v3, kept for comparison

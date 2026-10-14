@@ -171,3 +171,31 @@ def test_equity_rule_uses_true_listing_date_in_short_live_windows():
                         "BNBUSDT": pd.Timestamp("2017-11-06", tz="UTC")})
     m = equity_like(close, listed)
     assert m["NVDABUSDT"].iloc[-1] and not m["BNBUSDT"].any()
+
+
+def test_equity_rule_keeps_crypto_like_new_b_suffix_coin():
+    """A coin named <X>BUSDT listed after June 2026 that trades like crypto
+    (normal weekend volatility) must stay eligible once enough weekends exist."""
+    idx = pd.date_range("2026-07-01", periods=300, freq="D", tz="UTC")
+    rng = np.random.default_rng(9)
+    r = rng.normal(0, 0.04, (300, 2))
+    r[idx.dayofweek >= 5, 1] *= 0.1                       # the stock-like one
+    close = pd.DataFrame(100 * np.exp(np.cumsum(r, 0)), idx, ["FOOBUSDT", "NVDABUSDT"])
+    m = equity_like(close)
+    assert not m["FOOBUSDT"].iloc[-200:].any()           # crypto-like: kept
+    assert m["NVDABUSDT"].iloc[-200:].all()              # stock-like: excluded
+
+
+def test_split_discontinuities_reused_ticker():
+    from cryptobot.data import split_discontinuities
+    idx = pd.date_range("2022-05-01", periods=40, freq="D", tz="UTC")
+    px = pd.Series(80.0, idx)
+    px.iloc[10:13] = [1.0, 0.0003, 0.00005]               # real crash, no gap: kept
+    px.iloc[13:30] = np.nan                               # 17-day suspension
+    px.iloc[30:] = 8.87                                   # new asset under the same ticker
+    panel = {"close": px.to_frame("LUNAUSDT"), "quote_volume": (px * 0 + 1e6).to_frame("LUNAUSDT")}
+    out = split_discontinuities(panel)
+    assert "LUNAUSDT~1" in out["close"]
+    assert out["close"]["LUNAUSDT~1"].last_valid_index() == idx[12]   # old asset ends at the crash
+    assert out["close"]["LUNAUSDT"].first_valid_index() == idx[30]    # new asset starts fresh
+    assert out["listed"]["LUNAUSDT"] == idx[30]

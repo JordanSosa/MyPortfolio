@@ -15,3 +15,15 @@ def test_liquidity_cap_binds_only_for_thin_markets():
 def test_liquidity_cap_array_form_and_unknown_adv():
     out = liquidity_cap(np.array([0.3, 0.3]), np.array([np.nan, 1e9]), nav_usd=1e6)
     assert out[0] == 0.0 and out[1] == 0.3          # unknown liquidity -> no position
+
+
+def test_simulator_liquidity_cap():
+    from cryptobot.backtest import CostModel, simulate
+    idx = pd.date_range("2021-01-01", periods=3, freq="D", tz="UTC")
+    close = pd.DataFrame({"X": [1.0, 1.0, 1.0]}, idx)
+    tg = pd.DataFrame({"X": [0.5, 0.5, 0.5]}, idx)
+    adv = pd.DataFrame({"X": [100_000.0] * 3}, idx)            # $100k/day
+    cm = CostModel(fee_bps=0, base_slip_bps=0, aum_usd=1_000_000, max_slip_bps=0)
+    res = simulate(tg, close, adv, cm, max_participation=0.10)
+    assert np.isclose(res.weights["X"].iloc[0], 0.01)           # $10k of a $1M account
+    assert np.isclose(simulate(tg, close, adv, cm).weights["X"].iloc[0], 0.5)  # off by default

@@ -141,4 +141,5 @@ def load_panel_bitfinex(end: str = "2018-12-31") -> dict[str, pd.DataFrame]:
     # rename to Binance-style symbols so the strategy's BTC regime filter works
     out = {k: v.rename(columns=lambda c: c.replace("USD", "USDT")) for k, v in panel.items()}
     out["listed"] = pd.Series({s.replace("USD", "USDT"): df.index[0] for s, df in frames.items()})
-    return out
+    from .data import split_discontinuities
+    return split_discontinuities(out)
