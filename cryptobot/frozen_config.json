@@ -1,0 +1,23 @@
+{
+  "params": {
+    "universe_size": 30,
+    "min_history": 200,
+    "lookbacks": [
+      10,
+      20,
+      40,
+      80
+    ],
+    "top_k": 8,
+    "vol_lookback": 30,
+    "target_vol": 0.35,
+    "max_weight": 0.3,
+    "regime_filter": true,
+    "rebalance_days": 7,
+    "band": 0.05,
+    "adv_window": 30
+  },
+  "id": "U30_K8_L10-20-40-80_V0.35_R1",
+  "sha256": "c8df95fdf4163efef8abe196e374e147a7a1a805c4cca316ebba3cf9cf6f5daa",
+  "frozen_at": "2026-10-14T12:21:12.591751+00:00"
+}

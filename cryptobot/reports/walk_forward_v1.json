@@ -1,0 +1,175 @@
+{
+  "generated": "2026-10-14T12:16:04.086924+00:00",
+  "n_symbols_in_panel": 375,
+  "n_trials": 108,
+  "walk_forward_log": [
+    {
+      "year": 2019,
+      "chosen": "U15_K4_L20-40-80-160_V0.35_R1",
+      "train_plateau_sharpe": -1.973906777270705,
+      "test_sharpe": 0.48100705401237637,
+      "test_return": 0.09234034766526045
+    },
+    {
+      "year": 2020,
+      "chosen": "U30_K15_L40-80-160-320_V0.35_R0",
+      "train_plateau_sharpe": 0.3094016732747067,
+      "test_sharpe": 1.8677121655013393,
+      "test_return": 0.9191209785821182
+    },
+    {
+      "year": 2021,
+      "chosen": "U50_K4_L10-20-40-80_V0.6_R1",
+      "train_plateau_sharpe": 1.6913674814672177,
+      "test_sharpe": 3.2938495415897857,
+      "test_return": 2.899532009837467
+    },
+    {
+      "year": 2022,
+      "chosen": "U30_K4_L10-20-40-80_V0.6_R1",
+      "train_plateau_sharpe": 2.163216981286495,
+      "test_sharpe": -2.009796203274377,
+      "test_return": -0.4103226994119613
+    },
+    {
+      "year": 2023,
+      "chosen": "U50_K4_L10-20-40-80_V0.6_R1",
+      "train_plateau_sharpe": 1.6052491111170193,
+      "test_sharpe": 0.6352597777942265,
+      "test_return": 0.2114215071835075
+    },
+    {
+      "year": 2024,
+      "chosen": "U50_K4_L10-20-40-80_V0.6_R1",
+      "train_plateau_sharpe": 1.4264283377564977,
+      "test_sharpe": 1.3095841236259522,
+      "test_return": 0.588217447402698
+    }
+  ],
+  "oos": {
+    "start": "2019-01-01",
+    "end": "2024-12-31",
+    "CAGR": 0.449,
+    "vol": 0.3821,
+    "Sharpe": 1.1602,
+    "Sortino": 1.8527,
+    "MaxDD": -0.5808,
+    "Calmar": 0.7731,
+    "Ulcer": 31.1188,
+    "longest_DD_days": 1180,
+    "total_return": 8.2745,
+    "skew": 0.8219,
+    "hit_rate": 0.4398
+  },
+  "oos_2x_costs": {
+    "start": "2019-01-01",
+    "end": "2024-12-31",
+    "CAGR": 0.3395,
+    "vol": 0.3821,
+    "Sharpe": 0.9544,
+    "Sortino": 1.5058,
+    "MaxDD": -0.6529,
+    "Calmar": 0.52,
+    "Ulcer": 37.0231,
+    "longest_DD_days": 1209,
+    "total_return": 4.7848,
+    "skew": 0.7893,
+    "hit_rate": 0.4361
+  },
+  "oos_lag1": {
+    "start": "2019-01-01",
+    "end": "2024-12-31",
+    "CAGR": 0.3611,
+    "vol": 0.3881,
+    "Sharpe": 0.9874,
+    "Sortino": 1.534,
+    "MaxDD": -0.6364,
+    "Calmar": 0.5674,
+    "Ulcer": 34.3193,
+    "longest_DD_days": 1163,
+    "total_return": 5.368,
+    "skew": 0.5394,
+    "hit_rate": 0.4339
+  },
+  "btc_buy_hold": {
+    "start": "2019-01-01",
+    "end": "2024-12-31",
+    "CAGR": 0.7122,
+    "vol": 0.6563,
+    "Sharpe": 1.1538,
+    "Sortino": 1.7092,
+    "MaxDD": -0.7663,
+    "Calmar": 0.9294,
+    "Ulcer": 39.3153,
+    "longest_DD_days": 846,
+    "total_return": 24.271,
+    "skew": -0.4119,
+    "hit_rate": 0.5141
+  },
+  "ew_top10": {
+    "start": "2019-01-01",
+    "end": "2024-12-31",
+    "CAGR": 0.3437,
+    "vol": 0.8262,
+    "Sharpe": 0.782,
+    "Sortino": 1.0964,
+    "MaxDD": -0.901,
+    "Calmar": 0.3814,
+    "Ulcer": 61.4439,
+    "longest_DD_days": 1149,
+    "total_return": 4.8949,
+    "skew": -0.604,
+    "hit_rate": 0.5356
+  },
+  "oos_annual": {
+    "2019": 0.0923,
+    "2020": 0.9191,
+    "2021": 2.8995,
+    "2022": -0.4103,
+    "2023": 0.2114,
+    "2024": 0.5882
+  },
+  "btc_annual": {
+    "2019": 0.9431,
+    "2020": 3.0198,
+    "2021": 0.5979,
+    "2022": -0.6421,
+    "2023": 1.5561,
+    "2024": 1.2131
+  },
+  "ew_annual": {
+    "2019": 0.0225,
+    "2020": 1.5401,
+    "2021": 2.8753,
+    "2022": -0.8415,
+    "2023": 1.1096,
+    "2024": 0.7512
+  },
+  "deflated_sharpe": 0.8889,
+  "pbo": {
+    "PBO": 0.23628593628593628,
+    "median_logit": 0.9682504708048661,
+    "n_combinations": 12870
+  },
+  "bootstrap": {
+    "Sharpe_p05": 0.3616,
+    "Sharpe_p50": 1.2315,
+    "Sharpe_p95": 1.9958,
+    "P(Sharpe>0)": 0.9895,
+    "MaxDD_p05": -0.7186,
+    "MaxDD_p50": -0.4867,
+    "CAGR_p05": 0.0675,
+    "CAGR_p50": 0.4853
+  },
+  "trial_sharpe_distribution": {
+    "min": 0.5386,
+    "p25": 0.9017,
+    "median": 1.0528,
+    "p75": 1.2434,
+    "max": 1.5468,
+    "share_above_1": 0.5833
+  },
+  "final_config": "U30_K4_L10-20-40-80_V0.35_R1",
+  "final_config_dev_sharpe": 1.541,
+  "final_config_neighbour_robustness": 1.0
+}

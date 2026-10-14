@@ -1,0 +1,176 @@
+{
+  "generated": "2026-10-14T12:18:47.080789+00:00",
+  "n_symbols_in_panel": 375,
+  "n_trials": 108,
+  "n_trials_total_incl_prior_iterations": 216,
+  "walk_forward_log": [
+    {
+      "year": 2019,
+      "chosen": "U15_K4_L40-80-160-320_V0.35_R1",
+      "train_plateau_sharpe": -2.306222032097547,
+      "test_sharpe": 0.6133158036277193,
+      "test_return": 0.12504446948153514
+    },
+    {
+      "year": 2020,
+      "chosen": "U15_K4_L20-40-80-160_V0.6_R0",
+      "train_plateau_sharpe": 0.6985653952284632,
+      "test_sharpe": 1.908948828164543,
+      "test_return": 1.6342873051140456
+    },
+    {
+      "year": 2021,
+      "chosen": "U50_K8_L10-20-40-80_V0.6_R1",
+      "train_plateau_sharpe": 1.67717632154879,
+      "test_sharpe": 3.837369609119858,
+      "test_return": 3.563426574965355
+    },
+    {
+      "year": 2022,
+      "chosen": "U50_K8_L10-20-40-80_V0.6_R1",
+      "train_plateau_sharpe": 2.1622501555017615,
+      "test_sharpe": -2.1435686928326994,
+      "test_return": -0.39409444286795614
+    },
+    {
+      "year": 2023,
+      "chosen": "U50_K8_L10-20-40-80_V0.6_R1",
+      "train_plateau_sharpe": 1.5807411940416576,
+      "test_sharpe": 1.0838899975667478,
+      "test_return": 0.4642640570030725
+    },
+    {
+      "year": 2024,
+      "chosen": "U50_K8_L10-20-40-80_V0.6_R1",
+      "train_plateau_sharpe": 1.4829095160924761,
+      "test_sharpe": 0.9733124310381809,
+      "test_return": 0.38105279424129934
+    }
+  ],
+  "oos": {
+    "start": "2019-01-01",
+    "end": "2024-12-31",
+    "CAGR": 0.596,
+    "vol": 0.4125,
+    "Sharpe": 1.3396,
+    "Sortino": 2.0782,
+    "MaxDD": -0.4495,
+    "Calmar": 1.3261,
+    "Ulcer": 23.3632,
+    "longest_DD_days": 860,
+    "total_return": 15.5714,
+    "skew": 0.2638,
+    "hit_rate": 0.438
+  },
+  "oos_2x_costs": {
+    "start": "2019-01-01",
+    "end": "2024-12-31",
+    "CAGR": 0.5368,
+    "vol": 0.4128,
+    "Sharpe": 1.2473,
+    "Sortino": 1.9257,
+    "MaxDD": -0.496,
+    "Calmar": 1.0824,
+    "Ulcer": 25.1178,
+    "longest_DD_days": 865,
+    "total_return": 12.207,
+    "skew": 0.2529,
+    "hit_rate": 0.4352
+  },
+  "oos_lag1": {
+    "start": "2019-01-01",
+    "end": "2024-12-31",
+    "CAGR": 0.4447,
+    "vol": 0.4101,
+    "Sharpe": 1.1026,
+    "Sortino": 1.6523,
+    "MaxDD": -0.5977,
+    "Calmar": 0.744,
+    "Ulcer": 29.0106,
+    "longest_DD_days": 1149,
+    "total_return": 8.1102,
+    "skew": 0.0346,
+    "hit_rate": 0.4361
+  },
+  "btc_buy_hold": {
+    "start": "2019-01-01",
+    "end": "2024-12-31",
+    "CAGR": 0.7122,
+    "vol": 0.6563,
+    "Sharpe": 1.1538,
+    "Sortino": 1.7092,
+    "MaxDD": -0.7663,
+    "Calmar": 0.9294,
+    "Ulcer": 39.3153,
+    "longest_DD_days": 846,
+    "total_return": 24.271,
+    "skew": -0.4119,
+    "hit_rate": 0.5141
+  },
+  "ew_top10": {
+    "start": "2019-01-01",
+    "end": "2024-12-31",
+    "CAGR": 0.3437,
+    "vol": 0.8262,
+    "Sharpe": 0.782,
+    "Sortino": 1.0964,
+    "MaxDD": -0.901,
+    "Calmar": 0.3814,
+    "Ulcer": 61.4439,
+    "longest_DD_days": 1149,
+    "total_return": 4.8949,
+    "skew": -0.604,
+    "hit_rate": 0.5356
+  },
+  "oos_annual": {
+    "2019": 0.125,
+    "2020": 1.6343,
+    "2021": 3.5634,
+    "2022": -0.3941,
+    "2023": 0.4643,
+    "2024": 0.3811
+  },
+  "btc_annual": {
+    "2019": 0.9431,
+    "2020": 3.0198,
+    "2021": 0.5979,
+    "2022": -0.6421,
+    "2023": 1.5561,
+    "2024": 1.2131
+  },
+  "ew_annual": {
+    "2019": 0.0225,
+    "2020": 1.5401,
+    "2021": 2.8753,
+    "2022": -0.8415,
+    "2023": 1.1096,
+    "2024": 0.7512
+  },
+  "deflated_sharpe": 0.9366,
+  "pbo": {
+    "PBO": 0.14156954156954157,
+    "median_logit": 1.3188530803243583,
+    "n_combinations": 12870
+  },
+  "bootstrap": {
+    "Sharpe_p05": 0.5737,
+    "Sharpe_p50": 1.4395,
+    "Sharpe_p95": 2.2166,
+    "P(Sharpe>0)": 0.9955,
+    "MaxDD_p05": -0.7099,
+    "MaxDD_p50": -0.4837,
+    "CAGR_p05": 0.1577,
+    "CAGR_p50": 0.6545
+  },
+  "trial_sharpe_distribution": {
+    "min": 0.6041,
+    "p25": 0.9627,
+    "median": 1.1116,
+    "p75": 1.2869,
+    "max": 1.6154,
+    "share_above_1": 0.6667
+  },
+  "final_config": "U30_K8_L10-20-40-80_V0.35_R1",
+  "final_config_dev_sharpe": 1.605,
+  "final_config_neighbour_robustness": 1.0
+}
