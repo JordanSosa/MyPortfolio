@@ -288,7 +288,7 @@ Check (Sharpe at 4h ≥ 0.8× Sharpe at 0h): **pass**.
 ### 4.5 Live-engine parity
 * **Signals:** the live code path on rolling 800-day windows reproduces the
   backtest targets on every holdout day (`reports/v4_parity.json`; max
-  difference ~1e-14 against a 1e-9 threshold, re-run on the corrected data).
+  difference 7.3e-15 against a 1e-9 threshold; 651 of 651 days, re-run on the corrected data).
 * **Execution:** the paper account driven by the live order rules tracks the
   simulator to 0.06% a year (it waits 7 days before treating a missing coin as
   delisted; the simulator knows immediately).

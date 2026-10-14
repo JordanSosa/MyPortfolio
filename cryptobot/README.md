@@ -69,7 +69,7 @@ Other checks:
   at 10% or even 2% of each coin's daily volume
   (`reports/v4_capacity_liquidity.json`).
 * **Live engine = backtest.** On all 651 holdout days, signals matched to
-  about 1e-14. Paper-account NAV tracks the simulator to 0.06% a year
+  7e-15. Paper-account NAV tracks the simulator to 0.06% a year
   (`reports/v4_parity.json`).
 * **No single lucky setting.** The ensemble beats its median member (1.42 vs
   1.34). On random half-universes, Sharpe ranges 1.28–1.75.
