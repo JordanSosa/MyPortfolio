@@ -129,9 +129,9 @@ volatility-managed portfolios (Moreira & Muir 2017).
 cd cryptobot
 pip install -r requirements.txt
 python -m pytest -q tests                      # 23 tests incl. look-ahead and live-order logic
-python scripts/download_data.py                # ~45 min first time: 674 Binance symbols, 2017→today
+python scripts/download_data.py --hourly --bitfinex --tbill   # ~2 h first time (674 Binance symbols, hourly bars, Bitfinex)
 python scripts/research_v4.py dev              # development evaluation (Binance <= 2024)
-python scripts/research_v4.py fresh            # Bitfinex 2014-18 (needs cryptobot.data_bitfinex.download first)
+python scripts/research_v4.py fresh            # Bitfinex 2014-18 validation set
 python scripts/research_v4.py holdout          # 2025 → today
 python scripts/research_v4.py exec             # execution-delay test (needs 1h data)
 python scripts/research_v4.py parity           # live-engine replay (~45 min)

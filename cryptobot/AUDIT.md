@@ -8,7 +8,7 @@ outputs are in `reports/`.
 ## Verdict in one paragraph
 
 The first pass had a real edge but a fragile evidence base and a live engine
-that was not safe for real money. The audit found 7 methodology problems and 13
+that was not safe for real money. The audit found 8 methodology problems and 13
 code defects, fixed all of them, and replaced the single tuned configuration
 (v3) with a parameter-free ensemble (v4). v4 was then frozen and tested once on
 **data nobody had looked at**: Bitfinex 2014-2018, a different exchange,
@@ -85,6 +85,14 @@ idle cash with the US 3-month T-bill rate **minus 0.5 percentage points**
 (FRED DTB3, `data.load_tbill`), a conservative proxy for stablecoin savings
 rates. All headline numbers still exclude it; it is reported separately.
 
+### M8. No liquidity limit on position size
+The cost model caps slippage at 0.75%, which cannot represent a position that
+is a large multiple of a coin's daily volume. On Binance the universe is liquid
+enough that this never mattered below $1M. On the thinner Bitfinex history it
+inflated about 18% of P&L (see 4.1).
+**Fix:** positions are capped at 10% of the coin's 30-day median daily volume,
+in both the simulator (optional) and the live/paper engine (always on).
+
 ---
 
 ## 2. Code defects found and fixed
@@ -158,6 +166,29 @@ Drawdown ≤ ½ BTC's. Calmar > BTC's. 2× costs keep 94% of the Sharpe. The
 Sharpe sits at the 66th percentile of the development record's distribution,
 so no structural break. Per the pre-registered decision rule, **v4 becomes the
 recommended strategy.** v3 also passes all six.
+
+**Liquidity sensitivity (added after the test; it can only make results worse
+or more realistic, never selects anything).** Bitfinex had few coins before
+2018, so a "top-15 by volume" universe sometimes included very thin markets.
+At the extreme, the backtest held BCC at about 35× its daily volume, which is
+not tradable. Overall, 18% of the test's P&L came from coins trading under
+$1M a day. Re-running the frozen v4 with a position limit relative to each
+coin's 30-day median daily volume (`reports/v4_liquidity_sensitivity.json`):
+
+| Bitfinex 2014-18 | Sharpe | CAGR | MaxDD |
+| --- | --- | --- | --- |
+| As pre-registered | 1.72 | 42.1% | −21.4% |
+| ≤ 10% of daily volume, $100k account | 1.80 | 40.0% | −20.1% |
+| ≤ 2% of daily volume, $100k account | 1.72 | 34.8% | −21.0% |
+| ≤ 10% of daily volume, $1M account | 1.67 | 33.2% | −23.2% |
+| Coins under $1M/day excluded entirely | 1.71 | 36.2% | −22.2% |
+
+Every variant still passes F1-F6. v3 is also robust to it: Sharpe 1.71 →
+1.93 with the 10% limit, so its thin-market positions were net losers. On
+Binance 2019-24 the 10% limit does not
+bind for accounts up to $1M (Sharpe 1.47 → 1.46) and costs 0.07 Sharpe at
+$10M. The live engine now enforces the 10% limit as a safety constraint
+(finding M8).
 
 Caveat on 2014-2016: only BTC, LTC, Darkcoin and ETH had enough history then,
 so that segment mainly tests the trend and regime engine (Sharpe 0.70 vs 0.47

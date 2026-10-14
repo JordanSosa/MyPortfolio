@@ -10,6 +10,7 @@ on:
 
 permissions:
   contents: write
+  issues: write
 
 concurrency:
   group: cryptobot-forward-test
@@ -42,6 +43,17 @@ jobs:
         run: |
           python scripts/forward_report.py reports/paper/binance-archive-v4 | tee reports/paper/binance-archive-v4/latest_report.json
           python scripts/forward_report.py reports/paper/binance-archive-v3 | tee reports/paper/binance-archive-v3/latest_report.json
+      - name: Raise an issue if a kill switch fired
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for v in v4 v3; do
+            f=reports/paper/binance-archive-$v/latest_report.json
+            if [ -f "$f" ] && grep -q '"STOP TRADING' "$f"; then
+              gh issue create --title "cryptobot $v: kill switch fired ($(date -u +%F))" \
+                --body "forward_report.py returned STOP for the $v paper ledger. Stop live trading of $v and re-validate. Report: \`cryptobot/$f\`" || true
+            fi
+          done
       - name: Commit ledgers
         run: |
           git config user.name "cryptobot-forward-test"

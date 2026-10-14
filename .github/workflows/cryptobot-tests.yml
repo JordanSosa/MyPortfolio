@@ -2,9 +2,10 @@ name: cryptobot tests
 
 on:
   push:
-    paths: ["cryptobot/**", ".github/workflows/cryptobot-tests.yml"]
+    # the daily forward-test job commits ledgers under reports/ - no need to re-test for those
+    paths: ["cryptobot/**", "!cryptobot/reports/**", ".github/workflows/cryptobot-tests.yml"]
   pull_request:
-    paths: ["cryptobot/**", ".github/workflows/cryptobot-tests.yml"]
+    paths: ["cryptobot/**", "!cryptobot/reports/**", ".github/workflows/cryptobot-tests.yml"]
 
 jobs:
   test:
