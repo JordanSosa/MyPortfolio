@@ -1,0 +1,12 @@
+{
+  "days_checked": 651,
+  "step": 1,
+  "window_days": 800,
+  "max_abs_weight_diff": 7.271960811294775e-15,
+  "execution": {
+    "paper_final_nav": 1.05013958928489,
+    "sim_final_nav": 1.050154627995252,
+    "nav_tracking_error_ann": 0.00012102186151689105,
+    "max_daily_return_diff": 5.957670436662621e-05
+  }
+}

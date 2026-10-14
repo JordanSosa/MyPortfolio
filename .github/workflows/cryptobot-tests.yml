@@ -1,0 +1,21 @@
+name: cryptobot tests
+
+on:
+  push:
+    paths: ["cryptobot/**", ".github/workflows/cryptobot-tests.yml"]
+  pull_request:
+    paths: ["cryptobot/**", ".github/workflows/cryptobot-tests.yml"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: cryptobot
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - run: python -m pytest -q tests

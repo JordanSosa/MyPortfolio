@@ -293,6 +293,7 @@ def stage_holdout(_):
                           .to_timestamp().items()},
            "v4_current_weights": w4.iloc[-1][w4.iloc[-1] > 0.002].round(4).to_dict()}
     (REPORTS / "v4_holdout.json").write_text(json.dumps(out, indent=2, default=str))
+    pd.DataFrame({"v4": r4d}).to_csv(REPORTS / "v4_holdout_returns.csv")
     print(json.dumps(out, indent=1, default=str))
 
 

@@ -1,172 +1,210 @@
-# cryptobot — volatility-targeted crypto trend rotation
+# cryptobot — trend-following crypto rotation (v4 ensemble)
 
-An asset-agnostic, long-only spot strategy for crypto. It rotates into the
-strongest-trending liquid coins, sizes positions by volatility, and moves to
-cash (USDT) when the market trends down. It was built under a pre-registered
-validation protocol ([`PROTOCOL.md`](PROTOCOL.md), committed before any
-results were seen) and comes with a live/paper engine that is proven to make
-identical decisions to the backtest.
+An asset-agnostic, long-only spot strategy for crypto. Every day after the
+00:00 UTC close it ranks the most liquid coins by trend strength, holds the
+strongest uptrends sized by volatility, and moves to cash (USDT) when the
+market trends down.
 
-![equity](reports/equity.png)
-![drawdown](reports/drawdown.png)
+The current version, **v4**, came out of a full audit of the first version
+([`AUDIT.md`](AUDIT.md)). It has no tuned parameters: it averages 27 signal
+configurations on 7 staggered rebalance calendars. It was frozen, then tested
+once on data nobody had looked at, under a pre-registered protocol
+([`PROTOCOL_v2.md`](PROTOCOL_v2.md)).
+
+![untouched data](reports/v4_fresh.png)
+![untouched data drawdowns](reports/v4_fresh_drawdown.png)
 
 ## Verdict
 
-**What the evidence supports.** The edge is real, survives realistic costs,
-and cuts drawdowns by more than half compared with holding crypto. Across
-about 7.8 years of out-of-sample data it turned $1 into 9.6× with a worst
-drawdown of −33%. BTC buy-and-hold made 22.5× over the same window but went
-through a −77% drawdown, and an equal-weight top-10 basket made 2.8× through
-−90%. In the 21-month locked holdout it returned **+25%** while BTC returned
-−11% and the alt basket −53%.
+**What the evidence supports.** The strategy has a statistically solid,
+cost-robust edge, and it cuts drawdowns to between a quarter and a half of
+holding crypto.
 
-**What it is not.** It does not beat BTC buy-and-hold on raw return in a
-roaring bull market: it trades upside for survival. It did **not** pass every
-benchmark I set for it (scorecard below). Its returns over the most recent 21
-months were modest (13.5% a year, Sharpe 0.67), and they are sensitive to
-executing promptly after the daily close.
+* **Untouched data.** On a different exchange (Bitfinex, 2014-2018, delisted
+  coins included) it made **+42% a year at a −21% worst drawdown**. BTC made
+  +39% a year at −83%. It passed all six pre-registered criteria.
+* **Combined record.** Over all records (12.8 years, 2014 → 2026) it compounds
+  at 33% a year with Sharpe 1.42 and a worst drawdown of −32%.
 
-**Recommendation.** Before risking capital, run the paper forward test (already
-started, see below) for at least 90 days. Go live only if
-`forward_report.py` says `continue`, start with a small allocation, and obey
-the kill-switch rules.
+**What it is not.**
 
-## Scorecard against the pre-registered benchmarks
+* **It doesn't beat BTC in roaring bull markets.** In 2017 it made +407%
+  while BTC made +1,325%. It trades upside for survival.
+* **It earns little in choppy markets.** In 2025-26 it made only +6.8% in
+  21 months (BTC −11%, alts −53%).
+* **The live record is still short.** The forward test started on
+  2026-10-14, so there is little live evidence yet.
 
-Out-of-sample periods: walk-forward 2019-01-01 → 2024-12-31 (each year traded
-with parameters chosen only on earlier data), and the locked holdout
-2025-01-01 → 2026-10-13, which was run once with a config frozen and pushed
-beforehand (commit `f2febb8`, sha256 `c8df95f…`). All figures are net of a
-0.10% fee plus liquidity-scaled slippage on every trade.
+**Recommendation.** Paper-trade it for 90 days. The ledgers are already
+running, and the daily job keeps them going once merged. Then go live with
+10–25% of the intended capital if `forward_report.py` says `continue`, and
+scale up only while results stay inside the expected band.
 
-| # | Benchmark | Walk-forward OOS | Holdout | Result |
-| --- | --- | --- | --- | --- |
-| B1 | Sharpe ≥ 1.0 and > BTC | **1.40** vs BTC 1.15 | 0.67 vs BTC 0.06 | WF ✅ / holdout ❌ (<1.0, but ≫ BTC) |
-| B2 | MaxDD ≤ ½ BTC's and ≤ 40% | **−32.6%** vs BTC −76.6% | **−20.1%** vs BTC −53.0% | ✅ ✅ |
-| B3 | Calmar ≥ 1 and > BTC | **1.24** vs 0.93 | 0.67 vs −0.12 | WF ✅ / holdout ❌ (<1, but > BTC) |
-| B4 | Deflated Sharpe ≥ 0.95 (324 trials counted) | 0.944 | – | ❌ (narrow) |
-| B5 | Prob. of backtest overfitting ≤ 0.25 | **0.14** | – | ✅ |
-| B6 | Sharpe at 2× costs ≥ 0.75 | **1.31** | 0.54 | WF ✅ / holdout ❌ |
-| B7 | Sharpe with fills one day late ≥ 0.75 | **1.14** | 0.41 | WF ✅ / holdout ❌ |
-| B8 | Grid neighbours ≥ 0.7× chosen Sharpe ≥ 80% | **100%** | – | ✅ |
-| B9 | Holdout Sharpe ≥ ½ WF and > 0 | – | 0.67 vs 0.70 needed | ❌ (narrow) |
-| B10 | Live engine = backtest | – | 651/651 days identical (max weight diff 0.0); paper NAV tracks the simulator to 0.95% a year | ✅ |
+## Evidence
 
-Supporting detail (`reports/`):
+| Tier | Data | v4 Sharpe | v4 CAGR | v4 MaxDD | BTC Sharpe / MaxDD | Status |
+| --- | --- | --- | --- | --- | --- | --- |
+| **Fresh (primary test)** | Bitfinex 2014-2018, 113 pairs incl. delisted, 0.2% fees | **1.72** | **42.1%** | **−21.4%** | 0.82 / −82.9% | untouched, run once, **all 6 criteria passed** |
+| Development | Binance 2019-2024 | 1.47 | 35.5% | −31.7% | 1.15 / −76.6% | in-sample at the design level |
+| Holdout | Binance 2025-01 → 2026-10 | 0.29 | 3.8% | −24.4% | 0.06 / −53.0% | contaminated (seen before v4 existed), not used for decisions |
+| Forward | live paper ledgers | – | – | – | – | started 2026-10-14 |
 
-* **Walk-forward by year.** Returns were +12% (2019), +95% (2020), +154%
-  (2021), −25% (2022), +35% (2023), +38% (2024). BTC returned −64% in 2022.
-* **Bootstrap.** P(Sharpe > 0) = 99.5%. The 5th-percentile CAGR is +13%.
-* **Robustness** (`robustness.json`, frozen config, 2019 → now; 2019–2024 is
-  in-sample here):
-  * Rebalance weekday phase: Sharpe 1.24–1.52 across the 7 phases. The
-    phase in use is the best of them, so expect about 1.35 rather than 1.52.
-  * 30 random half-universes: median Sharpe 1.27 (5th–95th percentile
-    1.05–1.42).
-  * Account size: Sharpe 1.53 at $10k and 1.38 at $10M.
-* **Research history, kept on purpose.** v1 (daily selection) failed on
-  drawdown at −58%. v2 (weekly entries with daily exits) failed at −45%.
-  v3 (drawdown-constrained selection) is the frozen version. Every
-  configuration ever evaluated is counted in the Deflated Sharpe.
+Pre-registered fresh-data criteria (`reports/v4_fresh_bitfinex.json`), all ✅:
+
+| # | Criterion | Result |
+| --- | --- | --- |
+| F1 | Probabilistic Sharpe vs 0 ≥ 0.95 | 0.9999 |
+| F2 | Sharpe ≥ BTC buy-and-hold | 1.72 vs 0.82 |
+| F3 | MaxDD ≤ ½ of BTC's | −21.4% vs −82.9% |
+| F4 | Calmar > BTC's | 1.97 vs 0.47 |
+| F5 | Sharpe at 2× costs ≥ 0.75× base | 1.61 (94%) |
+| F6 | Consistent with the development record (≥ 5th pct) | 66th percentile |
+
+Other checks:
+
+* **Cost and timing robustness.** Cost drag is 0.67% a year at 3.9× annual
+  turnover. Sharpe stays at 1.41–1.47 whether fills happen at the close or
+  1, 4 or 12 hours later (hourly data, `reports/v4_exec_delay.json`).
+* **Live engine = backtest.** On all 651 holdout days, signals matched to
+  7e-15. Paper-account NAV tracks the simulator to 0.012% a year
+  (`reports/v4_parity.json`).
+* **No single lucky setting.** The ensemble beats its median member (1.47 vs
+  1.34). On random half-universes, Sharpe ranges 1.19–1.58.
+
+## Risk profiles: the one dial
+
+Everything is frozen except the portfolio volatility target, which you choose
+with `--risk`. Sharpe barely changes across profiles; return and drawdown
+scale together.
+
+| Profile | Vol target | Fresh 2014-18: CAGR / MaxDD | Dev 2019-24: CAGR / MaxDD |
+| --- | --- | --- | --- |
+| conservative | 20% | 26% / −13% | 16% / −16% |
+| **balanced (default, validated)** | **35%** | **42% / −21%** | **36% / −32%** |
+| growth | 50% | 54% / −36% | 49% / −41% |
+| aggressive | 75% | 69% / −38% | 63% / −56% |
+
+Only "balanced" was the pre-registered configuration; the other rows are
+informational. Choose the drawdown you can sit through without switching the
+bot off. Abandoning it mid-drawdown is the most common way a sound strategy
+loses money.
 
 ## How it works
 
-Everything is computed daily after the 00:00 UTC candle close.
+Everything is computed daily after the 00:00 UTC candle close. Per ensemble
+member:
 
-1. **Universe.** Take the top 30 USDT pairs by 30-day median dollar volume,
-   among coins with at least 200 days of history. Stablecoins and leveraged
-   tokens are excluded. The universe is chosen point-in-time, and delisted
-   coins (LUNA, FTT, …) are included in the data, so there is no survivorship
-   bias.
-2. **Trend score.** Average `tanh(z)` over 10/20/40/80-day log-returns, each
-   scaled by its expected volatility. The result lies in [−1, 1].
-3. **Selection.** Every 7th day, pick the top 8 coins with a positive trend.
-   A coin is dropped on the first day its trend turns non-positive. New
-   entries happen only on rebalance days, which prevents chasing one-day
-   pumps.
-4. **Sizing.** Weight each pick by trend strength divided by volatility.
-   Scale the portfolio to a 35% annualised volatility target (cap: 100%
-   gross, no leverage), with at most 30% in any one coin.
-5. **Regime filter.** Exposure is multiplied by `clip(0.5 + BTC trend, 0, 1)`.
-   When BTC is in a strong downtrend the bot goes fully to cash.
-6. **Execution.** A coin is traded only when its weight is more than 5
-   percentage points off target; exits always execute. Sells go before buys.
-   Average exposure is about 27–30% (median 26%; it is near 0% in bear markets), and annual turnover is 16–19×.
+1. **Universe.** The top N coins (N = 15 / 30 / 50) by 30-day median dollar
+   volume, among coins with at least 200 days of history.
+   * Stablecoins, leveraged tokens and tokenised stocks are excluded.
+   * Delisted coins are in the data, so there is no survivorship bias.
+2. **Trend score.** The average of `tanh(z)` over four lookback horizons,
+   where z is the log-return scaled by its expected volatility.
+   * Fast set: 10/20/40/80 days. Medium: 20-160. Slow: 40-320.
+3. **Selection.** On the member's weekly rebalance day, take the top K
+   (K = 4 / 8 / 15) coins with a positive trend.
+   * A coin is dropped the first day its trend turns non-positive, so exits
+     are daily and entries weekly.
+4. **Sizing.** Weight each pick by trend ÷ volatility and scale the
+   portfolio to the volatility target.
+   * No leverage; at most 30% in any one coin.
+   * A BTC regime filter cuts exposure when BTC itself trends down.
 
-The economic basis is well documented: time-series momentum and
-cross-sectional momentum in crypto (Liu & Tsyvinski 2021; Liu, Tsyvinski &
-Wu 2022) and volatility-managed portfolios (Moreira & Muir 2017).
+**v4 output.** The average of all 27 members (N × K × lookback set), each on
+7 staggered weekday calendars: 189 sub-portfolios in total. On average it
+holds about 13 coins at about 24% total exposure. Exposure is 0% in bear
+markets and up to about 80% in strong bull markets.
+
+**Execution.** A position is traded only when it drifts more than 5
+percentage points from target. Trades under 0.2% of NAV are skipped, exits
+always execute, and sells go before buys.
+
+The economic basis is well documented: time-series and cross-sectional
+momentum in crypto (Liu & Tsyvinski 2021; Liu, Tsyvinski & Wu 2022) and
+volatility-managed portfolios (Moreira & Muir 2017).
 
 ## Quick start
 
 ```bash
 cd cryptobot
 pip install -r requirements.txt
-python scripts/download_data.py            # ~45 min first time: 674 symbols, 2017→today
-python -m pytest -q tests                  # incl. look-ahead (truncation-invariance) test
-python scripts/run_research.py wf          # walk-forward + all diagnostics (~1 min)
-python scripts/run_research.py holdout     # frozen-config holdout
-python scripts/replay_parity.py            # B10 live/backtest parity (~9 min)
-python scripts/robustness.py               # phase / half-universe / account-size tests
+python -m pytest -q tests                      # 22 tests incl. look-ahead and live-order logic
+python scripts/download_data.py                # ~45 min first time: 674 Binance symbols, 2017→today
+python scripts/research_v4.py dev              # development evaluation (Binance <= 2024)
+python scripts/research_v4.py fresh            # Bitfinex 2014-18 (needs cryptobot.data_bitfinex.download first)
+python scripts/research_v4.py holdout          # 2025 → today
+python scripts/research_v4.py exec             # execution-delay test (needs 1h data)
+python scripts/research_v4.py parity           # live-engine replay (~45 min)
 python scripts/make_charts.py
 ```
 
 ## Forward testing (started 2026-10-14)
 
-Two paper ledgers are already running from the 2026-10-13 bar:
+Four paper ledgers run from the 2026-10-13 bar, so v4 and v3 are compared
+live on two data sources:
 
-* `reports/paper/binance-archive/` uses the exact data source of the
-  backtest.
-* `reports/paper/okx/` uses real OKX prices through the exchange API. Its
-  picks matched the backtest's on 7 of 8 coins; the eighth, OKB, is OKX's own
-  exchange token.
+| Ledger | Strategy | Prices |
+| --- | --- | --- |
+| `reports/paper/binance-archive-v4/` | v4 | Binance public archive (the backtest's own source) |
+| `reports/paper/okx-v4/` | v4 | live OKX API (16 of the top 25 picks shared with Binance) |
+| `reports/paper/binance-archive-v3/`, `okx-v3/` | v3 | as above |
 
 To keep them going:
 
 * **Automatically.** `.github/workflows/cryptobot-forward-test.yml` runs
-  daily at 03:17 UTC and commits the ledger. GitHub runs scheduled workflows
-  only from the default branch, so it starts once this branch is merged into
-  `master`. It is paper-only and uses no API keys.
-* **Manually or by cron.** Run `python scripts/paper_trade.py --exchange okx`
-  (or `kucoin`, `binance`, etc.) once a day after 00:05 UTC.
-* **Checking progress.** `python scripts/forward_report.py` compares the
-  forward NAV with the bootstrap band implied by the out-of-sample record and
-  evaluates the kill switches.
+  daily at 03:17 UTC and commits the ledgers. It is paper-only with no keys,
+  and starts once this branch is on `master`.
+* **By cron.** Run `python scripts/paper_trade.py` (archive, v4) or add
+  `--exchange okx` any time after 00:05 UTC.
+* **Checking progress.** `python scripts/forward_report.py reports/paper/binance-archive-v4`
+  compares the forward NAV with the band expected from the backtest records
+  and evaluates the kill switches.
 
 ## Going live with real funds
 
 ```bash
-export API_KEY=... API_SECRET=...              # spot-trading permission only, NO withdrawals
+export API_KEY=... API_SECRET=...      # spot trading permission only, withdrawals DISABLED
 export CRYPTOBOT_LIVE=I_UNDERSTAND_THE_RISK
-python scripts/paper_trade.py --exchange binance --dry   # inspect targets first
-python scripts/paper_trade.py --exchange binance --live
+python scripts/paper_trade.py --exchange binance --dry          # inspect today's targets
+python scripts/paper_trade.py --exchange binance --live         # balanced profile
+python scripts/paper_trade.py --exchange binance --live --risk growth
 ```
 
-Schedule it daily at 00:05 UTC. The edge degrades when execution is delayed
-(B7), so do not run it late. Use a dedicated sub-account, start at 10–25% of
-the capital you intend to commit, and scale up only after 90+ days of live
-results inside the expected band.
+* **Schedule.** Daily, after 00:05 UTC. The bot refuses stale data, holds a
+  lock, never trades the same bar twice, and logs every order to
+  `reports/live/...`.
+* **Capital.**
+  * v4 holds 10–25 small positions and skips trades under 0.2% of NAV.
+  * With Binance's ~$5 minimum order, use **at least $5,000**, otherwise many
+    positions cannot be opened.
+  * Under the cost model, capacity is not a constraint for private accounts:
+    dev Sharpe is 1.47 at $10k–$100k, 1.46 at $1M and 1.43 at $10M.
+* **Account.** Use a dedicated sub-account. The bot sells any coin it does not
+  want, including coins you bought by hand.
+* **Idle cash (optional, manual).** About 75% of the account is usually USDT.
+  Parking it in flexible savings at T-bill-like rates (modelled as T-bill −
+  0.5 pp) added +1.6% a year over 2019-24 and +2.5% a year over 2025-26. It
+  also adds exchange counterparty risk, and the bot does not automate it.
 
 **Kill-switch rules (stop and re-validate):**
 
-1. NAV falls more than 45% from its peak (1.4× the worst out-of-sample
-   drawdown).
+1. NAV falls more than 45% from its peak (about 1.4× the worst drawdown in
+   any record).
 2. After 90 or more days, the forward return falls below the 2.5th percentile
-   of the backtest's expectation band.
-3. Realised costs per trade exceed twice the model (check the fills against
-   `trades.csv`).
+   of the expected band.
+3. Realised costs per trade exceed twice the model. Check `trades.csv`
+   against exchange fills.
 
-`forward_report.py` evaluates rules 1 and 2 automatically.
+`forward_report.py` evaluates rules 1 and 2.
 
-**Maintenance.** Once a year, re-run `download_data.py` and
-`run_research.py wf` with `DEV_END` moved forward one year. If the selected
-config changes, run the new one in paper first. Do not re-tune more often:
-that is how overfitting creeps back in.
+**Maintenance.** Run `pytest` after any change. Do not re-tune on data you
+have already seen. A new version needs a new pre-registered protocol and
+untouched data; the forward ledger is now the only such data.
 
 ## Asset-specific mode: how to tune it, and when to pick an asset
 
-The portfolio strategy above is asset-agnostic and is the recommended mode.
-For running the same trend engine on a single coin, use:
+The portfolio strategy is asset-agnostic and is the recommended mode. To run
+the same trend engine on a single coin:
 
 ```bash
 python scripts/tune_asset.py SOLUSDT       # writes configs/SOLUSDT.json only if it qualifies
@@ -185,52 +223,62 @@ passes every gate:
 | S5 | Positive in ≥ 60% of walk-forward years | not one lucky year |
 | S6 | Holdout Sharpe > 0 and ≥ ½ walk-forward Sharpe | generalises to data it never saw |
 
-A variance ratio above 1 (`variance_ratio_20d` in the output) indicates
-trending behaviour, but it is informational only, not a gate.
+**How it tunes.** It tests 3 lookback ensembles × 3 volatility targets. The
+config is chosen by the plateau rule (mean Sharpe of a config and its
+neighbours) on a yearly walk-forward, and holdout data is never used to
+select.
 
-**How it tunes.** The tuner tests 3 lookback ensembles × 3 volatility
-targets. It selects the config using the plateau rule (mean Sharpe of a
-config and its neighbours) on a yearly walk-forward, and never touches
-holdout data during selection.
+**When to (re)pick.**
 
-**When to (re)pick.** Re-run `tune_asset.py` monthly for each candidate.
-Start trading a coin only when it newly passes all gates, and stop when it
-fails S2 or S6 on a re-run. Never pick a coin because of a recent rally:
-S1–S6 already ask the only questions that matter.
+* Re-run monthly.
+* Start trading a coin only when it newly passes all gates; stop when it
+  fails S2 or S6.
+* Never pick a coin because of a recent rally.
 
-**Current result (2026-10-14).** None of BTC, ETH, SOL, BNB, XRP, DOGE, ADA,
-LINK or TRX qualifies (`reports/tune/`). Several pass S1–S5 in walk-forward
-(e.g. BTC: Sharpe 1.42, MaxDD −25% vs −77% for holding it). All fail S6:
-single-coin trend following did not work in 2025–26, while the diversified
-rotation did. **Use the portfolio mode.**
+**Current result.** No major coin qualifies; all fail S6. Single-coin trend
+following: BTC trend made Sharpe 1.39 on Bitfinex 2014-18, but about 0 in
+2025-26. The diversified ensemble is more robust. **Use the portfolio mode.**
+
+## Research history
+
+* **v1 → v3** (first pass). Built under [`PROTOCOL.md`](PROTOCOL.md).
+  * v3 is a single configuration selected by walk-forward: OOS Sharpe 1.40
+    (2019-24), holdout +25% (2025-26), and it also passes the fresh test
+    (Sharpe 1.71).
+  * It failed some of its own benchmarks; the audit showed those were
+    under-powered.
+  * Kept as a comparison: `frozen_config.json`, `reports/walk_forward*.json`,
+    `reports/holdout.json`.
+* **Audit → v4.** Everything found and fixed is in [`AUDIT.md`](AUDIT.md),
+  including 11 code defects, the most important being in the live order
+  handling.
 
 ## Limitations, stated plainly
 
-* **No backtest proves future profits.** The forward record started on
-  2026-10-14. Until it is months long, the evidence is out-of-sample history,
-  not live P&L.
-* **Single venue.** The backtest data are Binance spot. Other venues differ in
-  listings and liquidity; the OKX check showed 7 of 8 picks in common.
-* **Cash earns 0%.** Holding USDT in a lending or yield product would add
-  return, along with counterparty risk.
-* **Fills are modelled at the daily close plus slippage.** A 1-day delay
-  costs about 0.25 Sharpe (B7).
-* **Not financial advice.** Exchange, custody, regulatory and tax risk are
-  outside this model; Australian residents should note that disposals are CGT
-  events.
+* **No backtest proves future profits.** Even untouched historical data is
+  not live trading. The forward ledgers will tell.
+* **Regime dependence.** Most of the return comes in strong bull trends;
+  choppy years are roughly flat (2019 +6%, 2025 −7%).
+* **Not modelled:** exchange failure, USDT de-peg, account freezes, and
+  taxes. Australian CGT applies to every disposal, and most holdings are held
+  for under 12 months.
+* **Not financial advice.**
 
 ## Layout
 
 ```
 cryptobot/
-  data.py        Binance archive download (incl. delisted), point-in-time panel
-  strategy.py    signals, selection, sizing  <- the only place trading logic lives
-  backtest.py    daily simulator: drift, no-trade band, fees+slippage, delisting haircut
-  metrics.py     Sharpe/Calmar/..., PSR, Deflated Sharpe, PBO (CSCV), block bootstrap
-  research.py    grid, walk-forward helpers, benchmarks
-  live.py        ccxt market data, order planning, paper account, live broker
-scripts/         download, research, parity, robustness, tuning, paper/live trading, reports
-reports/         every result quoted above (JSON/CSV/PNG), incl. failed iterations
-frozen_config.json   the configuration being traded (hash-checked)
-PROTOCOL.md      pre-registered validation protocol and benchmarks
+  data.py           Binance archive download (incl. delisted), refresh, T-bill rates
+  data_bitfinex.py  independent survivorship-free Bitfinex dataset (validation)
+  strategy.py       signals, selection, sizing, v4 ensemble <- all trading logic
+  backtest.py       daily simulator: drift, band, min trade, gaps, delistings, costs, cash yield
+  metrics.py        Sharpe/Calmar/..., PSR, Deflated Sharpe, PBO (CSCV), block bootstrap
+  research.py       v3 grid / walk-forward helpers
+  live.py           market data, order planning, paper account, hardened live broker
+scripts/            research_v4 (dev/fresh/holdout/exec/parity), paper_trade, forward_report,
+                    audit_diagnostics, tune_asset, make_charts, v3 research scripts
+reports/            every number quoted here (JSON/CSV/PNG), incl. failed iterations
+frozen_config_v4.json  the recommended strategy (hash-checked)
+frozen_config.json     v3, kept for comparison
+PROTOCOL.md / PROTOCOL_v2.md / AUDIT.md
 ```

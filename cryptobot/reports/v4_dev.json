@@ -302,5 +302,82 @@
     "CAGR_p05": 0.1316,
     "CAGR_p50": 0.3692
   },
-  "corr_v4_v3": 0.828
+  "corr_v4_v3": 0.828,
+  "capacity_aum": {
+    "10000": {
+      "start": "2019-01-01",
+      "end": "2024-12-31",
+      "CAGR": 0.356,
+      "vol": 0.2237,
+      "Sharpe": 1.4735,
+      "Sortino": 2.2434,
+      "MaxDD": -0.3159,
+      "Calmar": 1.1271,
+      "longest_DD_days": 759,
+      "total_return": 5.2278,
+      "turnover_ann": 3.9166,
+      "avg_exposure": 0.2416,
+      "cost_drag_ann": 0.006
+    },
+    "100000": {
+      "start": "2019-01-01",
+      "end": "2024-12-31",
+      "CAGR": 0.3551,
+      "vol": 0.2237,
+      "Sharpe": 1.4704,
+      "Sortino": 2.2385,
+      "MaxDD": -0.3168,
+      "Calmar": 1.1211,
+      "longest_DD_days": 759,
+      "total_return": 5.2028,
+      "turnover_ann": 3.9166,
+      "avg_exposure": 0.2416,
+      "cost_drag_ann": 0.0067
+    },
+    "1000000": {
+      "start": "2019-01-01",
+      "end": "2024-12-31",
+      "CAGR": 0.3522,
+      "vol": 0.2237,
+      "Sharpe": 1.4607,
+      "Sortino": 2.2227,
+      "MaxDD": -0.3192,
+      "Calmar": 1.1035,
+      "longest_DD_days": 759,
+      "total_return": 5.1226,
+      "turnover_ann": 3.9166,
+      "avg_exposure": 0.2416,
+      "cost_drag_ann": 0.0089
+    },
+    "10000000": {
+      "start": "2019-01-01",
+      "end": "2024-12-31",
+      "CAGR": 0.3439,
+      "vol": 0.2237,
+      "Sharpe": 1.4331,
+      "Sortino": 2.1776,
+      "MaxDD": -0.3244,
+      "Calmar": 1.0601,
+      "longest_DD_days": 772,
+      "total_return": 4.8996,
+      "turnover_ann": 3.9166,
+      "avg_exposure": 0.2416,
+      "cost_drag_ann": 0.0151
+    },
+    "50000000": {
+      "start": "2019-01-01",
+      "end": "2024-12-31",
+      "CAGR": 0.3339,
+      "vol": 0.2237,
+      "Sharpe": 1.4,
+      "Sortino": 2.1232,
+      "MaxDD": -0.3277,
+      "Calmar": 1.0189,
+      "longest_DD_days": 773,
+      "total_return": 4.6421,
+      "turnover_ann": 3.9166,
+      "avg_exposure": 0.2416,
+      "cost_drag_ann": 0.0225
+    }
+  }
 }

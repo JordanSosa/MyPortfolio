@@ -1,0 +1,38 @@
+{
+  "v4": {
+    "start": "2014-01-01",
+    "end": "2026-10-13",
+    "CAGR": 0.33,
+    "vol": 0.2177,
+    "Sharpe": 1.4194,
+    "MaxDD": -0.3168,
+    "Calmar": 1.042,
+    "total_return": 37.4106,
+    "years": 12.8,
+    "positive_years": "9/13"
+  },
+  "v3": {
+    "start": "2014-01-01",
+    "end": "2026-10-13",
+    "CAGR": 0.3742,
+    "vol": 0.2472,
+    "Sharpe": 1.4097,
+    "MaxDD": -0.3257,
+    "Calmar": 1.1488,
+    "total_return": 57.3441,
+    "years": 12.8,
+    "positive_years": "9/13"
+  },
+  "btc": {
+    "start": "2014-01-01",
+    "end": "2026-10-13",
+    "CAGR": 0.4519,
+    "vol": 0.6769,
+    "Sharpe": 0.8925,
+    "MaxDD": -0.8292,
+    "Calmar": 0.545,
+    "total_return": 116.8577,
+    "years": 12.8,
+    "positive_years": "8/13"
+  }
+}

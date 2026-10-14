@@ -210,3 +210,44 @@ def load_tbill(haircut: float = 0.005, refresh: bool = False) -> pd.Series:
     s = s.dropna()
     s = s.reindex(pd.date_range(s.index[0], pd.Timestamp.now(tz="UTC").normalize(), freq="D")).ffill()
     return (s - haircut).clip(lower=0.0)
+
+
+def refresh_symbol(symbol: str, interval: str = "1d") -> int:
+    """Bring a cached symbol up to date however stale it is: missing monthly
+    archive files first, then daily files for the current month. A symbol is
+    only treated as delisted when the archive has nothing newer."""
+    path = DATA_DIR / interval / f"{symbol}.parquet"
+    if not path.exists():
+        return 0
+    df = pd.read_parquet(path)
+    last = df.index[-1]
+    month_after = (last + pd.offsets.MonthBegin(1)).normalize()
+    frames = []
+    for k in _month_files(symbol, interval):
+        ym = re.search(r"-(\d{4})-(\d{2})\.zip$", k)
+        if ym and pd.Timestamp(f"{ym.group(1)}-{ym.group(2)}-01", tz="UTC") >= month_after.replace(day=1):
+            f = _fetch_zip(f"https://data.binance.vision/{k}")
+            if f is not None and len(f):
+                frames.append(f)
+    if frames:
+        new = _clean(pd.concat(frames, ignore_index=True))
+        df = pd.concat([df, new])
+        df = df[~df.index.duplicated(keep="last")].sort_index()
+        df.to_parquet(path)
+    return len(frames) + topup_daily(symbol, interval)
+
+
+def _clean(df: pd.DataFrame) -> pd.DataFrame:
+    ot = pd.to_numeric(df["open_time"])
+    ot = np.where(ot > 1e14, ot // 1000, ot)
+    df["open_time"] = pd.to_datetime(ot, unit="ms", utc=True)
+    for c in ["open", "high", "low", "close", "volume", "quote_volume", "taker_quote"]:
+        df[c] = pd.to_numeric(df[c], errors="coerce")
+    return (df[["open_time", "open", "high", "low", "close", "volume", "quote_volume",
+                "taker_quote"]].drop_duplicates("open_time").set_index("open_time").sort_index())
+
+
+def refresh_universe(interval: str = "1d", workers: int = 32) -> int:
+    syms = [p.stem for p in (DATA_DIR / interval).glob("*.parquet")]
+    with ThreadPoolExecutor(workers) as ex:
+        return sum(ex.map(lambda s: refresh_symbol(s, interval), syms))

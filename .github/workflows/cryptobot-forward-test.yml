@@ -34,14 +34,18 @@ jobs:
           path: cryptobot/data
           key: cryptobot-data-${{ github.run_id }}
           restore-keys: cryptobot-data-
-      - name: Paper trade
-        run: python scripts/paper_trade.py --exchange binance-archive
-      - name: Forward vs backtest report
-        run: python scripts/forward_report.py | tee reports/paper/binance-archive/latest_report.json
-      - name: Commit ledger
+      - name: Paper trade (v4 ensemble - the recommended strategy)
+        run: python scripts/paper_trade.py --exchange binance-archive --strategy frozen_config_v4.json
+      - name: Paper trade (v3 - kept running for comparison)
+        run: python scripts/paper_trade.py --exchange binance-archive --strategy frozen_config.json
+      - name: Forward vs backtest reports
+        run: |
+          python scripts/forward_report.py reports/paper/binance-archive-v4 | tee reports/paper/binance-archive-v4/latest_report.json
+          python scripts/forward_report.py reports/paper/binance-archive-v3 | tee reports/paper/binance-archive-v3/latest_report.json
+      - name: Commit ledgers
         run: |
           git config user.name "cryptobot-forward-test"
           git config user.email "actions@users.noreply.github.com"
-          git add reports/paper/binance-archive
+          git add reports/paper/binance-archive-v4 reports/paper/binance-archive-v3
           git diff --cached --quiet || git commit -m "cryptobot: forward-test ledger $(date -u +%F)"
           git push

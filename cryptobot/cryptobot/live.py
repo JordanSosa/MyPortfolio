@@ -1,16 +1,19 @@
 """Live / paper trading engine.
 
-The engine calls *exactly* the same ``target_weights`` function as the
-backtest, on a panel built from the exchange's recent daily candles, and takes
-the last row. The only live-specific logic is order generation (same no-trade
-band as the simulator) and bookkeeping.
+The engine calls *exactly* the same weight functions as the backtest
+(``ensemble_weights`` for v4, ``target_weights`` for v3) on a panel built from
+recent daily candles, and takes the last row. Live-specific logic is limited to
+order generation (the simulator's band / minimum-trade / no-trade-in-gap
+rules, see ``plan_orders``), order execution and bookkeeping.
 
 Run once per day shortly after 00:00 UTC (the daily candle close), e.g. cron:
     5 0 * * *  cd /path/to/cryptobot && python scripts/paper_trade.py
 """
 from __future__ import annotations
 
+import contextlib
 import csv
+import fcntl
 import json
 import os
 import time
@@ -22,17 +25,44 @@ import numpy as np
 import pandas as pd
 
 from .backtest import CostModel
-from .strategy import Params, compute_features, target_weights
+from .strategy import (EnsembleParams, Params, compute_features, ensemble_weights,
+                       target_weights)
 
 QUOTE = "USDT"
 
 
+# ---------------------------------------------------------------- configuration
+def load_strategy(path: Path) -> EnsembleParams | Params:
+    """Read a frozen config (v4 ensemble or v3 single config), verifying its hash."""
+    import hashlib
+    fz = json.loads(Path(path).read_text())
+    blob = json.dumps(fz["params"], sort_keys=True)
+    if "sha256" in fz and hashlib.sha256(blob.encode()).hexdigest() != fz["sha256"]:
+        raise ValueError(f"{path}: parameters do not match their recorded hash")
+    if fz.get("version") == "v4":
+        return EnsembleParams.from_dict(fz["params"])
+    cfg = dict(fz["params"])
+    cfg["lookbacks"] = tuple(cfg["lookbacks"])
+    return Params(**cfg)
+
+
+def history_days(p: EnsembleParams | Params) -> int:
+    """Daily bars the live panel needs so every feature equals the backtest's:
+    the longest lookback plus a volatility window of the same length, plus slack."""
+    lb = p.max_lookback if isinstance(p, EnsembleParams) else max(p.lookbacks)
+    return max(lb * 2 + 160, p.min_history + 160)
+
+
+def min_trade_of(p) -> float:
+    return getattr(p, "min_trade", 0.0)
+
+
 # ---------------------------------------------------------------- market data
-def build_live_panel(exchange, n_symbols: int = 80, days: int = 400,
+def build_live_panel(exchange, n_symbols: int = 80, days: int = 800,
                      quote: str = QUOTE, extra: list[str] | None = None) -> dict:
     """Daily OHLCV panel for the ``n_symbols`` most liquid ``*/quote`` spot
-    markets on ``exchange`` (a ccxt instance). Excludes stablecoins and the
-    still-forming current candle."""
+    markets on ``exchange`` (a ccxt instance) plus any ``extra`` symbols (held
+    coins). Excludes stablecoins, leveraged tokens and the forming candle."""
     from .data import LEVERAGED, STABLES
     exchange.load_markets()
     tickers = exchange.fetch_tickers()
@@ -46,7 +76,6 @@ def build_live_panel(exchange, n_symbols: int = 80, days: int = 400,
         qv = t.get("quoteVolume") or (t.get("baseVolume") or 0) * (t.get("last") or 0)
         cands.append((qv or 0, sym))
     cands = [s for _, s in sorted(cands, reverse=True)[:n_symbols]]
-    # always fetch currently held coins so they can be valued and sold
     for name in extra or []:
         sym = name[:-len(quote)] + "/" + quote
         if sym in exchange.markets and sym not in cands:
@@ -87,32 +116,87 @@ def _fetch_daily(exchange, sym: str, since: int) -> list:
         time.sleep(exchange.rateLimit / 1000)
 
 
-def latest_targets(panel: dict, p: Params) -> tuple[pd.Timestamp, pd.Series, pd.Series]:
-    f = compute_features(panel, p)
-    w = target_weights(panel, p, f)
+# ---------------------------------------------------------------- signals
+def latest_targets(panel: dict, p: Params | EnsembleParams
+                   ) -> tuple[pd.Timestamp, pd.Series, pd.Series]:
+    if isinstance(p, EnsembleParams):
+        w = ensemble_weights(panel, p)
+    else:
+        w = target_weights(panel, p, compute_features(panel, p))
     t = w.index[-1]
     return t, w.iloc[-1], panel["close"].iloc[-1]
 
 
-# ---------------------------------------------------------------- execution
-def plan_orders(target: pd.Series, current: pd.Series, band: float) -> pd.Series:
-    """Weight deltas to trade, using the simulator's exact band rule."""
+def latest_targets_v4(panel: dict, ep: EnsembleParams):
+    return latest_targets(panel, ep)
+
+
+def check_fresh(bar: pd.Timestamp, now: pd.Timestamp | None = None) -> None:
+    """Refuse to trade on stale data: the latest complete daily bar must be
+    yesterday's (UTC)."""
+    now = now or pd.Timestamp.now(tz="UTC")
+    expected = now.normalize() - pd.Timedelta(days=1)
+    if bar < expected:
+        raise RuntimeError(f"stale data: latest bar {bar.date()} but expected {expected.date()}; "
+                           "not trading")
+
+
+# ---------------------------------------------------------------- order planning
+def plan_orders(target: pd.Series, current: pd.Series, band: float, min_trade: float = 0.0,
+                tradable: pd.Index | None = None) -> pd.Series:
+    """Weight deltas to trade - the simulator's exact rules: trade when the
+    drift exceeds ``band`` or a position opens/closes; skip trades smaller than
+    ``min_trade`` unless they close a position; never trade a coin with no
+    price today (data gap / suspended market)."""
     idx = target.index.union(current.index)
     tgt = target.reindex(idx).fillna(0).clip(lower=0)
     if tgt.sum() > 1:
         tgt = tgt / tgt.sum()
     cur = current.reindex(idx).fillna(0)
+    if tradable is not None:
+        frozen = ~idx.isin(tradable)
+        tgt[frozen] = cur[frozen]
     diff = tgt - cur
-    trade = (diff.abs() > band) | ((tgt == 0) & (cur > 0)) | ((cur == 0) & (tgt > 0))
-    trade &= diff.abs() > 1e-6
+    closing = (tgt == 0) & (cur > 0)
+    trade = (diff.abs() > band) | closing | ((cur == 0) & (tgt > 0))
+    trade &= (diff.abs() > max(min_trade, 1e-6)) | closing
     return diff[trade]
+
+
+# ---------------------------------------------------------------- bookkeeping
+def atomic_write(path: Path, text: str) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    tmp = path.with_suffix(path.suffix + ".tmp")
+    tmp.write_text(text)
+    os.replace(tmp, path)
+
+
+@contextlib.contextmanager
+def run_lock(path: Path):
+    """Exclusive lock so two cron runs can never trade the same account at once."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with open(path, "w") as fh:
+        try:
+            fcntl.flock(fh, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        except BlockingIOError as e:
+            raise RuntimeError(f"another run holds {path}") from e
+        yield
+
+
+def already_done(state_dir: Path, bar: pd.Timestamp) -> bool:
+    f = state_dir / "last_bar.txt"
+    return f.exists() and f.read_text().strip() >= str(bar.date())
+
+
+def mark_done(state_dir: Path, bar: pd.Timestamp) -> None:
+    atomic_write(state_dir / "last_bar.txt", str(bar.date()))
 
 
 @dataclass
 class PaperAccount:
     path: Path
     cash: float = 10_000.0
-    units: dict | None = None
+    units: dict = field(default_factory=dict)
     cost: CostModel = field(default_factory=CostModel)
 
     @classmethod
@@ -123,8 +207,7 @@ class PaperAccount:
         return cls(path, initial_cash, {})
 
     def save(self):
-        self.path.parent.mkdir(parents=True, exist_ok=True)
-        self.path.write_text(json.dumps({"cash": self.cash, "units": self.units}, indent=2))
+        atomic_write(self.path, json.dumps({"cash": self.cash, "units": self.units}, indent=2))
 
     def nav(self, prices: pd.Series) -> float:
         return self.cash + sum(u * float(prices.get(s, np.nan)) for s, u in self.units.items()
@@ -134,6 +217,21 @@ class PaperAccount:
         nav = self.nav(prices)
         return pd.Series({s: u * prices[s] / nav for s, u in self.units.items()
                           if s in prices and np.isfinite(prices[s])}, dtype=float)
+
+    def liquidate_missing(self, prices: pd.Series, last_known: pd.Series,
+                          haircut: float = 0.10) -> list[dict]:
+        """Coins that disappeared from the venue (delisted) are booked out at
+        their last known price minus ``haircut`` - the simulator's rule."""
+        fills = []
+        for s in [s for s in self.units if s not in prices.index or not np.isfinite(prices[s])]:
+            lp = float(last_known.get(s, 0.0) or 0.0)
+            if not np.isfinite(lp) or lp <= 0:
+                continue                      # unknown price: keep carrying it
+            proceeds = self.units.pop(s) * lp * (1 - haircut)
+            self.cash += proceeds
+            fills.append({"symbol": s, "side": "DELIST", "notional": round(-proceeds, 2),
+                          "price": lp, "cost": round(proceeds * haircut / (1 - haircut), 4)})
+        return fills
 
     def execute(self, deltas: pd.Series, prices: pd.Series, adv: pd.Series) -> list[dict]:
         nav = self.nav(prices)
@@ -154,44 +252,102 @@ class PaperAccount:
 
 
 class LiveBroker:
-    """Real orders via ccxt. Requires API keys and explicit opt-in. Market
-    orders, sells before buys, respects exchange minimums."""
+    """Real orders via ccxt. Requires API keys and explicit opt-in.
 
-    def __init__(self, exchange):
+    * sells before buys; a full exit sells the entire free balance
+    * buys are sized in quote currency and capped at the free USDT actually
+      available after the sells (no rejected orders from price moves)
+    * every order is attempted independently and logged, success or failure
+    """
+
+    def __init__(self, exchange, quote: str = QUOTE):
         if os.environ.get("CRYPTOBOT_LIVE") != "I_UNDERSTAND_THE_RISK":
             raise RuntimeError("Set CRYPTOBOT_LIVE=I_UNDERSTAND_THE_RISK to trade real money.")
         self.ex = exchange
+        self.quote = quote
+
+    def balances(self) -> dict:
+        return self.ex.fetch_balance()
 
     def positions(self, prices: pd.Series) -> tuple[float, pd.Series]:
-        bal = self.ex.fetch_balance()["total"]
-        vals = {f"{a}{QUOTE}": q * float(prices[f"{a}{QUOTE}"]) for a, q in bal.items()
-                if f"{a}{QUOTE}" in prices.index and q}
-        nav = float(bal.get(QUOTE, 0)) + sum(vals.values())
-        return nav, pd.Series(vals, dtype=float) / nav
+        bal = self.balances()["total"]
+        vals = {f"{a}{self.quote}": float(q) * float(prices[f"{a}{self.quote}"])
+                for a, q in bal.items()
+                if a != self.quote and q and f"{a}{self.quote}" in prices.index
+                and np.isfinite(prices[f"{a}{self.quote}"])}
+        nav = float(bal.get(self.quote, 0) or 0) + sum(vals.values())
+        return nav, (pd.Series(vals, dtype=float) / nav if nav > 0 else pd.Series(dtype=float))
 
-    def execute(self, deltas: pd.Series, prices: pd.Series, nav: float) -> list[dict]:
+    def _min_cost(self, sym: str) -> float:
+        m = self.ex.market(sym)
+        return float(((m.get("limits") or {}).get("cost") or {}).get("min") or 5.0)
+
+    def execute(self, deltas: pd.Series, target: pd.Series, prices: pd.Series, nav: float
+                ) -> list[dict]:
         fills = []
-        for name in deltas.sort_values().index:
-            sym = name[:-len(QUOTE)] + "/" + QUOTE
-            amount = abs(float(deltas[name])) * nav / float(prices[name])
-            m = self.ex.market(sym)
-            amount = float(self.ex.amount_to_precision(sym, amount))
-            min_cost = (m.get("limits", {}).get("cost", {}) or {}).get("min") or 5
-            if amount * float(prices[name]) < min_cost:
-                continue
-            side = "buy" if deltas[name] > 0 else "sell"
-            o = self.ex.create_order(sym, "market", side, amount)
-            fills.append({"symbol": name, "side": side, "amount": amount, "id": o.get("id")})
+        free = self.balances()["free"]
+        for name in deltas[deltas < 0].sort_values().index:            # sells
+            base = name[:-len(self.quote)]
+            sym = f"{base}/{self.quote}"
+            try:
+                if float(target.get(name, 0.0)) <= 0:
+                    amount = float(free.get(base, 0) or 0)            # full exit
+                else:
+                    amount = min(abs(float(deltas[name])) * nav / float(prices[name]),
+                                 float(free.get(base, 0) or 0))
+                amount = float(self.ex.amount_to_precision(sym, amount))
+                if amount * float(prices[name]) < self._min_cost(sym):
+                    fills.append({"symbol": name, "side": "sell", "status": "skipped_min_notional"})
+                    continue
+                o = self.ex.create_order(sym, "market", "sell", amount)
+                fills.append({"symbol": name, "side": "sell", "amount": amount,
+                              "id": o.get("id"), "status": "ok"})
+            except Exception as e:  # noqa: BLE001 - log and continue with the rest
+                fills.append({"symbol": name, "side": "sell", "status": f"error: {e}"[:300]})
+        quote_free = float(self.balances()["free"].get(self.quote, 0) or 0) * 0.995
+        for name in deltas[deltas > 0].sort_values(ascending=False).index:  # buys
+            sym = f"{name[:-len(self.quote)]}/{self.quote}"
+            try:
+                cost = min(float(deltas[name]) * nav, quote_free)
+                if cost < self._min_cost(sym):
+                    fills.append({"symbol": name, "side": "buy", "status": "skipped_min_notional"})
+                    continue
+                if self.ex.has.get("createMarketBuyOrderWithCost"):
+                    o = self.ex.create_market_buy_order_with_cost(sym, cost)
+                else:
+                    px = float(self.ex.fetch_ticker(sym).get("ask") or prices[name])
+                    amt = float(self.ex.amount_to_precision(sym, cost / px * 0.998))
+                    o = self.ex.create_order(sym, "market", "buy", amt)
+                quote_free -= cost
+                fills.append({"symbol": name, "side": "buy", "cost": round(cost, 2),
+                              "id": o.get("id"), "status": "ok"})
+            except Exception as e:  # noqa: BLE001
+                fills.append({"symbol": name, "side": "buy", "status": f"error: {e}"[:300]})
         return fills
 
 
 def append_csv(path: Path, rows: list[dict]):
+    """Append rows, keeping columns aligned with the existing header; new
+    columns extend the header (the file is rewritten once when that happens)."""
     if not rows:
         return
     path.parent.mkdir(parents=True, exist_ok=True)
+    keys: list[str] = []
+    for r in rows:
+        keys += [k for k in r if k not in keys]
+    if path.exists():
+        with path.open(newline="") as fh:
+            header = next(csv.reader(fh), [])
+        extra = [k for k in keys if k not in header]
+        if extra:
+            old = pd.read_csv(path, dtype=str)
+            pd.concat([old, pd.DataFrame(rows, dtype=str)], ignore_index=True)[
+                header + extra].to_csv(path, index=False)
+            return
+        keys = header
     new = not path.exists()
     with path.open("a", newline="") as fh:
-        w = csv.DictWriter(fh, fieldnames=list(rows[0]))
+        w = csv.DictWriter(fh, fieldnames=keys, extrasaction="ignore")
         if new:
             w.writeheader()
         w.writerows(rows)

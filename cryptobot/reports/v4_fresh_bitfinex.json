@@ -1,0 +1,359 @@
+{
+  "source": "Bitfinex USD pairs (incl. delisted)",
+  "n_pairs": 113,
+  "fee_bps": 20.0,
+  "frozen_v4": "67f16df98ec2728ea907be4ce07b165240f87e51cb37657da79f1282013b9d5e",
+  "eligible_coins_by_year": {
+    "2014": 3,
+    "2015": 3,
+    "2016": 3,
+    "2017": 11,
+    "2018": 63
+  },
+  "full_2014_2018": {
+    "v4": {
+      "start": "2014-01-01",
+      "end": "2018-12-31",
+      "CAGR": 0.4209,
+      "vol": 0.2178,
+      "Sharpe": 1.7222,
+      "Sortino": 2.7184,
+      "MaxDD": -0.2138,
+      "Calmar": 1.9687,
+      "longest_DD_days": 547,
+      "total_return": 4.797
+    },
+    "v4_2x_costs": {
+      "start": "2014-01-01",
+      "end": "2018-12-31",
+      "CAGR": 0.388,
+      "vol": 0.218,
+      "Sharpe": 1.613,
+      "Sortino": 2.5289,
+      "MaxDD": -0.2215,
+      "Calmar": 1.7521,
+      "longest_DD_days": 548,
+      "total_return": 4.1565
+    },
+    "v3": {
+      "start": "2014-01-01",
+      "end": "2018-12-31",
+      "CAGR": 0.4337,
+      "vol": 0.226,
+      "Sharpe": 1.7071,
+      "Sortino": 2.7788,
+      "MaxDD": -0.1817,
+      "Calmar": 2.387,
+      "longest_DD_days": 538,
+      "total_return": 5.0643
+    },
+    "btc_buy_hold": {
+      "start": "2014-01-01",
+      "end": "2018-12-31",
+      "CAGR": 0.3929,
+      "vol": 0.7666,
+      "Sharpe": 0.8164,
+      "Sortino": 1.189,
+      "MaxDD": -0.8292,
+      "Calmar": 0.4738,
+      "longest_DD_days": 1085,
+      "total_return": 4.2473
+    },
+    "ew_top10": {
+      "start": "2014-01-01",
+      "end": "2018-12-31",
+      "CAGR": 0.2365,
+      "vol": 0.8766,
+      "Sharpe": 0.6825,
+      "Sortino": 0.9988,
+      "MaxDD": -0.9077,
+      "Calmar": 0.2605,
+      "longest_DD_days": 1178,
+      "total_return": 1.8922
+    },
+    "btc_trend_same_engine": {
+      "start": "2014-01-01",
+      "end": "2018-12-31",
+      "CAGR": 0.4943,
+      "vol": 0.3262,
+      "Sharpe": 1.3939,
+      "Sortino": 2.2002,
+      "MaxDD": -0.2558,
+      "Calmar": 1.932,
+      "longest_DD_days": 516,
+      "total_return": 6.458
+    },
+    "annual": {
+      "v4": {
+        "2014": -0.122,
+        "2015": 0.3008,
+        "2016": 0.19,
+        "2017": 4.0669,
+        "2018": -0.1582
+      },
+      "v3": {
+        "2014": -0.0713,
+        "2015": 0.3811,
+        "2016": 0.1556,
+        "2017": 3.5806,
+        "2018": -0.1068
+      },
+      "btc": {
+        "2014": -0.5585,
+        "2015": 0.3311,
+        "2016": 1.253,
+        "2017": 13.2451,
+        "2018": -0.7218
+      }
+    }
+  },
+  "criteria_v4": {
+    "F1_psr_vs_0_ge_0.95": true,
+    "F2_sharpe_ge_btc": true,
+    "F3_maxdd_le_half_btc": true,
+    "F4_calmar_gt_btc": true,
+    "F5_2x_cost_sharpe_ge_0.75x": true,
+    "F6_consistent_with_dev_p5_or_better": true,
+    "_sharpe_percentile_vs_dev_windows": 65.9,
+    "_psr": 0.9999
+  },
+  "criteria_v3": {
+    "F1_psr_vs_0_ge_0.95": true,
+    "F2_sharpe_ge_btc": true,
+    "F3_maxdd_le_half_btc": true,
+    "F4_calmar_gt_btc": true,
+    "F5_2x_cost_sharpe_ge_0.75x": true,
+    "F6_consistent_with_dev_p5_or_better": true,
+    "_sharpe_percentile_vs_dev_windows": 64.8,
+    "_psr": 1.0
+  },
+  "2014_2016": {
+    "v4": {
+      "start": "2014-01-01",
+      "end": "2016-12-31",
+      "CAGR": 0.1076,
+      "vol": 0.1646,
+      "Sharpe": 0.7034,
+      "Sortino": 1.0329,
+      "MaxDD": -0.1773,
+      "Calmar": 0.607,
+      "longest_DD_days": 547,
+      "total_return": 0.3592
+    },
+    "v4_2x_costs": {
+      "start": "2014-01-01",
+      "end": "2016-12-31",
+      "CAGR": 0.0787,
+      "vol": 0.1653,
+      "Sharpe": 0.5413,
+      "Sortino": 0.7871,
+      "MaxDD": -0.1912,
+      "Calmar": 0.4118,
+      "longest_DD_days": 548,
+      "total_return": 0.2556
+    },
+    "v3": {
+      "start": "2014-01-01",
+      "end": "2016-12-31",
+      "CAGR": 0.14,
+      "vol": 0.1836,
+      "Sharpe": 0.805,
+      "Sortino": 1.2754,
+      "MaxDD": -0.1725,
+      "Calmar": 0.8121,
+      "longest_DD_days": 538,
+      "total_return": 0.4823
+    },
+    "btc_buy_hold": {
+      "start": "2014-01-01",
+      "end": "2016-12-31",
+      "CAGR": 0.098,
+      "vol": 0.6525,
+      "Sharpe": 0.4727,
+      "Sortino": 0.6703,
+      "MaxDD": -0.802,
+      "Calmar": 0.1222,
+      "longest_DD_days": 1085,
+      "total_return": 0.3241
+    },
+    "ew_top10": {
+      "start": "2014-01-01",
+      "end": "2016-12-31",
+      "CAGR": -0.2066,
+      "vol": 0.7246,
+      "Sharpe": 0.045,
+      "Sortino": 0.0643,
+      "MaxDD": -0.8991,
+      "Calmar": -0.2297,
+      "longest_DD_days": 1090,
+      "total_return": -0.5008
+    },
+    "btc_trend_same_engine": {
+      "start": "2014-01-01",
+      "end": "2016-12-31",
+      "CAGR": 0.2981,
+      "vol": 0.2812,
+      "Sharpe": 1.0673,
+      "Sortino": 1.7336,
+      "MaxDD": -0.2522,
+      "Calmar": 1.1821,
+      "longest_DD_days": 516,
+      "total_return": 1.1891
+    },
+    "annual": {
+      "v4": {
+        "2014": -0.122,
+        "2015": 0.3008,
+        "2016": 0.19
+      },
+      "v3": {
+        "2014": -0.0713,
+        "2015": 0.3811,
+        "2016": 0.1556
+      },
+      "btc": {
+        "2014": -0.5585,
+        "2015": 0.3311,
+        "2016": 1.253
+      }
+    }
+  },
+  "2017_2018": {
+    "v4": {
+      "start": "2017-01-01",
+      "end": "2018-12-31",
+      "CAGR": 1.0652,
+      "vol": 0.2781,
+      "Sharpe": 2.7483,
+      "Sortino": 4.5073,
+      "MaxDD": -0.2138,
+      "Calmar": 4.9827,
+      "longest_DD_days": 358,
+      "total_return": 3.2652
+    },
+    "v4_2x_costs": {
+      "start": "2017-01-01",
+      "end": "2018-12-31",
+      "CAGR": 1.0266,
+      "vol": 0.278,
+      "Sharpe": 2.6815,
+      "Sortino": 4.3788,
+      "MaxDD": -0.2215,
+      "Calmar": 4.6355,
+      "longest_DD_days": 358,
+      "total_return": 3.1069
+    },
+    "v3": {
+      "start": "2017-01-01",
+      "end": "2018-12-31",
+      "CAGR": 1.0227,
+      "vol": 0.2769,
+      "Sharpe": 2.6842,
+      "Sortino": 4.4366,
+      "MaxDD": -0.1817,
+      "Calmar": 5.6281,
+      "longest_DD_days": 358,
+      "total_return": 3.0912
+    },
+    "btc_buy_hold": {
+      "start": "2017-01-01",
+      "end": "2018-12-31",
+      "CAGR": 0.9907,
+      "vol": 0.9114,
+      "Sharpe": 1.2097,
+      "Sortino": 1.7998,
+      "MaxDD": -0.8292,
+      "Calmar": 1.1948,
+      "longest_DD_days": 380,
+      "total_return": 2.9629
+    },
+    "ew_top10": {
+      "start": "2017-01-01",
+      "end": "2018-12-31",
+      "CAGR": 1.3635,
+      "vol": 1.0637,
+      "Sharpe": 1.3434,
+      "Sortino": 1.9984,
+      "MaxDD": -0.9077,
+      "Calmar": 1.502,
+      "longest_DD_days": 376,
+      "total_return": 4.5859
+    },
+    "btc_trend_same_engine": {
+      "start": "2017-01-01",
+      "end": "2018-12-31",
+      "CAGR": 0.8123,
+      "vol": 0.3832,
+      "Sharpe": 1.7436,
+      "Sortino": 2.6871,
+      "MaxDD": -0.2558,
+      "Calmar": 3.1751,
+      "longest_DD_days": 380,
+      "total_return": 2.2845
+    },
+    "annual": {
+      "v4": {
+        "2017": 4.0669,
+        "2018": -0.1582
+      },
+      "v3": {
+        "2017": 3.5806,
+        "2018": -0.1068
+      },
+      "btc": {
+        "2017": 13.2451,
+        "2018": -0.7218
+      }
+    }
+  },
+  "risk_dial_informational": {
+    "0.2": {
+      "start": "2014-01-01",
+      "end": "2018-12-31",
+      "CAGR": 0.2606,
+      "vol": 0.1449,
+      "Sharpe": 1.6707,
+      "Sortino": 2.5977,
+      "MaxDD": -0.1299,
+      "Calmar": 2.0059,
+      "longest_DD_days": 544,
+      "total_return": 2.1852
+    },
+    "0.35": {
+      "start": "2014-01-01",
+      "end": "2018-12-31",
+      "CAGR": 0.4209,
+      "vol": 0.2178,
+      "Sharpe": 1.7222,
+      "Sortino": 2.7184,
+      "MaxDD": -0.2138,
+      "Calmar": 1.9687,
+      "longest_DD_days": 547,
+      "total_return": 4.797
+    },
+    "0.5": {
+      "start": "2014-01-01",
+      "end": "2018-12-31",
+      "CAGR": 0.5366,
+      "vol": 0.2815,
+      "Sharpe": 1.6673,
+      "Sortino": 2.5987,
+      "MaxDD": -0.3563,
+      "Calmar": 1.5062,
+      "longest_DD_days": 544,
+      "total_return": 7.5776
+    },
+    "0.75": {
+      "start": "2014-01-01",
+      "end": "2018-12-31",
+      "CAGR": 0.6919,
+      "vol": 0.3601,
+      "Sharpe": 1.6411,
+      "Sortino": 2.5568,
+      "MaxDD": -0.3757,
+      "Calmar": 1.8415,
+      "longest_DD_days": 547,
+      "total_return": 12.8815
+    }
+  }
+}
