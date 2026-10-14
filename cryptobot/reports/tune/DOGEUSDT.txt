@@ -1,0 +1,84 @@
+{
+ "symbol": "DOGEUSDT",
+ "gates": {
+  "history_days": 2007,
+  "history_ok": true,
+  "adv_usd_now": 67918295.35640001,
+  "liquidity_ok": true,
+  "variance_ratio_20d": 1.116
+ },
+ "walk_forward": [
+  {
+   "year": 2022,
+   "chosen": "L10-20-40-80_V0.3",
+   "test_sharpe": 0.538
+  },
+  {
+   "year": 2023,
+   "chosen": "L20-40-80-160_V0.3",
+   "test_sharpe": 0.001
+  },
+  {
+   "year": 2024,
+   "chosen": "L20-40-80-160_V0.3",
+   "test_sharpe": 1.839
+  }
+ ],
+ "wf_oos": {
+  "start": "2022-01-01",
+  "end": "2024-12-31",
+  "CAGR": 0.2981,
+  "vol": 0.33,
+  "Sharpe": 0.9458,
+  "Sortino": 1.9028,
+  "MaxDD": -0.279,
+  "Calmar": 1.0688,
+  "Ulcer": 17.0918,
+  "longest_DD_days": 485,
+  "total_return": 1.1891,
+  "skew": 6.1645,
+  "hit_rate": 0.2144
+ },
+ "wf_buy_hold": {
+  "start": "2022-01-01",
+  "end": "2024-12-31",
+  "CAGR": 0.2286,
+  "vol": 0.9321,
+  "Sharpe": 0.6739,
+  "Sortino": 1.0663,
+  "MaxDD": -0.7133,
+  "Calmar": 0.3205,
+  "Ulcer": 50.7344,
+  "longest_DD_days": 801,
+  "total_return": 0.8555,
+  "skew": 1.1697,
+  "hit_rate": 0.5
+ },
+ "final_config": "L10-20-40-80_V0.5",
+ "holdout": {
+  "start": "2025-01-01",
+  "end": "2026-10-13",
+  "CAGR": -0.1283,
+  "vol": 0.3048,
+  "Sharpe": -0.301,
+  "Sortino": -0.464,
+  "MaxDD": -0.3596,
+  "Calmar": -0.3569,
+  "Ulcer": 25.8814,
+  "longest_DD_days": 450,
+  "total_return": -0.2173,
+  "skew": 1.9581,
+  "hit_rate": 0.1505
+ },
+ "holdout_buy_hold_sharpe": -0.4849,
+ "verdict": {
+  "S1_history_and_liquidity": true,
+  "S2_wf_sharpe_ge_0.8": true,
+  "S3_beats_buy_hold_sharpe": true,
+  "S4_maxdd_le_60pct_of_buy_hold": true,
+  "S5_positive_in_most_wf_years": true,
+  "S6_holdout_sharpe_ge_half_wf_and_positive": false
+ },
+ "qualified": false
+}
+NOT qualified - do not trade this asset in single-asset mode.

@@ -1,0 +1,94 @@
+{
+ "symbol": "BTCUSDT",
+ "gates": {
+  "history_days": 2694,
+  "history_ok": true,
+  "adv_usd_now": 1217579348.4871645,
+  "liquidity_ok": true,
+  "variance_ratio_20d": 1.098
+ },
+ "walk_forward": [
+  {
+   "year": 2020,
+   "chosen": "L10-20-40-80_V0.3",
+   "test_sharpe": 2.503
+  },
+  {
+   "year": 2021,
+   "chosen": "L10-20-40-80_V0.3",
+   "test_sharpe": 1.105
+  },
+  {
+   "year": 2022,
+   "chosen": "L10-20-40-80_V0.3",
+   "test_sharpe": -2.401
+  },
+  {
+   "year": 2023,
+   "chosen": "L10-20-40-80_V0.3",
+   "test_sharpe": 1.73
+  },
+  {
+   "year": 2024,
+   "chosen": "L10-20-40-80_V0.3",
+   "test_sharpe": 1.589
+  }
+ ],
+ "wf_oos": {
+  "start": "2020-01-01",
+  "end": "2024-12-31",
+  "CAGR": 0.4386,
+  "vol": 0.2847,
+  "Sharpe": 1.4189,
+  "Sortino": 2.3622,
+  "MaxDD": -0.2454,
+  "Calmar": 1.7872,
+  "Ulcer": 12.8462,
+  "longest_DD_days": 540,
+  "total_return": 5.173,
+  "skew": 1.1091,
+  "hit_rate": 0.3071
+ },
+ "wf_buy_hold": {
+  "start": "2020-01-01",
+  "end": "2024-12-31",
+  "CAGR": 0.6695,
+  "vol": 0.6503,
+  "Sharpe": 1.1212,
+  "Sortino": 1.6424,
+  "MaxDD": -0.7663,
+  "Calmar": 0.8737,
+  "Ulcer": 40.4602,
+  "longest_DD_days": 846,
+  "total_return": 12.0053,
+  "skew": -0.6186,
+  "hit_rate": 0.5134
+ },
+ "final_config": "L10-20-40-80_V0.3",
+ "holdout": {
+  "start": "2025-01-01",
+  "end": "2026-10-13",
+  "CAGR": -0.0146,
+  "vol": 0.1742,
+  "Sharpe": 0.0024,
+  "Sortino": 0.0036,
+  "MaxDD": -0.1979,
+  "Calmar": -0.0736,
+  "Ulcer": 12.7154,
+  "longest_DD_days": 448,
+  "total_return": -0.0258,
+  "skew": 0.7535,
+  "hit_rate": 0.2412
+ },
+ "holdout_buy_hold_sharpe": 0.0635,
+ "verdict": {
+  "S1_history_and_liquidity": true,
+  "S2_wf_sharpe_ge_0.8": true,
+  "S3_beats_buy_hold_sharpe": true,
+  "S4_maxdd_le_60pct_of_buy_hold": true,
+  "S5_positive_in_most_wf_years": true,
+  "S6_holdout_sharpe_ge_half_wf_and_positive": false
+ },
+ "qualified": false
+}
+NOT qualified - do not trade this asset in single-asset mode.

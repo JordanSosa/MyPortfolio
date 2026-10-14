@@ -1,0 +1,47 @@
+name: cryptobot forward test (paper)
+
+# Runs the frozen strategy once a day on Binance's public archive (the same
+# data the backtest used) and commits the paper ledger, building an
+# unfalsifiable, timestamped forward-test record. Paper only: no keys, no orders.
+on:
+  schedule:
+    - cron: "17 3 * * *"   # daily archive files are published a few hours after 00:00 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: cryptobot-forward-test
+  cancel-in-progress: false
+
+jobs:
+  paper:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    defaults:
+      run:
+        working-directory: cryptobot
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt
+      - name: Restore market-data cache
+        uses: actions/cache@v4
+        with:
+          path: cryptobot/data
+          key: cryptobot-data-${{ github.run_id }}
+          restore-keys: cryptobot-data-
+      - name: Paper trade
+        run: python scripts/paper_trade.py --exchange binance-archive
+      - name: Forward vs backtest report
+        run: python scripts/forward_report.py | tee reports/paper/binance-archive/latest_report.json
+      - name: Commit ledger
+        run: |
+          git config user.name "cryptobot-forward-test"
+          git config user.email "actions@users.noreply.github.com"
+          git add reports/paper/binance-archive
+          git diff --cached --quiet || git commit -m "cryptobot: forward-test ledger $(date -u +%F)"
+          git push

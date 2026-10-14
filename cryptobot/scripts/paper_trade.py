@@ -32,6 +32,45 @@ def load_params(path: Path) -> Params:
     return Params(**cfg)
 
 
+def archive_run(a, p: Params):
+    """Paper forward test on Binance's public daily archive - the exact data
+    source of the backtest, reachable from anywhere (incl. CI runners)."""
+    from cryptobot import data
+    from cryptobot.research import trim_panel
+    data.download_universe("1d")          # picks up newly listed coins
+    data.topup_universe("1d")             # appends yesterday's candles
+    panel = data.load_panel("1d")
+    start = panel["close"].index[-1] - pd.Timedelta(days=max(p.min_history, max(p.lookbacks)) + 400)
+    panel = trim_panel({k: v.loc[start:] for k, v in panel.items()})
+    t, target, prices = latest_targets(panel, p)
+    adv = panel["quote_volume"].rolling(p.adv_window, min_periods=10).median().iloc[-1]
+    target = target[target > 0]
+    print(f"{now_utc()} bar={t.date()} targets:\n{target.round(4).to_string() or '(all cash)'}")
+    if a.dry:
+        return
+    out = ROOT / "reports" / "paper" / "binance-archive"
+    acct = PaperAccount.load(out / "state.json", a.capital)
+    last = out / "last_bar.txt"
+    if last.exists() and last.read_text().strip() >= str(t.date()):
+        print("already processed this bar; nothing to do")
+        return
+    px = prices.dropna()
+    for s in [s for s in acct.units if s not in px.index]:   # delisted: last price - 10%
+        lastpx = panel["close"][s].dropna().iloc[-1] if s in panel["close"] else 0.0
+        acct.cash += acct.units.pop(s) * lastpx * 0.9
+    fills = acct.execute(plan_orders(target, acct.weights(px), p.band), px, adv)
+    acct.save()
+    last.write_text(str(t.date()))
+    nav = acct.nav(px)
+    stamp = {"run_at": now_utc(), "bar": str(t.date())}
+    append_csv(out / "equity.csv", [{**stamp, "nav": round(nav, 2),
+                                     "exposure": round(float(target.sum()), 4)}])
+    append_csv(out / "trades.csv", [{**stamp, **f} for f in fills])
+    append_csv(out / "targets.csv", [{**stamp, "symbol": s, "weight": round(float(w), 5)}
+                                     for s, w in target.items()])
+    print(f"NAV {nav:,.2f}  trades {len(fills)}")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--exchange", default="binance")
@@ -44,6 +83,8 @@ def main():
 
     cfg_path = ROOT / "configs" / f"{a.asset.upper()}.json" if a.asset else ROOT / "frozen_config.json"
     p = load_params(cfg_path)
+    if a.exchange == "binance-archive":
+        return archive_run(a, p)
     kw = {"enableRateLimit": True}
     if a.live:
         kw.update(apiKey=os.environ["API_KEY"], secret=os.environ["API_SECRET"])
@@ -58,10 +99,10 @@ def main():
     elif (out / "state.json").exists():
         held = list(json.loads((out / "state.json").read_text())["units"])
     if not a.asset:
-        panel = build_live_panel(ex, n_symbols=80, days=max(p.lookbacks) + 120, extra=held)
+        panel = build_live_panel(ex, n_symbols=80, days=max(p.min_history, max(p.lookbacks)) + 150, extra=held)
     if a.asset:
         sym = a.asset.upper()
-        panel = build_live_panel(ex, n_symbols=0, days=max(p.lookbacks) + 120, extra=[sym])
+        panel = build_live_panel(ex, n_symbols=0, days=max(p.min_history, max(p.lookbacks)) + 150, extra=[sym])
         w = single_asset_weights(panel["close"][sym], p)
         t, target, prices = w.index[-1], pd.Series({sym: float(w.iloc[-1])}), panel["close"].iloc[-1]
     else:

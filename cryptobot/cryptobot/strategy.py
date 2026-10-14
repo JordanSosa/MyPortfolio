@@ -38,6 +38,7 @@ class Params:
     max_weight: float = 0.30         # single-asset cap
     regime_filter: bool = True       # scale down when BTC itself is not trending
     rebalance_days: int = 7          # new entries only on rebalance days (0 = daily, v1)
+    rebalance_offset: int = 0        # calendar phase of rebalance day (robustness tests only)
     band: float = 0.05               # no-trade band (abs weight) in the simulator
     adv_window: int = 30
 
@@ -84,7 +85,7 @@ def target_weights(panel: dict, p: Params, feats: dict | None = None) -> pd.Data
     rank = score.rank(axis=1, ascending=False)
     pick = rank <= p.top_k
     if p.rebalance_days > 1:
-        pick = _hold_since_rebalance(pick, trend, p.rebalance_days)
+        pick = _hold_since_rebalance(pick, trend, p.rebalance_days, p.rebalance_offset)
 
     # inverse-vol weights scaled by conviction (trend strength)
     ann_vol = vol * np.sqrt(365)
@@ -112,14 +113,15 @@ def target_weights(panel: dict, p: Params, feats: dict | None = None) -> pd.Data
     return w
 
 
-def _hold_since_rebalance(pick: pd.DataFrame, trend: pd.DataFrame, every: int) -> pd.DataFrame:
+def _hold_since_rebalance(pick: pd.DataFrame, trend: pd.DataFrame, every: int,
+                          offset: int = 0) -> pd.DataFrame:
     """Selection is refreshed only on rebalance days (days since 1970-01-01
     divisible by ``every``, so backtest and live agree on the calendar). Between
     rebalances an asset stays held only while its trend has stayed positive on
     every day since selection - exits are daily, entries weekly. Memoryless:
     depends only on data since the last rebalance day."""
     day = (pick.index - pd.Timestamp("1970-01-01", tz="UTC")).days
-    is_reb = pd.Series(day % every == 0, pick.index)
+    is_reb = pd.Series((day - offset) % every == 0, pick.index)
     mask = np.repeat(is_reb.values[:, None], pick.shape[1], axis=1)
     sel = pick.astype(float).where(mask).ffill().fillna(0.0).astype(bool)
     block = is_reb.cumsum()

@@ -8,7 +8,8 @@ Steps (same discipline as the portfolio research):
 1. Eligibility gates - enough history and liquidity.
 2. Grid of lookback sets x vol targets, walk-forward by calendar year with
    the plateau selection rule, data after --holdout-start never used.
-3. Verdict against the single-asset benchmarks; writes
+3. Holdout gate on data after --holdout-start (never used for selection).
+4. Verdict against the single-asset benchmarks; writes
    configs/<SYMBOL>.json if it qualifies (used by paper_trade.py --asset).
 """
 import argparse
@@ -100,6 +101,9 @@ def main():
         "S3_beats_buy_hold_sharpe": s_oos["Sharpe"] > s_bh["Sharpe"],
         "S4_maxdd_le_60pct_of_buy_hold": s_oos["MaxDD"] >= 0.6 * s_bh["MaxDD"],
         "S5_positive_in_most_wf_years": float(np.mean([r["test_sharpe"] > 0 for r in log])) >= 0.6,
+        # validation gate on data never used for selection (mirrors protocol B9)
+        "S6_holdout_sharpe_ge_half_wf_and_positive": bool(
+            len(ho) > 180 and M.sharpe(ho) > 0 and M.sharpe(ho) >= 0.5 * s_oos["Sharpe"]),
     }
     qualified = all(verdict.values())
     report = {"symbol": sym, "gates": gates, "walk_forward": log,

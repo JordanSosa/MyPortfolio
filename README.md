@@ -17,6 +17,12 @@ Each project builds into its own sub-path; a landing page ties them together.
 | `/swallowed/` | [`swallowed/`](./swallowed/) | "Swallowed" — a first-person 3D journey through the digestive system (Vite + three.js + GSAP) |
 | `/aethermoor/` | [`aethermoor/`](./aethermoor/) | "Aethermoor" — a browser MMO vertical slice: Flyff × Path of Exile (Vite + three.js + WebAudio). See its [game design document](./aethermoor/GDD.md) |
 
+## Other projects (not deployed)
+
+| Path | What it is |
+| --- | --- |
+| [`cryptobot/`](./cryptobot/) | Validated crypto trend-rotation trading bot: research engine, walk-forward/holdout results, paper and live trading. See its [README](./cryptobot/README.md) |
+
 ## How deployment works
 
 `.github/workflows/deploy-pages.yml` runs on every push to `master` that
