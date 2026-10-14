@@ -1,0 +1,150 @@
+{
+  "data_gaps": {
+    "gap_cells_in_panel": 543,
+    "symbols_with_gaps": 12,
+    "false_liquidations_v3": 0,
+    "false_liquidation_events": [],
+    "gap_days_trend_nan_exits": 0,
+    "trend_nan_while_trading_cells": 397
+  },
+  "tokenised_equities": {
+    "candidates_in_raw_universe": 97,
+    "examples": [
+      "AAOIBUSDT",
+      "AAPLBUSDT",
+      "ADBEBUSDT",
+      "AGPUBUSDT",
+      "ALABBUSDT",
+      "AMATBUSDT",
+      "AMBUSDT",
+      "AMCBUSDT",
+      "AMDBUSDT",
+      "AMZNBUSDT",
+      "ARBUSDT",
+      "ARMBUSDT"
+    ],
+    "in_trimmed_panel": [
+      "AMBUSDT",
+      "ARBUSDT",
+      "BNBUSDT",
+      "CKBUSDT",
+      "CRCLBUSDT",
+      "DGBUSDT",
+      "INTCBUSDT",
+      "MSTRBUSDT",
+      "MUBUSDT",
+      "NVDABUSDT",
+      "PHBUSDT",
+      "QQQBUSDT",
+      "SHIBUSDT",
+      "SKHYBUSDT",
+      "SNDKBUSDT",
+      "SNXXBUSDT",
+      "SOXLBUSDT",
+      "SPCXBUSDT",
+      "TRBUSDT"
+    ],
+    "ever_held_weight": {
+      "ARBUSDT": 0.056,
+      "BNBUSDT": 0.3,
+      "CKBUSDT": 0.0237,
+      "SHIBUSDT": 0.1357,
+      "TRBUSDT": 0.033
+    }
+  },
+  "costs": {
+    "cost_drag_by_year_pct": {
+      "2017": 0.0,
+      "2018": 0.88,
+      "2019": 2.97,
+      "2020": 3.63,
+      "2021": 1.41,
+      "2022": 1.6,
+      "2023": 4.12,
+      "2024": 2.82,
+      "2025": 2.75,
+      "2026": 2.44
+    },
+    "avg_cost_drag_pct_per_year": 2.79,
+    "turnover_share": {
+      "entries": 0.31,
+      "exits": 0.291,
+      "resizes": 0.399
+    },
+    "gross_vs_net_sharpe_2019+": [
+      1.631,
+      1.522
+    ],
+    "gross_vs_net_cagr_2019+": [
+      0.4715,
+      0.431
+    ],
+    "round_trips_per_year": 175.0
+  },
+  "extreme_returns_while_held": [],
+  "holdout_power": {
+    "holdout_years": 1.78,
+    "holdout_sharpe": 0.669,
+    "sharpe_standard_error": 0.828,
+    "95pct_CI": [
+      -0.95,
+      2.29
+    ],
+    "holdout_sharpe_percentile_within_wf_windows": 20.2,
+    "wf_window_sharpe_p05_p50_p95": [
+      -0.15,
+      1.48,
+      2.99
+    ],
+    "min_years_to_detect_sharpe_1_vs_0_at_95pct": 4.1
+  },
+  "dsr": {
+    "oos_sharpes_of_pipelines_inspected": {
+      "v1": 1.1602,
+      "v2": 1.3396,
+      "v3": 1.3978
+    },
+    "dsr_trials_3_pipelines": 0.9993,
+    "dsr_as_preregistered_324": 0.9443,
+    "psr_vs_zero": 0.9997
+  },
+  "benchmarks_2019_to_now": {
+    "strategy_v3_frozen": {
+      "CAGR": 0.431,
+      "vol": 0.2573,
+      "Sharpe": 1.5217,
+      "MaxDD": -0.297,
+      "Calmar": 1.4513
+    },
+    "btc_buy_hold": {
+      "CAGR": 0.4911,
+      "vol": 0.6125,
+      "Sharpe": 0.9634,
+      "MaxDD": -0.7663,
+      "Calmar": 0.6409
+    },
+    "btc_vol_matched_0.42x_monthly": {
+      "CAGR": 0.2393,
+      "vol": 0.2585,
+      "Sharpe": 0.9598,
+      "MaxDD": -0.4233,
+      "Calmar": 0.5653
+    },
+    "btc_sma200_filter": {
+      "CAGR": 0.3717,
+      "vol": 0.446,
+      "Sharpe": 0.9311,
+      "MaxDD": -0.6429,
+      "Calmar": 0.5782
+    },
+    "btc_single_asset_trend_same_engine": {
+      "CAGR": 0.4062,
+      "vol": 0.3048,
+      "Sharpe": 1.2691,
+      "MaxDD": -0.2742,
+      "Calmar": 1.4814
+    },
+    "strategy_beta_to_btc": 0.227,
+    "strategy_corr_to_btc": 0.539
+  }
+}

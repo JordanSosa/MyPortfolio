@@ -189,3 +189,24 @@ def topup_universe(interval: str = "1d", workers: int = 32) -> int:
     syms = [p.stem for p in (DATA_DIR / interval).glob("*.parquet")]
     with ThreadPoolExecutor(workers) as ex:
         return sum(ex.map(lambda s: topup_daily(s, interval), syms))
+
+
+def load_tbill(haircut: float = 0.005, refresh: bool = False) -> pd.Series:
+    """Daily US 3-month T-bill rate (FRED DTB3) as a decimal annual rate, minus
+    ``haircut``, floored at 0, forward-filled to calendar days. Used as a
+    conservative proxy for what idle stablecoins earn (flexible savings,
+    tokenised T-bill funds); historically Binance/Coinbase stablecoin rates
+    were mostly at or above T-bills."""
+    path = DATA_DIR / "DTB3.csv"
+    if refresh or not path.exists():
+        r = requests.get("https://fred.stlouisfed.org/graph/fredgraph.csv?id=DTB3", timeout=60)
+        r.raise_for_status()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(r.text)
+    df = pd.read_csv(path)
+    df.columns = ["date", "rate"]
+    s = pd.to_numeric(df["rate"], errors="coerce") / 100.0
+    s.index = pd.to_datetime(df["date"]).dt.tz_localize("UTC")
+    s = s.dropna()
+    s = s.reindex(pd.date_range(s.index[0], pd.Timestamp.now(tz="UTC").normalize(), freq="D")).ffill()
+    return (s - haircut).clip(lower=0.0)

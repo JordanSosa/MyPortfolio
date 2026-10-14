@@ -1,0 +1,306 @@
+{
+  "generated": "2026-10-14T20:36:32.318198+00:00",
+  "period": [
+    "2019-01-01",
+    "2024-12-31"
+  ],
+  "params_v4": {
+    "universe_sizes": [
+      15,
+      30,
+      50
+    ],
+    "top_ks": [
+      4,
+      8,
+      15
+    ],
+    "lookback_sets": [
+      [
+        10,
+        20,
+        40,
+        80
+      ],
+      [
+        20,
+        40,
+        80,
+        160
+      ],
+      [
+        40,
+        80,
+        160,
+        320
+      ]
+    ],
+    "tranches": 7,
+    "rebalance_days": 7,
+    "min_history": 200,
+    "vol_lookback": 30,
+    "target_vol": 0.35,
+    "max_weight": 0.3,
+    "regime_filter": true,
+    "band": 0.05,
+    "min_trade": 0.002,
+    "adv_window": 30,
+    "exclude_equities": true
+  },
+  "v4": {
+    "start": "2019-01-01",
+    "end": "2024-12-31",
+    "CAGR": 0.3551,
+    "vol": 0.2237,
+    "Sharpe": 1.4704,
+    "Sortino": 2.2385,
+    "MaxDD": -0.3168,
+    "Calmar": 1.1211,
+    "longest_DD_days": 759,
+    "total_return": 5.2028,
+    "turnover_ann": 3.9166,
+    "avg_exposure": 0.2416,
+    "cost_drag_ann": 0.0067
+  },
+  "v4_with_cash_yield": {
+    "start": "2019-01-01",
+    "end": "2024-12-31",
+    "CAGR": 0.3708,
+    "vol": 0.2221,
+    "Sharpe": 1.5315,
+    "Sortino": 2.3336,
+    "MaxDD": -0.3121,
+    "Calmar": 1.188,
+    "longest_DD_days": 736,
+    "total_return": 5.6451,
+    "turnover_ann": 3.9118,
+    "avg_exposure": 0.2404,
+    "cost_drag_ann": 0.0067
+  },
+  "v3_fixed_code_single_config": {
+    "start": "2019-01-01",
+    "end": "2024-12-31",
+    "CAGR": 0.5324,
+    "vol": 0.2653,
+    "Sharpe": 1.7418,
+    "Sortino": 2.7861,
+    "MaxDD": -0.297,
+    "Calmar": 1.7927,
+    "longest_DD_days": 745,
+    "total_return": 11.9811,
+    "turnover_ann": 15.5585,
+    "avg_exposure": 0.2665,
+    "cost_drag_ann": 0.0275
+  },
+  "v3_walk_forward_oos_as_reported": {
+    "start": "2019-01-01",
+    "end": "2024-12-31",
+    "CAGR": 0.4041,
+    "vol": 0.2686,
+    "Sharpe": 1.3978,
+    "Sortino": 2.1874,
+    "MaxDD": -0.3257,
+    "Calmar": 1.2406,
+    "longest_DD_days": 756,
+    "total_return": 6.6774
+  },
+  "benchmarks": {
+    "btc_buy_hold": {
+      "start": "2019-01-01",
+      "end": "2024-12-31",
+      "CAGR": 0.7122,
+      "vol": 0.6563,
+      "Sharpe": 1.1538,
+      "Sortino": 1.7092,
+      "MaxDD": -0.7663,
+      "Calmar": 0.9294,
+      "longest_DD_days": 846,
+      "total_return": 24.271
+    },
+    "ew_top10": {
+      "start": "2019-01-01",
+      "end": "2024-12-31",
+      "CAGR": 0.347,
+      "vol": 0.8263,
+      "Sharpe": 0.7851,
+      "Sortino": 1.1006,
+      "MaxDD": -0.8995,
+      "Calmar": 0.3858,
+      "longest_DD_days": 1149,
+      "total_return": 4.9841
+    },
+    "btc_trend_same_engine": {
+      "start": "2019-01-01",
+      "end": "2024-12-31",
+      "CAGR": 0.5559,
+      "vol": 0.3321,
+      "Sharpe": 1.4954,
+      "Sortino": 2.5199,
+      "MaxDD": -0.273,
+      "Calmar": 2.0358,
+      "longest_DD_days": 734,
+      "total_return": 13.2196
+    }
+  },
+  "v4_2x_costs": {
+    "start": "2019-01-01",
+    "end": "2024-12-31",
+    "CAGR": 0.3461,
+    "vol": 0.2237,
+    "Sharpe": 1.4406,
+    "Sortino": 2.1895,
+    "MaxDD": -0.3227,
+    "Calmar": 1.0723,
+    "longest_DD_days": 771,
+    "total_return": 4.9577
+  },
+  "v4_lag1": {
+    "start": "2019-01-01",
+    "end": "2024-12-31",
+    "CAGR": 0.3404,
+    "vol": 0.2252,
+    "Sharpe": 1.4137,
+    "Sortino": 2.1475,
+    "MaxDD": -0.2908,
+    "Calmar": 1.1705,
+    "longest_DD_days": 753,
+    "total_return": 4.8081
+  },
+  "v3_2x_costs": {
+    "start": "2019-01-01",
+    "end": "2024-12-31",
+    "CAGR": 0.4908,
+    "vol": 0.2656,
+    "Sharpe": 1.6363,
+    "Sortino": 2.6028,
+    "MaxDD": -0.3254,
+    "Calmar": 1.508,
+    "longest_DD_days": 756,
+    "total_return": 10.001
+  },
+  "v3_lag1": {
+    "start": "2019-01-01",
+    "end": "2024-12-31",
+    "CAGR": 0.4597,
+    "vol": 0.2636,
+    "Sharpe": 1.5667,
+    "Sortino": 2.4415,
+    "MaxDD": -0.3444,
+    "Calmar": 1.3347,
+    "longest_DD_days": 758,
+    "total_return": 8.693
+  },
+  "annual": {
+    "v4": {
+      "2019": 0.0592,
+      "2020": 0.6791,
+      "2021": 1.0568,
+      "2022": -0.1215,
+      "2023": 0.255,
+      "2024": 0.5379
+    },
+    "v3": {
+      "2019": 0.2283,
+      "2020": 1.7147,
+      "2021": 1.372,
+      "2022": -0.2562,
+      "2023": 0.4442,
+      "2024": 0.5278
+    },
+    "btc": {
+      "2019": 0.9431,
+      "2020": 3.0198,
+      "2021": 0.5979,
+      "2022": -0.6421,
+      "2023": 1.5561,
+      "2024": 1.2131
+    }
+  },
+  "member_sharpes": {
+    "min": 1.007,
+    "median": 1.339,
+    "max": 1.742,
+    "n": 27,
+    "ensemble": 1.47
+  },
+  "half_universe_sharpe_p05_p50_p95": [
+    1.186,
+    1.425,
+    1.582
+  ],
+  "risk_dial": {
+    "0.2": {
+      "start": "2019-01-01",
+      "end": "2024-12-31",
+      "CAGR": 0.1567,
+      "vol": 0.1245,
+      "Sharpe": 1.232,
+      "Sortino": 1.8657,
+      "MaxDD": -0.1588,
+      "Calmar": 0.9869,
+      "longest_DD_days": 1034,
+      "total_return": 1.3969
+    },
+    "0.35": {
+      "start": "2019-01-01",
+      "end": "2024-12-31",
+      "CAGR": 0.3551,
+      "vol": 0.2237,
+      "Sharpe": 1.4704,
+      "Sortino": 2.2385,
+      "MaxDD": -0.3168,
+      "Calmar": 1.1211,
+      "longest_DD_days": 759,
+      "total_return": 5.2028
+    },
+    "0.5": {
+      "start": "2019-01-01",
+      "end": "2024-12-31",
+      "CAGR": 0.4864,
+      "vol": 0.3032,
+      "Sharpe": 1.4591,
+      "Sortino": 2.2129,
+      "MaxDD": -0.4147,
+      "Calmar": 1.1728,
+      "longest_DD_days": 839,
+      "total_return": 9.8081
+    },
+    "0.75": {
+      "start": "2019-01-01",
+      "end": "2024-12-31",
+      "CAGR": 0.6258,
+      "vol": 0.4103,
+      "Sharpe": 1.3904,
+      "Sortino": 2.0746,
+      "MaxDD": -0.562,
+      "Calmar": 1.1136,
+      "longest_DD_days": 855,
+      "total_return": 17.5174
+    },
+    "1.0": {
+      "start": "2019-01-01",
+      "end": "2024-12-31",
+      "CAGR": 0.6558,
+      "vol": 0.4713,
+      "Sharpe": 1.307,
+      "Sortino": 1.9226,
+      "MaxDD": -0.5455,
+      "Calmar": 1.202,
+      "longest_DD_days": 849,
+      "total_return": 19.6622
+    }
+  },
+  "psr_vs_0": 0.9998,
+  "dsr_pipelines_inspected_4": 0.9994,
+  "bootstrap": {
+    "Sharpe_p05": 0.6819,
+    "Sharpe_p50": 1.5331,
+    "Sharpe_p95": 2.2948,
+    "P(Sharpe>0)": 0.9985,
+    "MaxDD_p05": -0.4367,
+    "MaxDD_p50": -0.2713,
+    "CAGR_p05": 0.1316,
+    "CAGR_p50": 0.3692
+  },
+  "corr_v4_v3": 0.828
+}

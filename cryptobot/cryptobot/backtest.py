@@ -11,10 +11,15 @@ Conventions
   when its drifted weight differs from target by more than ``band`` (a
   no-trade band that cuts turnover). Exits to zero are always executed.
 * Long-only spot, no leverage: weights >= 0 and sum <= 1, the rest is cash
-  (USDT, assumed 0% yield - conservative).
+  (USDT). Cash earns ``cash_rate`` (annualised, per day) if given, else 0%.
 * Costs per unit of traded notional = taker fee + liquidity-dependent
-  slippage. If a held asset stops trading (delisting) it is liquidated at its
-  last price minus ``delist_haircut``.
+  slippage. If a held asset stops trading for good (delisting) it is
+  liquidated at its last price minus ``delist_haircut``. A *temporary* gap in
+  the data (exchange maintenance, suspended deposits) is not a delisting: the
+  position is carried, cannot be traded during the gap, and the full price
+  move is booked when trading resumes.
+* Trades smaller than ``min_trade`` (fraction of NAV) are skipped unless they
+  close a position - mirrors exchange minimum order sizes.
 """
 from __future__ import annotations
 
@@ -22,6 +27,8 @@ from dataclasses import dataclass
 
 import numpy as np
 import pandas as pd
+
+from .strategy import ffill_within_life
 
 
 def _ts(x) -> pd.Timestamp:
@@ -60,7 +67,8 @@ class Result:
 
 def simulate(targets: pd.DataFrame, close: pd.DataFrame, adv_usd: pd.DataFrame,
              cost: CostModel | None = None, band: float = 0.0, lag: int = 0,
-             delist_haircut: float = 0.10, start=None, end=None) -> Result:
+             delist_haircut: float = 0.10, start=None, end=None,
+             cash_rate: pd.Series | None = None, min_trade: float = 0.0) -> Result:
     cost = cost or CostModel()
     cols = targets.columns
     close = close.reindex(columns=cols)
@@ -73,11 +81,15 @@ def simulate(targets: pd.DataFrame, close: pd.DataFrame, adv_usd: pd.DataFrame,
         sel = close.index <= _ts(end)
         close, targets, adv_usd = close[sel], targets[sel], adv_usd[sel]
 
-    px = close.values
-    rets = close.pct_change(fill_method=None).values
+    px = close.values                                   # NaN = not tradable today
+    life = ffill_within_life(close)
+    rets = life.pct_change(fill_method=None).values     # gap days 0, resume day = full move
+    listed = life.notna().values                        # between first and last print
     tg = targets.values
     adv = adv_usd.values
     T, N = px.shape
+    cr = (np.zeros(T) if cash_rate is None else
+          cash_rate.reindex(close.index).ffill().fillna(0.0).values / 365.0)
     h = np.zeros(N)
     out_r = np.zeros(T)
     out_g = np.zeros(T)
@@ -88,12 +100,12 @@ def simulate(targets: pd.DataFrame, close: pd.DataFrame, adv_usd: pd.DataFrame,
     for t in range(T):
         r = rets[t]
         alive = np.isfinite(px[t])
-        # P&L from holdings over bar t
+        # P&L from holdings over bar t, plus interest on idle cash
         rr = np.where(np.isfinite(r), r, 0.0)
-        pnl = float(h @ rr)
+        pnl = float(h @ rr) + max(0.0, 1.0 - float(h.sum())) * cr[t]
         h = h * (1 + rr)
-        # forced liquidation of held assets that disappeared
-        dead = (h > 0) & ~alive
+        # forced liquidation of held assets that were delisted (not mere gaps)
+        dead = (h > 0) & ~listed[t]
         forced = 0.0
         if dead.any():
             forced = float(h[dead].sum() * delist_haircut)
@@ -105,13 +117,15 @@ def simulate(targets: pd.DataFrame, close: pd.DataFrame, adv_usd: pd.DataFrame,
         to_t = 0.0
         tgt = tg[t]
         if np.isfinite(tgt).any():
-            tgt = np.where(np.isfinite(tgt) & alive, np.maximum(tgt, 0), 0.0)
+            tgt = np.where(np.isfinite(tgt), np.maximum(tgt, 0), 0.0)
             s = tgt.sum()
             if s > 1:
                 tgt = tgt / s
+            tgt = np.where(alive, tgt, h)               # cannot trade during a data gap
             diff = tgt - h
             trade = (np.abs(diff) > band) | ((tgt == 0) & (h > 0)) | ((h == 0) & (tgt > 0))
-            trade &= np.abs(diff) > 1e-6
+            trade &= (np.abs(diff) > max(min_trade, 1e-6)) | ((tgt == 0) & (h > 0))
+            trade &= alive
             if trade.any():
                 bps = cost.per_asset_bps(adv[t])
                 cost_t = float((np.abs(diff[trade]) * bps[trade]).sum() / 1e4)

@@ -83,3 +83,75 @@ def test_pbo_detects_pure_noise():
     trials = pd.DataFrame(rng.normal(0, 0.01, (1600, 40)))
     out = M.pbo_cscv(trials, n_splits=8)
     assert 0.3 < out["PBO"] < 0.7   # noise -> ~50% chance of overfit
+
+
+# ----------------------------------------------------------------- audit fixes / v4
+from cryptobot.strategy import EnsembleParams, ensemble_weights, equity_like  # noqa: E402
+
+
+def test_temporary_gap_is_not_a_delisting():
+    """A held coin with a 2-day data gap must be carried (no haircut, no trade)
+    and the full move across the gap booked when trading resumes."""
+    idx = pd.date_range("2021-01-01", periods=6, freq="D", tz="UTC")
+    close = pd.DataFrame({"X": [100, 100, np.nan, np.nan, 150, 150.0]}, idx)
+    tg = pd.DataFrame({"X": [1.0, 1.0, 0.0, 0.0, 1.0, 1.0]}, idx)  # targets 0 during gap
+    adv = pd.DataFrame({"X": [1e12] * 6}, idx)
+    zero = CostModel(fee_bps=0, base_slip_bps=0, aum_usd=0)
+    res = simulate(tg, close, adv, zero)
+    assert np.isclose(M.equity(res.returns).iloc[-1], 1.5)        # +50% across the gap
+    assert res.turnover.iloc[2] == 0 and res.turnover.iloc[3] == 0  # no trading in the gap
+
+
+def test_ensemble_no_lookahead_truncation_invariance():
+    panel = synthetic_panel()
+    ep = EnsembleParams(min_history=100, universe_sizes=(5, 8), top_ks=(2, 4),
+                        lookback_sets=((10, 20, 40, 80), (20, 40, 80, 160)))
+    full = ensemble_weights(panel, ep)
+    for cut in [300, 452, 640]:
+        trunc = {k: v.iloc[:cut] for k, v in panel.items()}
+        np.testing.assert_allclose(ensemble_weights(trunc, ep).iloc[-1].values,
+                                   full.iloc[cut - 1].values, atol=1e-12)
+
+
+def test_ensemble_is_mean_of_members():
+    from cryptobot.strategy import members, target_weights
+    panel = synthetic_panel()
+    ep = EnsembleParams(min_history=100, universe_sizes=(8,), top_ks=(3,),
+                        lookback_sets=((10, 20, 40, 80),), tranches=7)
+    ens = ensemble_weights(panel, ep)
+    mean = sum(target_weights(panel, m) for m in members(ep)) / len(members(ep))
+    np.testing.assert_allclose(ens.values, mean.values, atol=1e-12)
+
+
+def test_tokenised_equities_excluded_but_coins_kept():
+    idx = pd.date_range("2025-01-01", periods=600, freq="D", tz="UTC")
+    rng = np.random.default_rng(3)
+    r = rng.normal(0, 0.03, (600, 3))
+    weekend = idx.dayofweek >= 5
+    r[weekend, 0] *= 0.1                                   # stock token: quiet weekends
+    close = pd.DataFrame(100 * np.exp(np.cumsum(r, 0)), idx, ["NVDABUSDT", "BNBUSDT", "ARBUSDT"])
+    close.loc[close.index < pd.Timestamp("2026-06-11", tz="UTC"), "NVDABUSDT"] = np.nan
+    m = equity_like(close)
+    assert m["NVDABUSDT"].iloc[-1]
+    assert not m["BNBUSDT"].any() and not m["ARBUSDT"].any()
+
+
+def test_cash_yield_accrues_on_idle_cash_only():
+    idx = pd.date_range("2021-01-01", periods=366, freq="D", tz="UTC")
+    close = pd.DataFrame({"X": np.full(366, 100.0)}, idx)
+    tg = pd.DataFrame({"X": [0.5] + [np.nan] * 365}, idx)
+    adv = pd.DataFrame({"X": [1e12] * 366}, idx)
+    zero = CostModel(fee_bps=0, base_slip_bps=0, aum_usd=0)
+    res = simulate(tg, close, adv, zero, cash_rate=pd.Series(0.04, idx))
+    # ~50% in cash at 4% for a year -> ~ +2%
+    assert 0.019 < M.equity(res.returns).iloc[-1] - 1 < 0.021
+
+
+def test_min_trade_skips_dust_but_not_exits():
+    idx = pd.date_range("2021-01-01", periods=3, freq="D", tz="UTC")
+    close = pd.DataFrame({"X": [100.0] * 3, "Y": [100.0] * 3}, idx)
+    tg = pd.DataFrame({"X": [0.001, 0.001, 0.0], "Y": [0.5, 0.5, 0.0]}, idx)
+    adv = pd.DataFrame({"X": [1e12] * 3, "Y": [1e12] * 3}, idx)
+    res = simulate(tg, close, adv, CostModel(fee_bps=0, base_slip_bps=0, aum_usd=0), min_trade=0.002)
+    assert res.weights["X"].max() == 0          # dust entry skipped
+    assert res.weights["Y"].iloc[-1] == 0       # exit always executed
