@@ -149,7 +149,25 @@ def load_panel(interval: str = "1d", symbols: list[str] | None = None,
         if end is not None:
             w = w.loc[:pd.Timestamp(end, tz="UTC")]
         panel[field] = w
+    # metadata: true first-trading date of every symbol (independent of any
+    # later slicing of the price window - see strategy.equity_like)
+    panel["listed"] = pd.Series({s: df.index[0] for s, df in frames.items() if len(df)})
     return panel
+
+
+def slice_panel(panel: dict, start=None, end=None) -> dict:
+    """Time-slice every price/volume frame of a panel; metadata (Series keyed
+    by symbol, e.g. ``listed``) passes through unchanged."""
+    def utc(x):
+        if x is None:
+            return None
+        t = pd.Timestamp(x)
+        return t.tz_localize("UTC") if t.tzinfo is None else t.tz_convert("UTC")
+    lo, hi = utc(start), utc(end)
+    out = {}
+    for k, v in panel.items():
+        out[k] = v.loc[lo:hi] if isinstance(v, pd.DataFrame) else v
+    return out
 
 
 def topup_daily(symbol: str, interval: str = "1d") -> int:
@@ -221,11 +239,12 @@ def refresh_symbol(symbol: str, interval: str = "1d") -> int:
         return 0
     df = pd.read_parquet(path)
     last = df.index[-1]
-    month_after = (last + pd.offsets.MonthBegin(1)).normalize()
+    # first month that may hold missing bars: the month of the day after `last`
+    first_needed = (last + pd.Timedelta(days=1)).normalize().replace(day=1)
     frames = []
     for k in _month_files(symbol, interval):
         ym = re.search(r"-(\d{4})-(\d{2})\.zip$", k)
-        if ym and pd.Timestamp(f"{ym.group(1)}-{ym.group(2)}-01", tz="UTC") >= month_after.replace(day=1):
+        if ym and pd.Timestamp(f"{ym.group(1)}-{ym.group(2)}-01", tz="UTC") >= first_needed:
             f = _fetch_zip(f"https://data.binance.vision/{k}")
             if f is not None and len(f):
                 frames.append(f)

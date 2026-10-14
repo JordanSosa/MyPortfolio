@@ -26,7 +26,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 from cryptobot import metrics as M  # noqa: E402
 from cryptobot.backtest import CostModel, simulate  # noqa: E402
-from cryptobot.data import load_panel, load_tbill  # noqa: E402
+from cryptobot.data import load_panel, load_tbill, slice_panel  # noqa: E402
 from cryptobot.research import trim_panel  # noqa: E402
 from cryptobot.strategy import (EnsembleParams, Params, ensemble_weights,  # noqa: E402
                                 members, single_asset_weights, target_weights)
@@ -344,7 +344,7 @@ def stage_parity(a):
     t0 = time.time()
     for i, d in enumerate(days):
         lo = d - pd.Timedelta(days=ep.max_lookback * 2 + 160)
-        trunc = {k: v.loc[lo:d] for k, v in panel.items()}
+        trunc = slice_panel(panel, lo, d)
         t, w, _ = latest_targets_v4(trunc, ep)
         assert t == d
         worst = max(worst, float((w.reindex(full.columns).fillna(0) - full.loc[d]).abs().max()))

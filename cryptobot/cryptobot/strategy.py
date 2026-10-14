@@ -119,7 +119,7 @@ def _trend_score(close: pd.DataFrame, lookbacks, vol: pd.DataFrame) -> pd.DataFr
     return acc / len(lookbacks)
 
 
-def equity_like(close: pd.DataFrame) -> pd.DataFrame:
+def equity_like(close: pd.DataFrame, listed: pd.Series | None = None) -> pd.DataFrame:
     """Point-in-time mask of tokenised equities (e.g. Binance ``NVDABUSDT``,
     listed from June 2026). They are not crypto assets: they follow stock-
     market hours, so their weekend moves are muted. Flagged when the symbol has
@@ -128,7 +128,12 @@ def equity_like(close: pd.DataFrame) -> pd.DataFrame:
     0.7-0.95; tokenised equities: 0.15-0.45). Requiring all three avoids ever
     excluding genuine coins such as BNB, ARB or SHIB."""
     mask = pd.DataFrame(False, close.index, close.columns)
+    # true listing date when known (live panels hold only ~800 days, so the
+    # first price in the window is NOT the listing date); else first price seen
     first = close.apply(lambda s: s.first_valid_index())
+    if listed is not None:
+        known = listed.reindex(close.columns)
+        first = known.where(known.notna(), first)
     cands = [c for c in close.columns if _EQUITY_NAME.match(c) and first[c] is not None
              and first[c] >= TOKENISED_EQUITY_START]
     if not cands:
@@ -223,7 +228,7 @@ def _hold_since_rebalance(pick: pd.DataFrame, trend: pd.DataFrame, every: int,
 def target_weights(panel: dict, p: Params, feats: dict | None = None,
                    exclude_equities: bool = True) -> pd.DataFrame:
     f = feats or compute_features(panel, p)
-    excluded = equity_like(f["close"]) if exclude_equities else None
+    excluded = equity_like(f["close"], panel.get("listed")) if exclude_equities else None
     rank_u = _universe_rank(f, p.min_history, excluded)
     trend = f["trend"]
     score = trend.where((rank_u <= p.universe_size) & (trend > 0))
@@ -242,7 +247,7 @@ def ensemble_weights(panel: dict, ep: EnsembleParams, feats_cache: dict | None =
     """Equal-weight average of every (universe size, top-k, lookback set,
     rebalance tranche) member's target weights."""
     close = panel["close"]
-    excluded = equity_like(close) if ep.exclude_equities else None
+    excluded = equity_like(close, panel.get("listed")) if ep.exclude_equities else None
     acc = np.zeros(close.shape)
     n = 0
     for lbs in ep.lookback_sets:

@@ -50,7 +50,7 @@ def archive_panel(p) -> dict:
     data.refresh_universe("1d")           # appends candles published since the last run
     panel = data.load_panel("1d")
     start = panel["close"].index[-1] - pd.Timedelta(days=history_days(p))
-    return trim_panel({k: v.loc[start:] for k, v in panel.items()})
+    return trim_panel(data.slice_panel(panel, start=start))
 
 
 def main():

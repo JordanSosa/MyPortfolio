@@ -18,7 +18,7 @@ import pandas as pd
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 from cryptobot.backtest import CostModel  # noqa: E402
-from cryptobot.data import load_panel  # noqa: E402
+from cryptobot.data import load_panel, slice_panel  # noqa: E402
 from cryptobot.live import PaperAccount, latest_targets, plan_orders  # noqa: E402
 from cryptobot.research import run_config, trim_panel  # noqa: E402
 from cryptobot.strategy import Params, compute_features, target_weights  # noqa: E402
@@ -38,7 +38,7 @@ def main(step: int = 1):
     # 1. signal parity
     max_diff = 0.0
     for d in days[::step]:
-        trunc = {k: v.loc[:d] for k, v in panel.items()}
+        trunc = slice_panel(panel, end=d)
         t, w, _ = latest_targets(trunc, p)
         assert t == d
         max_diff = max(max_diff, float((w - full.loc[d]).abs().max()))

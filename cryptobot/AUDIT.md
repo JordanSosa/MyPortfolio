@@ -8,7 +8,7 @@ outputs are in `reports/`.
 ## Verdict in one paragraph
 
 The first pass had a real edge but a fragile evidence base and a live engine
-that was not safe for real money. The audit found 7 methodology problems and 11
+that was not safe for real money. The audit found 7 methodology problems and 13
 code defects, fixed all of them, and replaced the single tuned configuration
 (v3) with a parameter-free ensemble (v4). v4 was then frozen and tested once on
 **data nobody had looked at**: Bitfinex 2014-2018, a different exchange,
@@ -102,8 +102,10 @@ rates. All headline numbers still exclude it; it is reported separately.
 | C9 | Paper (exchange mode) could not value or sell delisted holdings | NAV overstated | `liquidate_missing` mirrors the simulator rule | `test_paper_liquidates_delisted_at_haircut` |
 | C10 | Data top-up treated any symbol more than 45 days stale as delisted | A stale CI cache would delist every coin | `refresh_symbol` backfills monthly, then daily files | – |
 | C11 | Ledger CSV appends could misalign columns | Corrupt forward-test record | Header-aware append | `test_append_csv_keeps_columns_aligned` |
+| C12 | *(found in a second pass over the audit's own fixes)* The tokenised-equity rule read the listing date from the first price in the panel. The live bot downloads only ~800 days, so from about 2028 every old coin would have looked newly listed | Stock tokens could re-enter, or coins be wrongly excluded, in long-running live use | True listing dates carried as panel metadata: from the archive, or from the exchange's first-ever candle (works on Binance). Elsewhere the weekend-volatility test is the fallback | `test_equity_rule_uses_true_listing_date_in_short_live_windows` |
+| C13 | *(second pass)* The data refresh skipped the month containing the cache's last date when that date wasn't a month-end | A silent gap of up to ~4 weeks after an outage | Refresh starts from the month of the first missing day | – |
 
-Tests went from 7 to 22, and a CI workflow (`cryptobot-tests.yml`) runs them on
+Tests went from 7 to 23, and a CI workflow (`cryptobot-tests.yml`) runs them on
 every push. Frozen configs are hash-checked on load
 (`test_frozen_configs_load_and_hash_checked`).
 

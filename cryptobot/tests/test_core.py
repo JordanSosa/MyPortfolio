@@ -155,3 +155,19 @@ def test_min_trade_skips_dust_but_not_exits():
     res = simulate(tg, close, adv, CostModel(fee_bps=0, base_slip_bps=0, aum_usd=0), min_trade=0.002)
     assert res.weights["X"].max() == 0          # dust entry skipped
     assert res.weights["Y"].iloc[-1] == 0       # exit always executed
+
+
+def test_equity_rule_uses_true_listing_date_in_short_live_windows():
+    """In a live window that starts after June 2026 every coin's first price
+    is the window start; with listing metadata BNB must stay eligible and the
+    stock token must stay excluded."""
+    idx = pd.date_range("2028-03-01", periods=400, freq="D", tz="UTC")
+    rng = np.random.default_rng(5)
+    r = rng.normal(0, 0.03, (400, 2))
+    r[idx.dayofweek >= 5, 0] *= 0.1                   # stock token: quiet weekends
+    r[idx.dayofweek >= 5, 1] *= 0.6                   # BNB with unusually quiet weekends
+    close = pd.DataFrame(100 * np.exp(np.cumsum(r, 0)), idx, ["NVDABUSDT", "BNBUSDT"])
+    listed = pd.Series({"NVDABUSDT": pd.Timestamp("2026-06-11", tz="UTC"),
+                        "BNBUSDT": pd.Timestamp("2017-11-06", tz="UTC")})
+    m = equity_like(close, listed)
+    assert m["NVDABUSDT"].iloc[-1] and not m["BNBUSDT"].any()

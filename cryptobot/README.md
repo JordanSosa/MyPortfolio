@@ -128,7 +128,7 @@ volatility-managed portfolios (Moreira & Muir 2017).
 ```bash
 cd cryptobot
 pip install -r requirements.txt
-python -m pytest -q tests                      # 22 tests incl. look-ahead and live-order logic
+python -m pytest -q tests                      # 23 tests incl. look-ahead and live-order logic
 python scripts/download_data.py                # ~45 min first time: 674 Binance symbols, 2017→today
 python scripts/research_v4.py dev              # development evaluation (Binance <= 2024)
 python scripts/research_v4.py fresh            # Bitfinex 2014-18 (needs cryptobot.data_bitfinex.download first)
@@ -250,7 +250,7 @@ following: BTC trend made Sharpe 1.39 on Bitfinex 2014-18, but about 0 in
   * Kept as a comparison: `frozen_config.json`, `reports/walk_forward*.json`,
     `reports/holdout.json`.
 * **Audit → v4.** Everything found and fixed is in [`AUDIT.md`](AUDIT.md),
-  including 11 code defects, the most important being in the live order
+  including 13 code defects, the most important being in the live order
   handling.
 
 ## Limitations, stated plainly

@@ -139,4 +139,6 @@ def load_panel_bitfinex(end: str = "2018-12-31") -> dict[str, pd.DataFrame]:
                 w.loc[(w.index < df.index[0]) | (w.index > df.index[-1]), s] = float("nan")
         panel[field] = w
     # rename to Binance-style symbols so the strategy's BTC regime filter works
-    return {k: v.rename(columns=lambda c: c.replace("USD", "USDT")) for k, v in panel.items()}
+    out = {k: v.rename(columns=lambda c: c.replace("USD", "USDT")) for k, v in panel.items()}
+    out["listed"] = pd.Series({s.replace("USD", "USDT"): df.index[0] for s, df in frames.items()})
+    return out

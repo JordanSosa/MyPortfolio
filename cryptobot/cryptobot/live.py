@@ -99,7 +99,27 @@ def build_live_panel(exchange, n_symbols: int = 80, days: int = 800,
         for k in fields:
             fields[k][name] = df[k]
         time.sleep(exchange.rateLimit / 1000)
-    return {k: pd.DataFrame(v).sort_index() for k, v in fields.items()}
+    panel = {k: pd.DataFrame(v).sort_index() for k, v in fields.items()}
+    panel["listed"] = _listing_dates(exchange, list(panel["close"].columns), quote)
+    return panel
+
+
+def _listing_dates(exchange, names: list[str], quote: str) -> pd.Series:
+    """First-ever daily candle for symbols the tokenised-equity rule could
+    apply to (``<TICKER>B<quote>``). The live window is ~800 days, so the
+    first price in it is not the listing date."""
+    from .strategy import _EQUITY_NAME
+    out = {}
+    for name in names:
+        if not _EQUITY_NAME.match(name):
+            continue
+        try:
+            first = exchange.fetch_ohlcv(name[:-len(quote)] + "/" + quote, "1d", since=0, limit=1)
+            if first:
+                out[name] = pd.Timestamp(first[0][0], unit="ms", tz="UTC")
+        except Exception as e:  # noqa: BLE001 - fall back to the first price in the window
+            print(f"listing date unavailable for {name}: {e}")
+    return pd.Series(out, dtype="datetime64[ns, UTC]")
 
 
 def _fetch_daily(exchange, sym: str, since: int) -> list:
