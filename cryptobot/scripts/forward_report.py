@@ -39,10 +39,18 @@ def oos_record(version: str) -> pd.Series:
                       rd("holdout_returns.csv")["strategy"].dropna()])
 
 
+def flow_adjusted_returns(nav: pd.Series, flow: pd.Series) -> pd.Series:
+    """Daily time-weighted returns: deposits and withdrawals are not profits or
+    losses, so each day's flow is removed before comparing NAVs."""
+    return ((nav - flow) / nav.shift(1) - 1).dropna()
+
+
 def main(path: Path):
     eq = pd.read_csv(path / "equity.csv", parse_dates=["bar"]).drop_duplicates("bar", keep="last")
     nav = eq.set_index("bar")["nav"]
-    r = nav.pct_change().dropna()
+    flow = (eq.set_index("bar")["flow"].fillna(0.0) if "flow" in eq.columns
+            else pd.Series(0.0, nav.index))
+    r = flow_adjusted_returns(nav, flow)
     n = len(r)
     version = "v4" if str(path).rstrip("/").endswith("-v4") else "v3"
     rec = oos_record(version).values
@@ -54,8 +62,9 @@ def main(path: Path):
         e = np.cumprod(1 + x)
         sims_ret.append(e[-1] - 1)
         sims_dd.append((e / np.maximum.accumulate(e) - 1).min())
-    fwd_ret = float(nav.iloc[-1] / nav.iloc[0] - 1)
-    fwd_dd = float((nav / nav.cummax() - 1).min())
+    growth = (1 + r).cumprod()                      # flow-free growth of $1
+    fwd_ret = float(growth.iloc[-1] - 1) if len(growth) else 0.0
+    fwd_dd = float((growth / growth.cummax() - 1).min()) if len(growth) else 0.0
     pct = float((np.array(sims_ret) < fwd_ret).mean() * 100)
     out = {
         "strategy": version, "days": n, "start": str(nav.index[0].date()),

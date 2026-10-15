@@ -29,9 +29,11 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 from cryptobot.execution import liquidity_cap  # noqa: E402
 from cryptobot.live import (LiveBroker, PaperAccount, account_id, already_done,  # noqa: E402
-                            append_csv, build_live_panel, check_complete, check_fresh,
-                            claim_account, history_days, latest_targets, load_strategy,
-                            mark_done, min_trade_of, now_utc, plan_orders, run_lock)
+                            append_csv, atomic_write, build_live_panel, check_complete,
+                            combined_orders,
+                            check_fresh, claim_account, history_days, latest_targets, live_flow,
+                            load_strategy, mark_done, min_trade_of, now_utc, plan_orders,
+                            run_lock)
 from cryptobot.strategy import EnsembleParams, single_asset_weights  # noqa: E402
 
 DEFAULT_STRATEGY = ROOT / "frozen_config_v4.json"
@@ -69,6 +71,12 @@ def main():
     ap.add_argument("--allow-stale", action="store_true", help="testing only")
     ap.add_argument("--take-over", action="store_true",
                     help="live: let this strategy setting take over an account run by another")
+    ap.add_argument("--hostname", help="override the exchange API domain (e.g. OKX regional "
+                                       "domains such as us.okx.com / app.okx.com)")
+    ap.add_argument("--deposit", type=float, default=0.0,
+                    help="paper: add this much cash before today's run (live detects deposits itself)")
+    ap.add_argument("--withdraw", type=float, default=0.0,
+                    help="paper: remove this much cash before today's run")
     a = ap.parse_args()
 
     cfg = ROOT / "configs" / f"{a.asset.upper()}.json" if a.asset else Path(a.strategy)
@@ -103,7 +111,11 @@ def main():
             kw = {"enableRateLimit": True}
             if a.live:
                 kw.update(apiKey=os.environ["API_KEY"], secret=os.environ["API_SECRET"])
+                if os.environ.get("API_PASSWORD"):          # OKX (and others) use a passphrase
+                    kw["password"] = os.environ["API_PASSWORD"]
             ex = getattr(ccxt, a.exchange)(kw)
+            if a.hostname:                                  # e.g. OKX regional API domains
+                ex.hostname = a.hostname
             ca = os.environ.get("REQUESTS_CA_BUNDLE") or os.environ.get("SSL_CERT_FILE")
             if ca:  # corporate / sandbox TLS proxies
                 ex.validateServerSsl = ca
@@ -147,14 +159,24 @@ def main():
             if broker.unpriced_inactive:
                 print(f"WARNING held coins without an active market (not traded): "
                       f"{broker.unpriced_inactive}")
+            # money in or out since the last run (deposits are detected, not declared)
+            prev = json.loads((out / "state.json").read_text()) if (out / "state.json").exists() else None
+            flow, pre_w = live_flow(prev, nav, cur, last_known.combine_first(prices))
+            if flow:
+                print(f"external {'deposit' if flow > 0 else 'withdrawal'} detected: {flow:,.2f}")
             target = liquidity_cap(target, adv, nav)
-            deltas = plan_orders(target, cur, p.band, min_trade_of(p), tradable)
+            deltas = combined_orders(target, cur, flow, pre_w, nav, p.band, min_trade_of(p), tradable)
             fills = broker.execute(deltas, target, prices, nav)
         else:
             fills = acct.update_gaps(prices, last_known, t)
+            flow = a.deposit - a.withdraw
+            pre_w = acct.weights(prices)
+            if flow:
+                acct.add_cash(flow, prices)
             nav = acct.nav(prices)
             target = liquidity_cap(target, adv, nav)
-            deltas = plan_orders(target, acct.weights(prices), p.band, min_trade_of(p), tradable)
+            deltas = combined_orders(target, acct.weights(prices), flow, pre_w, nav, p.band,
+                                     min_trade_of(p), tradable)
             fills += acct.execute(deltas, prices.dropna(), adv)
             acct.save()
         # record what happened BEFORE marking the bar done, so a crash below can
@@ -165,10 +187,16 @@ def main():
                                          for s, w in target.items()])
         mark_done(out, t)
         try:
-            nav = broker.positions(prices, min_trade_of(p))[0] if a.live else acct.nav(prices)
+            if a.live:
+                nav = broker.positions(prices, min_trade_of(p))[0]
+                # baseline for tomorrow's deposit/withdrawal detection
+                atomic_write(out / "state.json", json.dumps(
+                    {"bar": str(t.date()), "cash": broker.cash, "units": broker.units}, indent=2))
+            else:
+                nav = acct.nav(prices)
         except Exception as e:  # noqa: BLE001 - NAV is informational after trading
             print(f"post-trade NAV unavailable ({e}); logging pre-trade NAV")
-        append_csv(out / "equity.csv", [{**stamp, "nav": round(nav, 2),
+        append_csv(out / "equity.csv", [{**stamp, "nav": round(nav, 2), "flow": round(flow, 2),
                                          "exposure": round(float(target.sum()), 4)}])
     print(f"NAV {nav:,.2f}  orders {len(fills)}")
 

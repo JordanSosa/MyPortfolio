@@ -265,6 +265,38 @@ def plan_orders(target: pd.Series, current: pd.Series, band: float, min_trade: f
     return diff[trade]
 
 
+def live_flow(prev_state: dict | None, nav: float, current: pd.Series, prices: pd.Series
+              ) -> tuple[float, pd.Series]:
+    """Deposit (+) / withdrawal (-) since the last live run, and the weights the
+    account had before it (yesterday's holdings at today's prices). With no
+    saved state (first run) there is nothing to compare against: no flow."""
+    from .execution import detect_flow
+    if not prev_state:
+        return 0.0, pd.Series(dtype=float)
+    flow = detect_flow(nav, prev_state["cash"], prev_state["units"], prices)
+    expected = nav - flow
+    pre = pd.Series({s: u * float(prices[s]) / expected for s, u in prev_state["units"].items()
+                     if s in prices.index and np.isfinite(prices[s])}, dtype=float)
+    return flow, pre[pre.index.isin(current.index)]
+
+
+def combined_orders(target: pd.Series, current: pd.Series, flow: float, pre_weights: pd.Series,
+                    nav: float, band: float, min_trade: float = 0.0,
+                    tradable: pd.Index | None = None, min_order_usd: float = 5.0) -> pd.Series:
+    """Weight deltas for today including any deposit/withdrawal: the flow is
+    first put to work pro rata across the existing holdings (keeping the
+    strategy's mix, ``execution.flow_deltas``); the normal rebalance is then
+    planned on top of that pro-forma account, exactly as in the backtest."""
+    from .execution import flow_deltas
+    fd = flow_deltas(flow, pre_weights, nav, min_order_usd) if flow else pd.Series(dtype=float)
+    if tradable is not None:
+        fd = fd[fd.index.isin(tradable)]
+    pro_forma = current.add(fd, fill_value=0.0)
+    normal = plan_orders(target, pro_forma, band, min_trade, tradable)
+    total = normal.add(fd, fill_value=0.0)
+    return total[total.abs() > 1e-9]
+
+
 # ---------------------------------------------------------------- bookkeeping
 def atomic_write(path: Path, text: str) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -368,6 +400,15 @@ class PaperAccount:
                               "price": px, "cost": round(proceeds * haircut / (1 - haircut), 4)})
         return fills
 
+    def add_cash(self, amount: float, prices: pd.Series | None = None) -> None:
+        """Deposit (+) or withdraw (-) cash. A withdrawal larger than the cash on
+        hand leaves cash temporarily negative; the pro-rata sells planned by
+        ``execution.flow_deltas`` bring it back above zero in the same run."""
+        if prices is not None and amount < 0 and -amount > self.nav(prices):
+            raise ValueError(f"cannot withdraw {-amount:,.2f}: account is worth "
+                             f"{self.nav(prices):,.2f}")
+        self.cash += amount
+
     def execute(self, deltas: pd.Series, prices: pd.Series, adv: pd.Series) -> list[dict]:
         nav = self.nav(prices)
         bps = pd.Series(self.cost.per_asset_bps(adv.reindex(deltas.index).values), deltas.index)
@@ -409,6 +450,8 @@ class LiveBroker:
         self.quote = quote
         self.dust: list[str] = []
         self.unpriced_inactive: list[str] = []
+        self.units: dict = {}          # every non-quote holding with a market (incl. dust)
+        self.cash: float = 0.0
 
     def balances(self) -> dict:
         return self.ex.fetch_balance()
@@ -439,7 +482,7 @@ class LiveBroker:
         """(NAV in quote currency, weights of tradable non-dust holdings)."""
         bal = self.balances()["total"]
         vals = {}
-        self.dust, self.unpriced_inactive = [], []
+        self.dust, self.unpriced_inactive, self.units = [], [], {}
         for a, q in bal.items():
             if a == self.quote or not q:
                 continue
@@ -451,7 +494,9 @@ class LiveBroker:
                 self.unpriced_inactive.append(name)
                 continue
             vals[name] = float(q) * p
-        nav = float(bal.get(self.quote, 0) or 0) + sum(vals.values())
+            self.units[name] = float(q)
+        self.cash = float(bal.get(self.quote, 0) or 0)
+        nav = self.cash + sum(vals.values())
         if nav <= 0:
             return 0.0, pd.Series(dtype=float)
         w = {}

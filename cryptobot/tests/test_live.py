@@ -7,6 +7,7 @@ import pytest
 
 from cryptobot.live import (LiveBroker, PaperAccount, append_csv, check_complete, check_fresh,
                             claim_account, load_strategy, plan_orders, run_lock)
+from cryptobot.backtest import CostModel
 from cryptobot.strategy import EnsembleParams
 
 
@@ -226,3 +227,39 @@ def test_frozen_configs_load_and_hash_checked(tmp_path):
     (tmp_path / "bad.json").write_text(json.dumps(bad))
     with pytest.raises(ValueError):
         load_strategy(tmp_path / "bad.json")
+
+
+def test_paper_deposit_ends_at_the_strategy_mix(tmp_path):
+    """$10k account at target, $10k deposited: after the run the account holds
+    the same weights as before (deposit invested pro rata), plus any normal
+    rebalance - not 50% diluted positions waiting for the band."""
+    from cryptobot.live import combined_orders
+    acct = PaperAccount(tmp_path / "s.json", 7_500.0, {"AUSDT": 100.0, "BUSDT": 50.0},
+                        CostModel(fee_bps=0, base_slip_bps=0, aum_usd=0, max_slip_bps=0))
+    px = pd.Series({"AUSDT": 20.0, "BUSDT": 10.0})                 # $2,000 + $500 in coins
+    target = pd.Series({"AUSDT": 0.2, "BUSDT": 0.05})
+    pre = acct.weights(px)
+    acct.add_cash(10_000.0, px)
+    nav = acct.nav(px)
+    d = combined_orders(target, acct.weights(px), 10_000.0, pre, nav, band=0.05,
+                        min_trade=0.002, tradable=px.index)
+    acct.execute(d, px, pd.Series({"AUSDT": 1e12, "BUSDT": 1e12}))
+    np.testing.assert_allclose(acct.weights(px).reindex(target.index).values, target.values)
+    assert np.isclose(acct.nav(px), 20_000.0)
+
+
+def test_live_detects_weekly_deposit_and_keeps_the_mix(live_env):
+    """Yesterday: $700 in AAA + $300 cash. Overnight the user deposits $300 USDT.
+    The bot must see a +$300 flow and top AAA up so its weight stays 70%."""
+    from cryptobot.live import combined_orders, live_flow
+    prev = {"cash": 300.0, "units": {"AAAUSDT": 7.0}}
+    ex = FakeExchange({"USDT": 600.0, "AAA": 7.0}, {"AAA": 100.0})
+    br = LiveBroker(ex)
+    px = pd.Series({"AAAUSDT": 100.0})
+    nav, cur = br.positions(px, min_trade=0.002)
+    flow, pre = live_flow(prev, nav, cur, px)
+    assert np.isclose(flow, 300.0) and np.isclose(pre["AAAUSDT"], 0.7)
+    d = combined_orders(pd.Series({"AAAUSDT": 0.7}), cur, flow, pre, nav, band=0.05,
+                        min_trade=0.002, tradable=px.index)
+    assert np.isclose(d["AAAUSDT"] * nav, 210.0)               # 70% of the $300 deposit
+    assert live_flow(None, nav, cur, px)[0] == 0.0             # first run: nothing to compare

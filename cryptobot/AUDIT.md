@@ -154,6 +154,14 @@ The reviewer found no problems in:
 
 Tests: 7 → 35, run in CI on every push.
 
+### Pass 4: found while answering operating questions (deposits, going live)
+
+| # | Finding | Fix | Test |
+| --- | --- | --- | --- |
+| D1 | The live engine had no concept of deposits or withdrawals. A deposit diluted every position below target, but per-coin gaps were under the 5-point band, so **zero orders** were placed: a deposit doubling the account was 58% invested after a day and 92% after a month. A withdrawal of half the account doubled exposure (23% → 47%), again with zero orders. The backtest never had cash flows, so no earlier test could catch this | Flows are detected each run (today's value vs yesterday's holdings at today's prices). Deposits are invested pro rata across current holdings, keeping the mix; withdrawals over 10% trim pro rata, smaller ones come from cash. The simulator gained the same logic (`flows`, `flow_mode`, `min_order_usd`). For small weekly deposits the old behaviour made little difference: $1k + $300/week from 2019 ends at $316,958 (fixed) vs $323,987 (old) on $122,800 contributed, within noise | `test_deposit_is_invested_pro_rata_keeping_the_mix`, `test_live_detects_weekly_deposit_and_keeps_the_mix`, `test_paper_deposit_ends_at_the_strategy_mix`, `test_small_withdrawal_comes_from_cash_large_one_trims_pro_rata`, `test_simulator_deposit_naive_vs_pro_rata` |
+| D2 | OKX API keys require a passphrase, which the runner never passed, so live trading on OKX would have failed to authenticate. There was also no way to use OKX's regional API domains | `API_PASSWORD` env var; `--hostname` | (ccxt `requiredCredentials` checked) |
+| D3 | The forward report measured returns from raw NAV, so a deposit would have looked like profit | Flow-adjusted time-weighted returns | – |
+
 ### Effect of the data corrections (R8, R9) on reported results
 They changed historical numbers, so every v4 figure below is re-run on the
 corrected data. The pre-correction values are kept here.

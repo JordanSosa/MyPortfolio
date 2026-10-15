@@ -134,7 +134,7 @@ volatility-managed portfolios (Moreira & Muir 2017).
 ```bash
 cd cryptobot
 pip install -r requirements.txt
-python -m pytest -q tests                      # 35 tests incl. look-ahead and live-order logic
+python -m pytest -q tests                      # 43 tests incl. look-ahead, live orders, deposits
 python scripts/download_data.py --hourly --bitfinex --tbill   # ~2 h first time (674 Binance symbols, hourly bars, Bitfinex)
 python scripts/research_v4.py dev              # development evaluation (Binance <= 2024)
 python scripts/research_v4.py fresh            # Bitfinex 2014-18 validation set
@@ -143,6 +143,7 @@ python scripts/research_v4.py exec             # execution-delay test (needs 1h 
 python scripts/research_v4.py parity           # live-engine replay (~45 min)
 python scripts/altcoin_analysis.py            # where the profit comes from; every altcoin on its own
 python scripts/v4_extras.py                    # capacity and liquidity sensitivity
+python scripts/contributions.py                # $1k + $300/week replay; 20-year scenarios
 python scripts/make_charts.py
 ```
 
@@ -200,6 +201,38 @@ altcoin, and don't restrict it to small caps. Its edge on altcoins is mostly
 avoiding their crashes, and that only adds up to strong returns when it is
 spread across many coins.
 
+## What could $10,000 become? (scenarios, not a forecast)
+
+These figures come from resampling v4's own daily returns over 2014-2026, run
+20 years forward 4,000 times (`scripts/contributions.py`,
+`reports/contributions.json`). They are pre-tax, in USD, and assume no
+contributions. The three scenarios differ only in the average return assumed:
+
+| After | History repeats (32%/yr) | **Base case (≈14%/yr)** | Recent regime (≈4%/yr) |
+| --- | --- | --- | --- |
+| 1 year | $12,600 | **$11,000** | $10,000 |
+| 2 years | $16,600 | **$12,700** | $10,300 |
+| 3 years | $21,900 | **$14,500** | $10,900 |
+| 5 years | $38,000 | **$18,800** | $11,700 |
+| 10 years | $159,000 | **$36,400** | $14,400 |
+| 15 years | $638,000 | **$73,200** | $17,400 |
+| 20 years | $2.6M | **$131,000** | $21,200 |
+
+* **History repeats:** the 2014-2026 record as it was. That was crypto's
+  hyper-growth era (BTC ×110); treat it as the backtest's ceiling, not an
+  expectation.
+* **Base case:** historical risk, half the historical average return. Halving
+  is the usual haircut for backtested strategies (Harvey & Liu, 2015).
+  * The median outcome is $131k after 20 years.
+  * 1 in 10 paths ends below $21k, and 1 in 10 above $900k.
+  * About 1 in 5 paths is still below $10,000 after 5 years.
+* **Recent regime:** the average return of 2025-26, the weakest period.
+
+All three are before tax and inflation. With most gains realised within a
+year, Australian CGT at around 30% would turn the base case's ≈14% into
+roughly 10% a year, about $63k after 20 years. In today's money, divide 20-year
+figures by about 1.6 (2.5% inflation).
+
 ## Forward testing (started 2026-10-14)
 
 Four paper ledgers run from the 2026-10-13 bar, so v4 and v3 are compared
@@ -228,39 +261,116 @@ To keep them going:
 
 ## Going live with real funds
 
+### 1. Pick the exchange
+
+* **Binance (preferred):** it is the backtest's own data source, so live
+  decisions match the research exactly.
+  * Binance Australia is AUSTRAC-registered and offers spot trading.
+  * Before anything else, check in **API Management** that your account can
+    create a key with *Enable Spot & Margin Trading*. Some Australian users
+    have reported "restricted jurisdiction" errors on API trading.
+* **OKX (fallback):** OKX Australia Pty Ltd is AUSTRAC-registered and offers
+  spot trading to all Australians. The bot already runs paper accounts on its
+  live prices.
+  * OKX keys need a passphrase (`API_PASSWORD`).
+  * Some Australian accounts use a regional API domain. If you get error
+    `50119 API key doesn't exist`, add `--hostname us.okx.com` (or
+    `app.okx.com`).
+
+### 2. Account and API key
+
+1. **Use a dedicated sub-account.** The bot sells any coin it does not want,
+   including coins you bought by hand.
+2. **Fund it in USDT.** Deposit AUD and convert it to USDT yourself.
+3. **Create the API key:**
+   * trade permission only, with **withdrawals disabled**;
+   * restricted to your server's IP address (Binance requires this for
+     trading keys).
+
+### 3. Where it runs
+It needs an always-on machine with a **fixed IP** that runs the bot once a day
+just after 00:05 UTC (11:05 AEDT / 10:05 AEST). Options:
+* a small Sydney-region VPS (about A$5–10 a month);
+* a home computer or Raspberry Pi on a static IP.
+
+GitHub Actions is **not** suitable: its runners are in the US, which Binance
+blocks, and they have no fixed IP.
+
 ```bash
-export API_KEY=... API_SECRET=...      # spot trading permission only, withdrawals DISABLED
+git clone <this repo> && cd MyPortfolio/cryptobot
+pip install -r requirements.txt && python -m pytest -q         # 43 tests must pass
+cat > ~/.cryptobot.env <<'ENV'                                    # chmod 600 this file
+export API_KEY=...  API_SECRET=...  API_PASSWORD=...  # PASSWORD: OKX only
 export CRYPTOBOT_LIVE=I_UNDERSTAND_THE_RISK
-python scripts/paper_trade.py --exchange binance --dry          # inspect today's targets
-python scripts/paper_trade.py --exchange binance --live         # balanced profile
-python scripts/paper_trade.py --exchange binance --live --risk growth
+ENV
+source ~/.cryptobot.env
+python scripts/paper_trade.py --exchange binance --dry           # today's targets, no orders
+python scripts/paper_trade.py --exchange binance --live          # first real run - watch it
+# then daily, server clock in UTC:
+# 5 0 * * *  cd ~/MyPortfolio/cryptobot && . ~/.cryptobot.env && python scripts/paper_trade.py --exchange binance --live >> live.log 2>&1
 ```
 
-* **Schedule.** Daily, after 00:05 UTC.
-* **What it refuses to do.**
-  * It won't trade on stale or incomplete data. BTC, every held coin and at
-    least 95% of the universe must be priced.
-  * It holds a lock, never trades the same bar twice, and logs every order
-    attempt to `reports/live/<exchange>-<account>/` before marking the day
-    done.
-* **One account, one setting.** An account belongs to one strategy setting.
-  Switching from `balanced` to `growth` needs `--take-over`.
-* **Capital.**
-  * v4 holds 10–25 small positions and skips trades under 0.2% of NAV.
-  * With Binance's ~$5 minimum order, use **at least $5,000**, otherwise many
-    positions cannot be opened.
-  * Under the cost model, capacity is not a constraint for private accounts:
-    dev Sharpe is 1.42 at $10k–$100k, 1.41 at $1M and 1.38 at $10M.
-  * No position exceeds 10% of a coin's daily volume.
-* **Account.** Use a dedicated sub-account. The bot sells any coin it does not
-  want, including coins you bought by hand.
-* **Keep everything in the spot wallet.** About 75% of the account is
-  usually idle USDT.
-  * Do not move it into savings products: the bot values the account from the
-    spot wallet. Funds it cannot see make every position look oversized, and
-    it would sell them down.
-  * Interest on idle cash would have added about 2% a year (modelled at
-    T-bill − 0.5 pp), but it is not part of the strategy.
+After the first run, compare the orders on the exchange with
+`reports/live/<exchange>-<account>/trades.csv`.
+
+### Deposits and withdrawals
+You never need to tell the bot about them. Each run compares the account's
+value with what yesterday's holdings are worth today; the difference is money
+you added or took out.
+
+* **Deposits** are invested straight away, pro rata across the current
+  holdings, keeping the same coins in the same proportions and the same share
+  in cash. Example: with 25% invested and 75% cash, a $300 deposit puts $75
+  into the coins and adds $225 to cash.
+  * Top-ups below the exchange minimum (~$5) stay in cash until the next
+    rotation.
+  * In a 2019-2026 replay this cost almost nothing ($316,958 vs $317,465).
+* **Withdrawals** (withdraw USDT, ideally right after a daily run):
+  * up to 10% of the account comes out of cash, with no selling;
+  * anything larger trims every holding pro rata so the risk level doesn't
+    jump.
+* **Profits and idle cash are always reinvested.** Positions are sized as a
+  percentage of the whole account, cash and past profits included. Exposure
+  rises towards ~80% when markets trend, and sale proceeds fund the next picks.
+
+Before this fix, deposits waited for the 5-point rebalancing threshold. A
+deposit that doubled the account was only about 58% invested after a day and
+92% after a month. Withdrawals raised risk: withdrawing half doubled exposure
+from 23% to 47%.
+
+### Small accounts and regular contributions
+Weekly contributions work well. Here is "$1,000 to start, then $300 a week"
+replayed on real history (`scripts/contributions.py`):
+
+| Started | Contributed | Bot ended with | Money-weighted return | Buying BTC weekly instead |
+| --- | --- | --- | --- | --- |
+| Jan 2019 | $122,800 | **$316,958** | 23.8% / yr | $530,838 (36.7% / yr) |
+| Jan 2025 | $28,600 | **$32,758** | 15.5% / yr | $27,526 (−4.1% / yr) |
+
+* **Against BTC:** in the 2019-26 bull market, buying BTC weekly ended
+  higher, but it went through falls of up to 77%. The bot's worst was about
+  −32%. In 2025-26 the bot made money while weekly BTC buying lost.
+* **At $1,000:** only positions of at least ~$5 can be opened, so the bot
+  holds about 15 of its ~25 target coins at first. That evens out once the
+  account passes about $5,000.
+* **Capacity:** not a constraint for private accounts. Dev Sharpe is 1.42 at
+  $10k–$100k, 1.41 at $1M and 1.38 at $10M, and no position exceeds 10% of a
+  coin's daily volume.
+
+### Rules that keep the account safe
+* **Schedule:** daily, after 00:05 UTC.
+* **Data checks:** it won't trade on stale or incomplete data. BTC, every held
+  coin and at least 95% of the universe must be priced.
+* **No double trading:** it holds a lock and never trades the same bar twice.
+  Every order attempt is logged before the day is marked done.
+* **One account, one setting:** an account belongs to one strategy setting;
+  switching from `balanced` to `growth` needs `--take-over`.
+* **Keep everything in the spot wallet:** don't move idle USDT into savings
+  products.
+  * The bot values the account from the spot wallet, so a transfer out looks
+    like a withdrawal and trims your positions.
+  * Interest on idle cash would have added about 2% a year in the model, but
+    it is not part of the strategy.
 
 **Kill-switch rules (stop and re-validate):**
 
