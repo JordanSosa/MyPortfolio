@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en-AU">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Proposal for {{firm}} | {{business}}</title>
+<style>
+  @page { size: A4; margin: 18mm; }
+  body { font-family: "Public Sans", "Helvetica Neue", Arial, sans-serif; color: #11181a; background: #fff; line-height: 1.5; max-width: 720px; margin: 32px auto; padding: 0 16px; }
+  h1 { font-size: 26px; line-height: 1.2; margin: 0 0 6px; }
+  h2 { font-size: 13px; margin: 28px 0 8px; text-transform: uppercase; letter-spacing: .08em; color: #2e6b4e; }
+  p, li { font-size: 15px; }
+  .meta { color: #56645f; font-size: 14px; margin: 0; }
+  table { width: 100%; border-collapse: collapse; margin-top: 4px; }
+  td { padding: 8px 0; border-bottom: 1px solid #cfc9bc; vertical-align: top; font-size: 15px; }
+  td.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; padding-left: 16px; }
+  tr.total td { font-weight: 700; border-bottom: 2px solid #11181a; }
+  ul, ol { padding-left: 20px; margin: 6px 0; }
+  footer { margin-top: 36px; font-size: 13px; color: #56645f; border-top: 1px solid #cfc9bc; padding-top: 10px; }
+</style>
+</head>
+<body>
+<p class="meta">{{business}} · {{today}}</p>
+<h1>Corporate secretarial desk for {{firm}}</h1>
+<p class="meta">Prepared for {{contact}}. Valid until {{valid_until}}.</p>
+
+<h2>What comes off your plate</h2>
+<ul>
+  <li>Annual reviews: checking each annual statement, preparing the solvency resolution, collecting e-signatures and updating registers.</li>
+  <li>Routine changes (Form 484): officeholder appointments and resignations, and address changes.</li>
+  <li>Acting as ASIC registered agent for the companies you move to the desk (agent {{agent_number}}). Transfer-in is free.</li>
+</ul>
+<p>We work behind your firm. Your clients stay yours, and we don't do tax, BAS or advice.</p>
+
+<h2>Fees</h2>
+<table>
+  <tr><td>Companies on the desk</td><td class="num">{{companies}}</td></tr>
+  <tr><td>Desk fee per company per year, + GST</td><td class="num">{{fee}}</td></tr>
+  <tr><td>Annual fee, + GST</td><td class="num">{{annual}}</td></tr>
+  <tr><td>Billed monthly, + GST</td><td class="num">{{monthly}}</td></tr>
+  <tr class="total"><td>Founding-firm rate for the first 12 months ({{discount}} off), + GST</td><td class="num">{{founding_monthly}} a month</td></tr>
+</table>
+<p class="meta">Other work, each + GST + the ASIC fee: share issue or transfer ${{share_change_fee}}; special resolution or name change ${{special_resolution_fee}}; new company ${{new_company_fee}}; voluntary deregistration ${{deregistration_fee}}. ASIC fees are passed through at cost.</p>
+
+<h2>Service standard</h2>
+<ul>
+  <li>Documents prepared and sent for e-signing, usually the same day the details are complete.</li>
+  <li>Lodged with ASIC within two business days of signed authority and any corporate key needed.</li>
+  <li>Annual statements retrieved within 14 days of each company's review date.</li>
+</ul>
+
+<h2>What we need from you</h2>
+<ul>
+  <li>Changes sent on our one-page change template, one change per email.</li>
+  <li>Anything only the client can provide, such as signatures and director IDs, passed on promptly.</li>
+</ul>
+
+<h2>Next steps</h2>
+<ol>
+  <li>Reply to confirm, and we'll send the engagement letter for e-signing.</li>
+  <li>We transfer the registered agent for your companies, starting {{start}}.</li>
+  <li>Your team gets the change template and a one-page how-to.</li>
+</ol>
+
+<footer>{{sender_name}} · {{business}} · ABN {{abn}} · {{phone}} · {{desk_email}} · {{location}}</footer>
+</body>
+</html>

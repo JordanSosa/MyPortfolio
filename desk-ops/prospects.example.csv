@@ -1,0 +1,2 @@
+email,first_name,firm,suburb,website,source_url,no_objection_checked,personal_line,notes,do_not_contact
+jane@example.com,Jane,Example Accounting,Campbelltown,example.com,https://example.com/contact,yes,,Example row. Replace it with real firms; do_not_contact keeps it from ever being emailed.,yes

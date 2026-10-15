@@ -1,0 +1,4 @@
+--
+{sender_name} | {business} | ABN {abn}
+{location} | {phone} | {desk_email}
+Not relevant to you? Reply "unsubscribe" and I won't email you again.

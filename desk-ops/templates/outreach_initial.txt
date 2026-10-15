@@ -1,0 +1,14 @@
+Subject: ASIC work off your plate, ${desk_fee} per company a year
+{greeting}
+
+{personal_line}I run {business}, a corporate secretarial desk in {location} that does one thing: ASIC work for small accounting firms. Annual reviews, solvency resolutions, registers and routine 484 changes, prepared and e-signed, then lodged within two business days of signed authority.
+
+We work behind your firm. Your clients stay yours, and we don't do tax, BAS or advice.
+
+The desk fee is ${desk_fee} + GST per company a year, routine changes included. ASIC fees pass through at cost.
+
+From 1 July 2027 companies start reporting director IDs, an electronic address and service addresses to ASIC, so every firm will need to collect them across its whole book. I'm taking on three founding firms to run that for.
+
+Would 15 minutes in the next week or two suit? You can pick a time here: {booking_link}
+
+{sender_name}

@@ -1,0 +1,35 @@
+Subject: Change request: [company name]
+
+One change per email. Fill in the first block and the block for your change, and leave the rest blank.
+
+Change type (appoint officeholder / remove officeholder / change address / share issue / share transfer):
+Company name:
+ACN:
+Date of change (dd/mm/yyyy):
+Your firm and contact:
+
+APPOINT OR REMOVE AN OFFICEHOLDER
+Role (director / secretary):
+Full name:
+Former names (if any):
+Date of birth (dd/mm/yyyy):
+Place of birth (town, state, country):
+Residential address:
+Director ID (15 digits, starts 036):
+Signed consent to act held (yes/no):
+
+CHANGE OF ADDRESS
+Which address (registered office / principal place of business / officeholder):
+New address:
+Occupier consent held (yes/no/n.a.):
+
+SHARES
+Issue or transfer:
+Share class:
+Number of shares:
+Amount paid per share:
+From (transfers only):
+To (name and address):
+Held beneficially (yes/no):
+
+Notes:

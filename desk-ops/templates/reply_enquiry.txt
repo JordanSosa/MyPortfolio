@@ -1,0 +1,8 @@
+{greeting}
+
+Thanks for your email. [Write the answer here.]
+
+If it's easier to talk it through, you can book 15 minutes here: {booking_link}
+
+{sender_name}
+{business} | {phone}

@@ -1,0 +1,8 @@
+{greeting}
+
+Thanks, we have everything we need for the {change_type} for {company} (date of change {effective}). The documents will be out for e-signing shortly, usually the same day, and we lodge with ASIC within two business days of signed authority.
+
+ASIC's deadline for this change is {asic_due}.
+
+{sender_name}
+{business} | {phone}

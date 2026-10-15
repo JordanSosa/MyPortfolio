@@ -1,0 +1,10 @@
+{greeting}
+
+Thanks for sending through the {change_type} for {company}. Before we can prepare the documents we still need:
+
+{outstanding}
+
+Reply with those and we'll have the documents out for signing the same day.
+
+{sender_name}
+{business} | {phone}

@@ -1,0 +1,7 @@
+# Your details, your prospect list and everything the desk stores stay local.
+config.ini
+prospects.csv
+data/
+__pycache__/
+*.pyc
+.venv/

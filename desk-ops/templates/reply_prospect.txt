@@ -1,0 +1,8 @@
+{greeting}
+
+Thanks for getting back to me. The quickest next step is a 15-minute call. You can pick a time here: {booking_link}
+
+Or reply with two or three times that suit and I'll send an invite.
+
+{sender_name}
+{business} | {phone}
