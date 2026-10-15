@@ -221,6 +221,10 @@ To keep them going:
 * **Checking progress.** `python scripts/forward_report.py reports/paper/binance-archive-v4`
   compares the forward NAV with the band expected from the backtest records
   and evaluates the kill switches.
+* **Why does it hold that?** `python scripts/explain_portfolio.py` shows the
+  day's market regime (the BTC trend and the exposure multiplier) and the
+  liquid universe. For every target coin it also shows the trend scores,
+  volatility, and how many of the 189 sub-portfolios hold it.
 
 ## Going live with real funds
 
