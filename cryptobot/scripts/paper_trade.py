@@ -10,7 +10,8 @@
 
 Safety: refuses stale data (latest bar must be yesterday UTC), holds an
 exclusive lock, never processes the same bar twice for one account, writes
-state atomically, and logs every order attempt.
+state atomically, and logs every order attempt. Live runs report to
+HEALTHCHECK_URL if set (cryptobot/monitor.py): success, failure, kill switch.
 
 Each (venue, strategy) pair keeps its own ledger under
 reports/paper/<venue>-<version>/ (or reports/live/...), so forward records of
@@ -27,6 +28,7 @@ import pandas as pd
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
+from cryptobot import monitor  # noqa: E402
 from cryptobot.execution import liquidity_cap  # noqa: E402
 from cryptobot.live import (LiveBroker, PaperAccount, account_id, already_done,  # noqa: E402
                             append_csv, atomic_write, build_live_panel, check_complete,
@@ -34,11 +36,10 @@ from cryptobot.live import (LiveBroker, PaperAccount, account_id, already_done, 
                             check_fresh, claim_account, history_days, latest_targets, live_flow,
                             load_strategy, mark_done, min_trade_of, now_utc, plan_orders,
                             run_lock)
+from cryptobot.monitor import RISK_PROFILES  # noqa: E402
 from cryptobot.strategy import EnsembleParams, single_asset_weights  # noqa: E402
 
 DEFAULT_STRATEGY = ROOT / "frozen_config_v4.json"
-# The one user-facing dial: portfolio volatility target. Everything else stays frozen.
-RISK_PROFILES = {"conservative": 0.20, "balanced": 0.35, "growth": 0.50, "aggressive": 0.75}
 
 
 def version_of(p) -> str:
@@ -146,6 +147,8 @@ def main():
         check_complete(panel["close"], held, grace=acct.missing if acct else None)
         if already_done(out, t):
             print("already processed this bar; nothing to do")
+            if a.live:
+                monitor.ping(f"{tag}: bar {t.date()} already processed")
             return
 
         tradable = prices.dropna().index
@@ -198,8 +201,20 @@ def main():
             print(f"post-trade NAV unavailable ({e}); logging pre-trade NAV")
         append_csv(out / "equity.csv", [{**stamp, "nav": round(nav, 2), "flow": round(flow, 2),
                                          "exposure": round(float(target.sum()), 4)}])
-    print(f"NAV {nav:,.2f}  orders {len(fills)}")
+        try:
+            status, breach = monitor.report(out)
+        except Exception as e:  # noqa: BLE001 - reporting must never fail a run that traded
+            status, breach = f"{tag}: status unavailable ({e})", False
+    print(f"NAV {nav:,.2f}  orders {len(fills)}\n{status}")
+    if a.live:
+        monitor.ping(f"{status} | exposure {target.sum():.0%}, orders {len(fills)}", fail=breach)
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except BaseException as e:
+        quiet = isinstance(e, KeyboardInterrupt) or (isinstance(e, SystemExit) and e.code in (0, None))
+        if "--live" in sys.argv and not quiet:
+            monitor.ping(f"cryptobot live run FAILED: {type(e).__name__}: {e}", fail=True)
+        raise

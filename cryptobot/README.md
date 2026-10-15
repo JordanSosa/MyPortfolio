@@ -83,12 +83,19 @@ Everything is frozen except the portfolio volatility target, which you choose
 with `--risk`. Sharpe barely changes across profiles; return and drawdown
 scale together.
 
-| Profile | Vol target | Fresh 2014-18: CAGR / MaxDD | Dev 2019-24: CAGR / MaxDD |
-| --- | --- | --- | --- |
-| conservative | 20% | 26% / −13% | 16% / −16% |
-| **balanced (default, validated)** | **35%** | **42% / −21%** | **34% / −32%** |
-| growth | 50% | 54% / −36% | 49% / −42% |
-| aggressive | 75% | 69% / −38% | 62% / −56% |
+| Profile | Vol target | Fresh 2014-18: CAGR / MaxDD | Dev 2019-24: CAGR / MaxDD | Holdout 2025-26: CAGR / MaxDD | Kill switch |
+| --- | --- | --- | --- | --- | --- |
+| conservative | 20% | 26% / −13% | 16% / −16% | 1% / −12% | −20% |
+| **balanced (default, validated)** | **35%** | **42% / −21%** | **34% / −32%** | **4% / −24%** | **−45%** |
+| growth | 50% | 54% / −36% | 49% / −42% | 0% / −29% | −60% |
+| aggressive | 75% | 69% / −38% | 62% / −56% | 3% / −36% | −80% |
+
+`python scripts/risk_profiles.py` produces these (`reports/v4_profiles.json`)
+and each profile's daily record, which `forward_report.py` and the live
+monitor use. The kill switch is 1.4× the profile's worst drawdown in any
+record, rounded to 5%. More risk paid only in trending markets. In the choppy
+2025-26 holdout, growth made 0.2% a year against balanced's 4.2%, with a
+deeper drawdown.
 
 Only "balanced" was the pre-registered configuration; the other rows are
 informational. Choose the drawdown you can sit through without switching the
@@ -405,10 +412,11 @@ blocks, and they have no fixed IP.
 
 ```bash
 git clone <this repo> && cd MyPortfolio/cryptobot
-pip install -r requirements.txt && python -m pytest -q         # 49 tests must pass
+pip install -r requirements.txt && python -m pytest -q         # 55 tests must pass
 cat > ~/.cryptobot.env <<'ENV'                                    # chmod 600 this file
 export API_KEY=...  API_SECRET=...  API_PASSWORD=...  # PASSWORD: OKX only
 export CRYPTOBOT_LIVE=I_UNDERSTAND_THE_RISK
+export HEALTHCHECK_URL=https://hc-ping.com/<your-check-id>   # step 4
 ENV
 source ~/.cryptobot.env
 python scripts/paper_trade.py --exchange binance --dry           # today's targets, no orders
@@ -419,6 +427,49 @@ python scripts/paper_trade.py --exchange binance --live          # first real ru
 
 After the first run, compare the orders on the exchange with
 `reports/live/<exchange>-<account>/trades.csv`.
+
+### 4. Monitoring: know when it stops
+A bot that silently stops running can't exit positions in a crash. Set
+`HEALTHCHECK_URL` (`cryptobot/monitor.py`), for example a free check at
+healthchecks.io with a period of 1 day and a grace time of 2 hours. Its alerts
+(email, phone push) then cover:
+
+* **a failed run:** an exchange error, stale or incomplete data, or a crash.
+  The error text arrives with the alert;
+* **no run at all:** the server is down or the cron job is broken;
+* **the kill switch:** the account's drawdown, with deposits and withdrawals
+  taken out, passes the level for its risk profile.
+
+Every successful run also sends a one-line summary: NAV, drawdown and orders.
+`python scripts/forward_report.py reports/live/<exchange>-<account>` gives the
+full check against the backtest at any time.
+
+### 5. If the bot is your main investment
+The research supports the bot as a satellite (see "Is the bot the best way to
+build wealth?"). If most of your savings go into it anyway, these steps keep
+the bad outcomes survivable:
+
+1. **Keep 3–6 months of spending outside it.** Needing cash during a drawdown
+   is how a temporary loss becomes a permanent one.
+2. **Point your employer's super at a high-growth or indexed share option.**
+   It keeps flowing whatever you do with your own savings, and it is your only
+   diversification.
+3. **Phase any lump sum in over 8–12 weeks.** Deposits are detected
+   automatically, and the live engine has not yet traded real money.
+4. **Run balanced for the first 3–6 months live.** Compare the live ledger
+   with the paper ledger (`forward_report.py` on both). If it tracks, and you
+   can sit through a fall of 40% or more, `--risk growth --take-over` raises
+   returns and drawdowns together.
+5. **Set up monitoring** (step 4).
+6. **Plan for tax.** Use crypto tax software from day one; it imports the
+   exchange's history. A good year brings a bill every October, up to A$36k in
+   the A$500-a-week replay. Withdraw it from the bot, which trims holdings pro
+   rata.
+7. **Decide your exit rule now.** Use the kill switch for your profile and
+   nothing else. Don't switch off in an ordinary drawdown, and don't override
+   the kill switch when it fires.
+8. **Watch exchange concentration.** Above about A$100k, consider a second
+   exchange account running its own copy of the bot.
 
 ### Deposits and withdrawals
 You never need to tell the bot about them. Each run compares the account's
@@ -481,8 +532,9 @@ replayed on real history (`scripts/contributions.py`):
 
 **Kill-switch rules (stop and re-validate):**
 
-1. NAV falls more than 45% from its peak (about 1.4× the worst drawdown in
-   any record).
+1. NAV, with deposits and withdrawals taken out, falls more than 45% from its
+   peak on balanced (about 1.4× the worst drawdown in any record). Other risk
+   profiles use the same 1.4× rule; see the table above.
 2. After 90 or more days, the forward return falls below the 2.5th percentile
    of the expected band.
 3. Realised costs per trade exceed twice the model. Check `trades.csv`
@@ -597,8 +649,10 @@ cryptobot/
   live.py           market data, completeness checks, order planning, paper account, live broker
   execution.py      liquidity cap and deposit/withdrawal handling shared by simulator and live engine
   tax_au.py         Australian capital gains tax model (FIFO parcels, 12-month discount, losses carried forward)
+  monitor.py        live monitoring: health-check pings, flow-adjusted drawdown, per-profile kill switch
 scripts/            research_v4 (dev/fresh/holdout/exec/parity), paper_trade, forward_report,
-                    altcoin_analysis, v4_extras, contributions, wealth_paths, explain_portfolio, audit_diagnostics,
+                    altcoin_analysis, v4_extras, contributions, wealth_paths, risk_profiles,
+                    explain_portfolio, audit_diagnostics,
                     tune_asset, make_charts, v3 research scripts
 reports/            every number quoted here (JSON/CSV/PNG), incl. failed iterations
 frozen_config_v4.json  the recommended strategy (hash-checked)

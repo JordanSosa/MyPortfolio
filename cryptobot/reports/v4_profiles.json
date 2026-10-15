@@ -1,0 +1,85 @@
+{
+  "rule": "kill switch = 1.4 x worst drawdown in any record, rounded to 5%",
+  "profiles": {
+    "conservative": {
+      "target_vol": 0.2,
+      "fresh_2014_2018": {
+        "CAGR": 0.2606,
+        "Sharpe": 1.671,
+        "MaxDD": -0.1299
+      },
+      "dev_2019_2024": {
+        "CAGR": 0.1551,
+        "Sharpe": 1.227,
+        "MaxDD": -0.1605
+      },
+      "holdout_2025_on": {
+        "CAGR": 0.0122,
+        "Sharpe": 0.177,
+        "MaxDD": -0.1203
+      },
+      "worst_drawdown": -0.1605,
+      "kill_drawdown": -0.2
+    },
+    "balanced": {
+      "target_vol": 0.35,
+      "fresh_2014_2018": {
+        "CAGR": 0.4209,
+        "Sharpe": 1.722,
+        "MaxDD": -0.2138
+      },
+      "dev_2019_2024": {
+        "CAGR": 0.3386,
+        "Sharpe": 1.421,
+        "MaxDD": -0.3168
+      },
+      "holdout_2025_on": {
+        "CAGR": 0.0421,
+        "Sharpe": 0.311,
+        "MaxDD": -0.2355
+      },
+      "worst_drawdown": -0.3168,
+      "kill_drawdown": -0.45
+    },
+    "growth": {
+      "target_vol": 0.5,
+      "fresh_2014_2018": {
+        "CAGR": 0.5366,
+        "Sharpe": 1.667,
+        "MaxDD": -0.3563
+      },
+      "dev_2019_2024": {
+        "CAGR": 0.4944,
+        "Sharpe": 1.473,
+        "MaxDD": -0.417
+      },
+      "holdout_2025_on": {
+        "CAGR": 0.0016,
+        "Sharpe": 0.141,
+        "MaxDD": -0.2906
+      },
+      "worst_drawdown": -0.417,
+      "kill_drawdown": -0.6
+    },
+    "aggressive": {
+      "target_vol": 0.75,
+      "fresh_2014_2018": {
+        "CAGR": 0.6919,
+        "Sharpe": 1.641,
+        "MaxDD": -0.3757
+      },
+      "dev_2019_2024": {
+        "CAGR": 0.621,
+        "Sharpe": 1.383,
+        "MaxDD": -0.5632
+      },
+      "holdout_2025_on": {
+        "CAGR": 0.0316,
+        "Sharpe": 0.258,
+        "MaxDD": -0.3635
+      },
+      "worst_drawdown": -0.5632,
+      "kill_drawdown": -0.8
+    }
+  }
+}
