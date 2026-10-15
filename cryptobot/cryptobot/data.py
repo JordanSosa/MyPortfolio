@@ -294,6 +294,24 @@ def load_tbill(haircut: float = 0.005, refresh: bool = False) -> pd.Series:
     return (s - haircut).clip(lower=0.0)
 
 
+def load_audusd(refresh: bool = False) -> pd.Series:
+    """Daily AUD/USD - US dollars per Australian dollar (FRED DEXUSAL, New York
+    noon buying rate) - forward-filled to calendar days. Used to express
+    Australian-dollar contributions, account values and tax in AUD."""
+    path = DATA_DIR / "DEXUSAL.csv"
+    if refresh or not path.exists():
+        r = requests.get("https://fred.stlouisfed.org/graph/fredgraph.csv?id=DEXUSAL", timeout=60)
+        r.raise_for_status()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(r.text)
+    df = pd.read_csv(path)
+    df.columns = ["date", "usd_per_aud"]
+    s = pd.to_numeric(df["usd_per_aud"], errors="coerce")
+    s.index = pd.to_datetime(df["date"]).dt.tz_localize("UTC")
+    s = s.dropna()
+    return s.reindex(pd.date_range(s.index[0], pd.Timestamp.now(tz="UTC").normalize(), freq="D")).ffill()
+
+
 def refresh_symbol(symbol: str, interval: str = "1d") -> int:
     """Bring a cached symbol up to date however stale it is: missing monthly
     archive files first, then daily files for the current month. A symbol is

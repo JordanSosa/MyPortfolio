@@ -64,6 +64,7 @@ class Result:
     exposure: pd.Series
     trades: int
     nav_usd: pd.Series | None = None      # dollar account value (only with ``flows``)
+    trades_usd: pd.DataFrame | None = None  # dollars bought (+) / sold (-) per asset and day
 
 
 def simulate(targets: pd.DataFrame, close: pd.DataFrame, adv_usd: pd.DataFrame,
@@ -72,7 +73,7 @@ def simulate(targets: pd.DataFrame, close: pd.DataFrame, adv_usd: pd.DataFrame,
              cash_rate: pd.Series | None = None, min_trade: float = 0.0,
              max_participation: float | None = None, flows: pd.Series | None = None,
              initial_usd: float | None = None, min_order_usd: float = 0.0,
-             flow_mode: str = "prorata") -> Result:
+             flow_mode: str = "prorata", record_trades: bool = False) -> Result:
     """Daily portfolio simulation (see module docstring).
 
     Deposits/withdrawals: ``flows`` (dollars by date, + deposit / - withdrawal)
@@ -82,7 +83,11 @@ def simulate(targets: pd.DataFrame, close: pd.DataFrame, adv_usd: pd.DataFrame,
     just adds/removes cash and lets the normal band rule react (the pre-fix
     live behaviour). ``min_order_usd`` skips any trade smaller than that many
     dollars (exchange minimum order size), except exits. Returns stay
-    time-weighted; ``Result.nav_usd`` holds the dollar path."""
+    time-weighted; ``Result.nav_usd`` holds the dollar path.
+
+    ``record_trades`` fills ``Result.trades_usd`` with every fill in dollars
+    (+ bought, - sold; a delisting is a sale at the haircut price), e.g. for
+    working out capital gains tax."""
     cost = cost or CostModel()
     cols = targets.columns
     close = close.reindex(columns=cols)
@@ -106,7 +111,7 @@ def simulate(targets: pd.DataFrame, close: pd.DataFrame, adv_usd: pd.DataFrame,
           cash_rate.reindex(close.index).ffill().fillna(0.0).values / 365.0)
     h = np.zeros(N)
     equity = 1.0                                        # for the optional liquidity cap
-    track_usd = flows is not None or min_order_usd > 0
+    track_usd = flows is not None or min_order_usd > 0 or record_trades
     nav_usd = float(initial_usd if initial_usd is not None else cost.aum_usd)
     fl = (np.zeros(T) if flows is None else
           flows.reindex(close.index).fillna(0.0).values.astype(float))
@@ -116,6 +121,7 @@ def simulate(targets: pd.DataFrame, close: pd.DataFrame, adv_usd: pd.DataFrame,
     out_to = np.zeros(T)
     out_c = np.zeros(T)
     W = np.zeros((T, N))
+    TU = np.zeros((T, N)) if record_trades else None
     n_trades = 0
     for t in range(T):
         r = rets[t]
@@ -130,6 +136,8 @@ def simulate(targets: pd.DataFrame, close: pd.DataFrame, adv_usd: pd.DataFrame,
         if dead.any():
             forced = float(h[dead].sum() * delist_haircut)
             pnl -= forced
+            if TU is not None:
+                TU[t, dead] -= h[dead] * nav_usd * (1 - delist_haircut)
             h[dead] = 0.0
         nav = 1 + pnl
         h = h / nav if nav > 0 else h * 0
@@ -142,6 +150,8 @@ def simulate(targets: pd.DataFrame, close: pd.DataFrame, adv_usd: pd.DataFrame,
             f = fl[t]
             new_usd = nav_usd + f
             if new_usd <= 0:                          # everything withdrawn
+                if TU is not None:
+                    TU[t] -= h * nav_usd
                 h[:] = 0.0
                 nav_usd = 0.0
             elif flow_mode == "prorata" and not (f < 0 and -f <= 0.10 * nav_usd):
@@ -151,6 +161,8 @@ def simulate(targets: pd.DataFrame, close: pd.DataFrame, adv_usd: pd.DataFrame,
                 skip = np.abs(amt) < max(min_order_usd, 1e-12)
                 bps = cost.per_asset_bps(adv[t])
                 flow_cost = float((np.abs(amt[~skip]) * bps[~skip]).sum() / 1e4) / new_usd
+                if TU is not None:
+                    TU[t, ~skip] += amt[~skip]
                 h = np.where(skip, h * nav_usd / new_usd, h)
                 nav_usd = new_usd
             else:                                     # cash only: weights dilute / concentrate
@@ -176,6 +188,8 @@ def simulate(targets: pd.DataFrame, close: pd.DataFrame, adv_usd: pd.DataFrame,
                 bps = cost.per_asset_bps(adv[t])
                 cost_t = float((np.abs(diff[trade]) * bps[trade]).sum() / 1e4)
                 to_t = float(np.abs(diff[trade]).sum())
+                if TU is not None:
+                    TU[t, trade] += diff[trade] * nav_usd
                 h[trade] = tgt[trade]
                 n_trades += int(trade.sum())
         cost_t += flow_cost
@@ -192,4 +206,5 @@ def simulate(targets: pd.DataFrame, close: pd.DataFrame, adv_usd: pd.DataFrame,
     Wdf = pd.DataFrame(W, idx, cols)
     return Result(pd.Series(out_r, idx), pd.Series(out_g, idx), Wdf,
                   pd.Series(out_to, idx), pd.Series(out_c, idx), Wdf.sum(axis=1), n_trades,
-                  pd.Series(out_nav, idx) if track_usd else None)
+                  pd.Series(out_nav, idx) if track_usd else None,
+                  pd.DataFrame(TU, idx, cols) if TU is not None else None)

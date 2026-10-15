@@ -75,7 +75,7 @@ Other checks:
   1.34). On random half-universes, Sharpe ranges 1.28–1.75.
 * **Independent review.** A separate review of the live engine found 3
   high-severity defects (section 2b of [`AUDIT.md`](AUDIT.md)). All are fixed
-  and covered by tests (35 in total).
+  and covered by tests.
 
 ## Risk profiles: the one dial
 
@@ -134,7 +134,7 @@ volatility-managed portfolios (Moreira & Muir 2017).
 ```bash
 cd cryptobot
 pip install -r requirements.txt
-python -m pytest -q tests                      # 43 tests incl. look-ahead, live orders, deposits
+python -m pytest -q tests                      # 49 tests incl. look-ahead, live orders, deposits, tax
 python scripts/download_data.py --hourly --bitfinex --tbill   # ~2 h first time (674 Binance symbols, hourly bars, Bitfinex)
 python scripts/research_v4.py dev              # development evaluation (Binance <= 2024)
 python scripts/research_v4.py fresh            # Bitfinex 2014-18 validation set
@@ -144,6 +144,7 @@ python scripts/research_v4.py parity           # live-engine replay (~45 min)
 python scripts/altcoin_analysis.py            # where the profit comes from; every altcoin on its own
 python scripts/v4_extras.py                    # capacity and liquidity sensitivity
 python scripts/contributions.py                # $1k + $300/week replay; 20-year scenarios
+python scripts/contributions.py --aud --weekly 500   # A$ plan with Australian CGT, vs BTC
 python scripts/make_charts.py
 ```
 
@@ -230,8 +231,79 @@ contributions. The three scenarios differ only in the average return assumed:
 
 All three are before tax and inflation. With most gains realised within a
 year, Australian CGT at around 30% would turn the base case's ≈14% into
-roughly 10% a year, about $63k after 20 years. In today's money, divide 20-year
-figures by about 1.6 (2.5% inflation).
+roughly 10% a year, about $63k after 20 years (the next section models the tax
+properly). In today's money, divide 20-year figures by about 1.6 (2.5%
+inflation).
+
+## A$500 a week, after Australian tax
+
+`python scripts/contributions.py --aud --weekly 500` replays "A$1,000 to
+start, then A$500 every week" on real prices
+(`reports/contributions_aud_500.json`; `_300.json` for A$300):
+
+* deposits are converted to USDT at each day's AUD/USD rate (FRED DEXUSAL)
+  less 0.1%, and everything is valued in AUD;
+* capital gains tax is worked out per parcel (`cryptobot/tax_au.py`: FIFO,
+  50% discount after 12 months, losses carried forward, 2026-27 rates plus
+  Medicare levy on top of a A$100,000 salary) and paid out of the account
+  every 31 October;
+* "after tax" means everything is sold at the end and that tax paid too.
+
+**Jan 2019 → Oct 2026: A$204,000 contributed.** 2019-24 is v4's development
+period, so this replay flatters the bot.
+
+| Plan | Before tax | **After tax** | Worst fall in account value | Worst drawdown excl. deposits |
+| --- | --- | --- | --- | --- |
+| Bot, balanced | A$518,859 (23.5%/yr) | **A$381,087 (15.8%/yr)** | −A$130,742 (Jan–Jun 2025) | −28% |
+| Bot, growth | A$696,644 (30.9%/yr) | **A$455,926 (20.2%/yr)** | −A$278,658 | −39% |
+| Buy BTC weekly and hold | A$861,532 (36.3%/yr) | **A$716,662 (31.6%/yr)** | −A$709,064 (Oct 2025–Jun 2026) | −74% |
+| Half bot, half BTC | A$689,960 (30.6%/yr) | **A$553,639 (25.1%/yr)** | −A$383,581 | −55% |
+
+**Jan 2025 → Oct 2026: A$47,000 contributed**, in a falling market.
+
+| Plan | Before tax | **After tax** |
+| --- | --- | --- |
+| Bot, balanced | A$51,676 (10.8%/yr) | **A$50,104 (7.2%/yr)** |
+| Bot, growth | A$52,745 (13.3%/yr) | **A$50,824 (8.9%/yr)** |
+| Buy BTC weekly and hold | A$43,789 (−7.6%/yr) | **A$43,789 (−7.6%/yr)** |
+| Half bot, half BTC | A$47,762 (1.8%/yr) | **A$47,481 (1.1%/yr)** |
+
+Percentages are money-weighted returns.
+
+**Why tax hits the bot hardest.** The median position is held 19 days, and
+only 0.3% of positions last more than a year, so the 50% discount almost
+never applies. The bot makes roughly 360–700 trades a year, and every profitable year
+brings a tax bill: up to A$36,000 (October 2024) on the A$500 plan. BTC that is
+bought and held pays nothing until it is sold, and then only on half the gain.
+Over 2019-26 tax cut the bot's return from 23.5% to 15.8% a year, but BTC's
+only from 36.3% to 31.6%.
+
+**20 years at A$500 a week** (A$522,000 contributed). Same resampling as
+above, with AUD/USD assumed flat. "After tax" taxes each year's gain at the
+marginal rate on top of a A$100,000 salary, with losses carried forward.
+
+| After | Contributed | Base case, before tax | **Base case, after tax** | Recent regime, after tax |
+| --- | --- | --- | --- | --- |
+| 1 year | A$27,000 | A$28,200 | **A$27,800** | A$26,800 |
+| 2 years | A$53,000 | A$59,900 | **A$57,500** | A$53,100 |
+| 3 years | A$79,000 | A$95,700 | **A$89,700** | A$80,300 |
+| 5 years | A$131,000 | A$184,300 | **A$163,700** | A$136,400 |
+| 10 years | A$261,500 | A$556,200 | **A$413,300** | A$288,000 |
+| 15 years | A$392,000 | A$1.30M | **A$787,300** | A$457,600 |
+| 20 years | A$522,000 | A$2.67M | **A$1.30M** | A$636,800 |
+
+* **Base case:** about 8.4% a year after tax on the money put in (14.4%
+  before). 1 in 10 paths ends below A$580,000 and 1 in 10 above A$3.2M.
+* **Recent regime:** about 1.9% a year after tax. That barely beats the
+  money put in and falls behind inflation.
+* **Being behind after 5 years is common.** After 5 years, 21% of base-case
+  paths (41% in the recent regime) are below the total contributed, even
+  before tax.
+* **A$300 a week instead:** A$313,600 contributed. The base case ends at
+  A$1.61M before tax and A$810,000 after; the recent regime at A$388,000 after
+  tax. Outcomes scale almost exactly with the contribution.
+
+In today's money, divide the 20-year figures by about 1.64 (2.5% inflation).
 
 ## Forward testing (started 2026-10-14)
 
@@ -298,7 +370,7 @@ blocks, and they have no fixed IP.
 
 ```bash
 git clone <this repo> && cd MyPortfolio/cryptobot
-pip install -r requirements.txt && python -m pytest -q         # 43 tests must pass
+pip install -r requirements.txt && python -m pytest -q         # 49 tests must pass
 cat > ~/.cryptobot.env <<'ENV'                                    # chmod 600 this file
 export API_KEY=...  API_SECRET=...  API_PASSWORD=...  # PASSWORD: OKX only
 export CRYPTOBOT_LIVE=I_UNDERSTAND_THE_RISK
@@ -443,32 +515,56 @@ following: BTC trend made Sharpe 1.39 on Bitfinex 2014-18, but about 0 in
     that wrongly dropped JUP.
   * Every fix is tested.
 
-## Limitations, stated plainly
+## Risks and concerns, stated plainly
 
-* **No backtest proves future profits.** Even untouched historical data is
-  not live trading. The forward ledgers will tell.
-* **Regime dependence.** Most of the return comes in strong bull trends;
-  choppy years are roughly flat (2019 +6%, 2025 −6.5%).
-* **Not modelled:** exchange failure, USDT de-peg, account freezes, and
-  taxes. Australian CGT applies to every disposal, and most holdings are held
-  for under 12 months.
+* **No backtest proves future profits.** The only untouched test is
+  Bitfinex 2014-2018. Replays from 2019 are in-sample, and the forward
+  ledgers only started on 2026-10-14. The live order path has never placed a
+  real order, so the first live weeks are part of the test.
+* **The edge may be fading, or resting.** The trailing two-year Sharpe is
+  0.80, against 1.40 over the whole record. Similar lulls happened before:
+  0.20 in early 2020 and 0.26 in mid-2023, each followed by strong years.
+  Twenty-one months cannot tell decay from a quiet market.
+* **Tax.** Nearly every gain is short-term, so it is taxed every year at the
+  full marginal rate. On the A$500-a-week replay this cut 23.5% a year to
+  15.8%.
+* **It lags crypto in bull markets by design.** It is 25% invested on
+  average, and more than half invested on only 11% of days. Since 2019, buying
+  BTC weekly and holding would have left about 1.9× as much after tax, at the
+  price of a −74% drawdown.
+* **Long waits for new highs.** The account spent 759 days (Nov 2021 → Dec
+  2023) and 611 days (Jan 2025 → Sep 2026) below an earlier peak. Since 2019
+  it has been more than 1% below its high on 88% of days.
+* **Everything sits on one exchange, mostly in USDT.** About 75% of the
+  account is idle USDT on average. USDT briefly traded near $0.95 in May
+  2022, and exchanges can fail.
+  * Australian exchanges are registered with AUSTRAC for anti-money-
+    laundering purposes, which does not protect your balance.
+  * The new licensing law for platforms (Act No. 38 of 2026) starts in
+    April 2027.
+* **Operations.** It needs a machine that runs every day. A missed run means
+  missed exits. Converting each AUD deposit to USDT is a manual step.
+* **Currency.** The account lives in USD. AUD/USD has ranged from 0.58 to 0.80
+  since 2019.
+* **Not modelled:** exchange failure, USDT de-peg, account freezes.
 * **Not financial advice.**
 
 ## Layout
 
 ```
 cryptobot/
-  data.py           Binance archive download (incl. delisted), refresh, discontinuity splits, T-bill rates
+  data.py           Binance archive download (incl. delisted), refresh, discontinuity splits, T-bill and AUD/USD rates
   data_bitfinex.py  independent survivorship-free Bitfinex dataset (validation)
   strategy.py       signals, selection, sizing, v4 ensemble <- all trading logic
   backtest.py       daily simulator: drift, band, min trade, gaps, delistings, costs, cash yield
   metrics.py        Sharpe/Calmar/..., PSR, Deflated Sharpe, PBO (CSCV), block bootstrap
   research.py       v3 grid / walk-forward helpers
   live.py           market data, completeness checks, order planning, paper account, live broker
-  execution.py      liquidity cap shared by simulator and live engine
+  execution.py      liquidity cap and deposit/withdrawal handling shared by simulator and live engine
+  tax_au.py         Australian capital gains tax model (FIFO parcels, 12-month discount, losses carried forward)
 scripts/            research_v4 (dev/fresh/holdout/exec/parity), paper_trade, forward_report,
-                    altcoin_analysis, v4_extras, audit_diagnostics, tune_asset, make_charts,
-                    v3 research scripts
+                    altcoin_analysis, v4_extras, contributions, explain_portfolio, audit_diagnostics,
+                    tune_asset, make_charts, v3 research scripts
 reports/            every number quoted here (JSON/CSV/PNG), incl. failed iterations
 frozen_config_v4.json  the recommended strategy (hash-checked)
 frozen_config.json     v3, kept for comparison
