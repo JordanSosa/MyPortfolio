@@ -145,6 +145,7 @@ python scripts/altcoin_analysis.py            # where the profit comes from; eve
 python scripts/v4_extras.py                    # capacity and liquidity sensitivity
 python scripts/contributions.py                # $1k + $300/week replay; 20-year scenarios
 python scripts/contributions.py --aud --weekly 500   # A$ plan with Australian CGT, vs BTC
+python scripts/wealth_paths.py                 # bot vs index funds vs super, 30 years, after tax
 python scripts/make_charts.py
 ```
 
@@ -304,6 +305,40 @@ marginal rate on top of a A$100,000 salary, with losses carried forward.
   tax. Outcomes scale almost exactly with the contribution.
 
 In today's money, divide the 20-year figures by about 1.64 (2.5% inflation).
+
+## Is the bot the best way to build wealth?
+
+`python scripts/wealth_paths.py` (`reports/wealth_paths.json`) invests the
+same take-home budget several ways: A$500 a week, rising with inflation, for
+30 years. Values are in today's dollars, after Australian tax on a A$100,000
+salary.
+
+* **Shares:** 5% a year above inflation with 16% volatility (world shares made
+  5.2% above inflation over 1900-2024), less fees and tax drag.
+* **The bot:** the same resampled record and scenarios as above.
+
+| Plan | Median after 20 years | 1-in-10 bad case | Chance of A$1.5M within 25 years |
+| --- | --- | --- | --- |
+| Bot, base case | A$976k | A$447k | 49% |
+| Bot, recent regime | A$497k | A$220k | 11% |
+| Index fund outside super | A$826k | A$472k | 33% |
+| Salary sacrifice to super + index fund | A$946k | A$540k | 43% |
+| … with 10% of the budget in the bot (base case) | A$1,017k | A$619k | 51% |
+| … with 10% of the budget in the bot (recent regime) | A$934k | A$560k | 41% |
+
+* **All-in on the bot is a bet on which scenario comes true.** It wins only if
+  the future looks like the base case. If it looks like 2025-26, it ends with
+  about 60% of what a plain index fund gives.
+* **Salary sacrifice is the most reliable boost.** On A$100k, giving up
+  A$13,940 of take-home pay puts A$17,425 into super (+25%), because
+  contributions are taxed at 15% instead of 32%. The catch is that super is
+  locked until 60.
+* **A 10% bot satellite is cheap insurance for upside.** It adds about A$70k at
+  the median if the bot performs, and costs about A$12k if it doesn't.
+  * Bot and share returns are drawn independently here. In crashes they tend
+    to fall together, so the blends' bad cases are optimistic.
+* **The savings rate matters more than the strategy.** No plan has better than
+  a 7% chance of reaching A$1.5M within 15 years on A$500 a week.
 
 ## Forward testing (started 2026-10-14)
 
@@ -563,7 +598,7 @@ cryptobot/
   execution.py      liquidity cap and deposit/withdrawal handling shared by simulator and live engine
   tax_au.py         Australian capital gains tax model (FIFO parcels, 12-month discount, losses carried forward)
 scripts/            research_v4 (dev/fresh/holdout/exec/parity), paper_trade, forward_report,
-                    altcoin_analysis, v4_extras, contributions, explain_portfolio, audit_diagnostics,
+                    altcoin_analysis, v4_extras, contributions, wealth_paths, explain_portfolio, audit_diagnostics,
                     tune_asset, make_charts, v3 research scripts
 reports/            every number quoted here (JSON/CSV/PNG), incl. failed iterations
 frozen_config_v4.json  the recommended strategy (hash-checked)
