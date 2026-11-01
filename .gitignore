@@ -1,2 +1,8 @@
-_site/
-node_modules/
+node_modules
+dist
+dist-single
+_site
+*.log
+.DS_Store
+/shots
+/test-results
