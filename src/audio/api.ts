@@ -18,7 +18,19 @@ export type SfxId =
   // weapons
   | "starShot" | "slash" | "boomerang" | "bell" | "candyThrow" | "bubblePop" | "beam" | "beamBig" | "meow" | "orbitHit"
   // events
-  | "warning" | "bossRoar" | "comboUp" | "comboBreak" | "rankUp" | "waveIncoming" | "victory" | "gameOver";
+  | "warning" | "bossRoar" | "comboUp" | "comboBreak" | "rankUp" | "waveIncoming" | "victory" | "gameOver"
+  // ---- Season 2 (docs/EXPANSION.md). Added as aliases of similar sounds; the audio agent gives each its own synthesis.
+  // hub / meta progression
+  | "hubOpen" | "tabSwitch" | "nodeBuy" | "nodeDeny" | "talentUp" | "heroLevelUp" | "masteryUp" | "unlockFanfare"
+  | "achievement" | "payoutTick" | "payoutTotal" | "currencyGain" | "equip"
+  // gacha
+  | "gachaCharge" | "gachaMeteor" | "gachaReveal" | "gachaRevealSR" | "gachaRevealSSR" | "gachaRevealUR"
+  | "gachaMythicGlitch" | "gachaMythicBoom" | "gachaDupe" | "gachaLost5050" | "starUp"
+  // satire stingers
+  | "narratorSting" | "nani" | "baka" | "recordScratch" | "toBeContinued"
+  // new weapons / heroes / stages
+  | "honk" | "missile" | "fanSmack" | "teacup" | "sparkleCharm" | "transform" | "fireball" | "boba" | "paperCrane"
+  | "lightstick" | "snore" | "glitch" | "splash" | "crunch";
 
 export interface SfxOpts {
   /** 0..1 multiplier (default 1) */
@@ -29,7 +41,12 @@ export interface SfxOpts {
   pan?: number;
 }
 
-export type MusicTrack = "none" | "title" | "battle" | "boss" | "final" | "victory" | "gameover" | "shop";
+export type MusicTrack =
+  | "none" | "title" | "battle" | "boss" | "final" | "victory" | "gameover" | "shop"
+  // ---- Season 2: hub + gacha + per-stage battle and boss themes ("cancel" = the series-finale boss)
+  | "hub" | "gacha"
+  | "candy" | "academy" | "beach" | "finale"
+  | "boss_candy" | "boss_academy" | "boss_beach" | "boss_finale" | "cancel";
 
 export interface AudioAPI {
   /** Must be called from a user gesture (first tap/click/key). Safe to call repeatedly. */

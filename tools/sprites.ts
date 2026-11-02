@@ -10,7 +10,23 @@
  */
 import { isGrid, rasterizeFont, rasterizeSprite, validateGrid } from "../src/art/format";
 import { FONT_MANIFEST, MANIFEST } from "../src/art/manifest";
-import { ALL_FONTS, ALL_SPRITES } from "../src/art/sprites/index";
+import type { FontDef, SpriteDef } from "../src/art/format";
+import { ALL_FONTS as REG_FONTS, ALL_SPRITES as REG_SPRITES } from "../src/art/sprites/index";
+
+// Work-in-progress art (src/art/wip/*.ts) is NOT part of the game; it is previewed here with ?wip=1.
+// Artists draw there, then move the finished file into src/art/sprites/ (auto-registered).
+type WipMod = { sprites?: SpriteDef[]; fonts?: FontDef[] };
+const WIP = import.meta.glob<WipMod>("../src/art/wip/*.ts", { eager: true });
+const useWip = new URLSearchParams(location.search).get("wip") === "1";
+const ALL_SPRITES: SpriteDef[] = [...REG_SPRITES];
+const ALL_FONTS: FontDef[] = [...REG_FONTS];
+if (useWip) {
+  const have = new Set(ALL_SPRITES.map((s) => s.id));
+  for (const m of Object.values(WIP)) {
+    for (const s of m.sprites ?? []) if (!have.has(s.id)) (ALL_SPRITES.push(s), have.add(s.id));
+    for (const f of m.fonts ?? []) ALL_FONTS.push(f);
+  }
+}
 
 const qs = new URLSearchParams(location.search);
 const filters = (qs.get("filter") ?? "").split(",").map((s) => s.trim()).filter(Boolean);

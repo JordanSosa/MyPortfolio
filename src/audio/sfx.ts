@@ -61,7 +61,7 @@ function boom(v: Voice, t: number, f: number, dur: number, vol: number): void {
   v.tone({ t, w: "triangle", f: f * 4, f2: f, gt: 0.04, a: 0.001, d: 0.08, s: 0, v: vol * 0.35 });
 }
 
-export const SFX: Record<SfxId, SfxDef> = {
+const BASE_SFX = {
   // ------------------------------------------------------------------ UI
   uiMove: {
     vol: 0.41, gap: 0.03, max: 2, pri: 1, free: true,
@@ -651,4 +651,52 @@ export const SFX: Record<SfxId, SfxDef> = {
       v.tone({ t: 0.55, w: "sine", f: 110 * p, a: 0.01, d: 1.4, s: 0, v: 0.3 });
     },
   },
+} satisfies Partial<Record<SfxId, SfxDef>>;
+
+/** Season 2 ids start as aliases of similar sounds (docs/EXPANSION.md); the audio agent replaces them with bespoke synthesis. */
+export const SFX: Record<SfxId, SfxDef> = {
+  ...BASE_SFX,
+  hubOpen: BASE_SFX.uiConfirm,
+  tabSwitch: BASE_SFX.uiMove,
+  nodeBuy: BASE_SFX.powerup,
+  nodeDeny: BASE_SFX.uiDeny,
+  talentUp: BASE_SFX.cardPick,
+  heroLevelUp: BASE_SFX.levelUp,
+  masteryUp: BASE_SFX.rankUp,
+  unlockFanfare: BASE_SFX.evolve,
+  achievement: BASE_SFX.rankUp,
+  payoutTick: BASE_SFX.countTick,
+  payoutTotal: BASE_SFX.coin,
+  currencyGain: BASE_SFX.coin,
+  equip: BASE_SFX.cardPick,
+  gachaCharge: BASE_SFX.ultReady,
+  gachaMeteor: BASE_SFX.ultCutin,
+  gachaReveal: BASE_SFX.cardFlip,
+  gachaRevealSR: BASE_SFX.powerup,
+  gachaRevealSSR: BASE_SFX.chestJackpot,
+  gachaRevealUR: BASE_SFX.evolve,
+  gachaMythicGlitch: BASE_SFX.warning,
+  gachaMythicBoom: BASE_SFX.ultBlast,
+  gachaDupe: BASE_SFX.coin,
+  gachaLost5050: BASE_SFX.comboBreak,
+  starUp: BASE_SFX.rankUp,
+  narratorSting: BASE_SFX.telegraph,
+  nani: BASE_SFX.hitCrit,
+  baka: BASE_SFX.bossHit,
+  recordScratch: BASE_SFX.comboBreak,
+  toBeContinued: BASE_SFX.gameOver,
+  honk: BASE_SFX.bossRoar,
+  missile: BASE_SFX.starShot,
+  fanSmack: BASE_SFX.bossHit,
+  teacup: BASE_SFX.bubblePop,
+  sparkleCharm: BASE_SFX.heal,
+  transform: BASE_SFX.evolve,
+  fireball: BASE_SFX.explosion,
+  boba: BASE_SFX.bubblePop,
+  paperCrane: BASE_SFX.boomerang,
+  lightstick: BASE_SFX.beam,
+  snore: BASE_SFX.freeze,
+  glitch: BASE_SFX.warning,
+  splash: BASE_SFX.bubblePop,
+  crunch: BASE_SFX.propBreak,
 };

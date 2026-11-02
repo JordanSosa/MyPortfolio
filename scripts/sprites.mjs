@@ -1,5 +1,5 @@
 // Render the sprite preview sheet to a PNG and print the validation report.
-//   node scripts/sprites.mjs [--filter hoshi,en_] [--owner chars] [--scale 4] [--bg checker|dark|light|grass] [--fonts] [--out shots/sprites.png] [--validate]
+//   node scripts/sprites.mjs [--wip] [--filter hoshi,en_] [--owner chars] [--scale 4] [--bg checker|dark|light|grass] [--fonts] [--out shots/sprites.png] [--validate]
 import { parseArgs, startServer, launchBrowser, newPage, ensureDir } from "./lib.mjs";
 
 const args = parseArgs();
@@ -8,6 +8,7 @@ const q = new URLSearchParams();
 for (const k of ["filter", "owner", "scale", "bg"]) if (args[k] && args[k] !== true) q.set(k, args[k]);
 if (args.fonts) q.set("fonts", "1");
 if (args.validate) q.set("validate", "1");
+if (args.wip) q.set("wip", "1");
 
 const { url, close } = await startServer();
 const browser = await launchBrowser();
