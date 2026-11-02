@@ -329,7 +329,8 @@ export class WorldView {
       const by = Math.round(p.y + 3);
       r.rect(Layer.Text, bx - 1, by - 1, bw + 2, 4, C.outline, 0.9);
       r.rect(Layer.Text, bx, by, bw * this.hpGhost, 2, C.pinkLight, 0.9);
-      const col = k > 0.5 ? lerpColor(C.yellow, C.lime, (k - 0.5) * 2) : lerpColor(C.red, C.yellow, k * 2);
+      // pink (healthy) -> yellow -> red: lime/green vanished against the meadow
+      const col = k > 0.5 ? lerpColor(C.yellow, C.pink, (k - 0.5) * 2) : lerpColor(C.red, C.yellow, k * 2);
       r.rect(Layer.Text, bx, by, Math.max(k > 0 ? 1 : 0, bw * k), 2, this.hurtFlash > 0.5 ? 0xffffff : col, 1);
       if (k < 0.3) r.rect(Layer.Text, bx, by, bw * k, 2, C.white, 0.35 + 0.35 * Math.sin(time * 14));
     }

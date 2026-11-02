@@ -189,7 +189,8 @@ export function openChestModal(app: App, w: World): UiScreen {
         const rl = reels.querySelectorAll<HTMLElement>(".reel");
         while (landed < landAt.length && t >= landAt[landed]) {
           rl[landed]?.classList.add("landed");
-          app.sfx(res?.rewards[landed]?.kind === "evolution" ? "evolve" : "cardPick");
+          // evolution fanfare ("evolve") plays in the deferred celebration once the chest closes
+          app.sfx(res?.rewards[landed]?.kind === "evolution" ? "powerup" : "cardPick");
           landed++;
         }
         if (landed >= landAt.length && t > (landAt[landAt.length - 1] ?? 0) + 0.25) finishSpin();

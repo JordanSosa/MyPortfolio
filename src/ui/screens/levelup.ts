@@ -119,7 +119,8 @@ export function openLevelUp(app: App, w: World): UiScreen {
     busy = true;
     const els = cardsEl.querySelectorAll<HTMLElement>(".card");
     els.forEach((b, k) => b.classList.add(k === i ? "picked" : "gone"));
-    app.sfx(c.kind === "evolution" ? "evolve" : "cardPick");
+    // evolutions play their "evolve" fanfare in the deferred celebration (view/feedback.ts) once the modal closes
+    app.sfx(c.kind === "evolution" ? "powerup" : "cardPick");
     w.choose(c);
     setTimeout(() => {
       busy = false;
