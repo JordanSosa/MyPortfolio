@@ -7,6 +7,7 @@
 import { describe, expect, test } from "vitest";
 import { Bot, simulate } from "../src/debug/bot";
 import { CFG } from "../src/game/config";
+import { BOSSES } from "../src/game/registry";
 import { EFX_STOMP } from "../src/game/enemies/_fx";
 import { SAFE_SPAWN } from "../src/game/enemies/_bullets";
 import { LL_BATS, LL_FANS, LL_FLOWER, LL_SPIRAL, LL_STARFALL, LL_TELE_IN, LL_TELE_OUT, LUNA_RING_N, lunaRing, lunaState } from "../src/game/bosses/lady-lunatic";
@@ -333,6 +334,46 @@ describe("bosses", () => {
     expect(w.phase).toBe("victory");
     expect(w.summary().victory).toBe(true);
   });
+});
+
+describe("boss entrance", () => {
+  // portrait / landscape phone views (art px at zoom 1) and the headless default
+  const VIEWS = [
+    { name: "portrait", w: 217, h: 469 },
+    { name: "landscape", w: 469, h: 217 },
+    { name: "default", w: CFG.viewW, h: CFG.viewH },
+  ];
+  for (const v of VIEWS)
+    test.each(["king_puff", "nightmare_teddy", "lady_lunatic"])(`${v.name}: %s is on screen under the HUD for its name card, spawns pause, no early contact`, (id) => {
+      const w = new World({ hero: "hoshi", seed: 3, viewW: v.w, viewH: v.h });
+      for (const inst of w.weapons) inst.def.dispose?.(w, inst);
+      w.weapons.length = 0;
+      for (let i = 0; i < 30; i++) w.step(1 / 60);
+      let spawned = 0;
+      w.bus.on("bossSpawn", () => spawned++);
+      w.director.warnBoss(BOSSES.get(id)!, 0.4);
+      w.director.warning!.t = 0;
+      w.step(1 / 60);
+      expect(spawned).toBe(1);
+      const b = w.boss!;
+      expect(b.def.id).toBe(id);
+      expect(w.director.introT).toBeGreaterThan(1.4);
+      const n0 = w.enemyCount;
+      const hp0 = w.player.hp;
+      // the top HUD measured on a phone: 107 of 844 CSS px (portrait), 70 of 390 (landscape)
+      const hud = v.h * (v.w > v.h ? 70 / 390 : 107 / 844);
+      let firstClear = -1;
+      for (let i = 0; i < 60; i++) {
+        const top = w.player.y - w.viewH / 2;
+        const head = b.y - b.cy * 2 - b.z;
+        if (firstClear < 0 && head > top + hud && head < w.player.y + w.viewH / 2 && Math.abs(b.x - w.player.x) < w.viewW / 2) firstClear = i / 60;
+        w.step(1 / 60);
+      }
+      expect(firstClear).toBeGreaterThanOrEqual(0);
+      expect(firstClear).toBeLessThanOrEqual(0.5);
+      expect(w.player.hp).toBe(hp0); // a standing hero takes no contact damage in the first second
+      expect(w.enemyCount).toBeLessThanOrEqual(n0 + 7); // (King Puff's slam summons; no director spawns)
+    });
 });
 
 describe("bullet hygiene", () => {

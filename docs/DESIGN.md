@@ -13,7 +13,8 @@ first-class target**, desktop (keyboard/gamepad) equally supported.
 
 ## 1. Pillars
 
-1. **Instant power fantasy.** First level-up inside 8 seconds. A screen full of
+1. **Instant power fantasy.** First level-up inside 8 seconds (Lv 2 costs 3 XP and,
+   below Lv 3 in the first 30 s, gems within 110 px fly to the hero). A screen full of
    enemies melting under your build by minute 3.
 2. **Over-the-top juice on everything.** Every hit flashes, squashes, pops a
    number. Every death bursts into confetti. Every level-up is a fireworks
@@ -88,9 +89,9 @@ prioritise evolutions when eligible.
 
 | Hero | Look | Start weapon | Trait | Ultimate |
 | --- | --- | --- | --- | --- |
-| **Hoshi** (star magician) | pink twin-tails, star clips, cyan eyes, white/pink magical-girl dress, star wand | Star Shot | +10 % projectile speed, −5 % cooldown | **Supernova Shower** — 30 meteors rain across the view over 3 s, each exploding (radius 32) |
+| **Hoshi** (star magician) | pink twin-tails, star clips, cyan eyes, white/pink magical-girl dress, star wand | Star Shot | +10 % projectile speed, −5 % cooldown | **Supernova Shower** — 30 meteors rain across the view over 3 s in volleys of three (6-9 in the air at once), each exploding (radius 32) with its own flash + shockwave |
 | **Rin** (shrine swordswoman) | black ponytail with red ribbon, red eyes, white haori + red hakama, katana | Petal Slash | +20 HP, +10 % damage | **Thousand Blossom Cut** — world freezes, 12 slash lines carve the screen, then every on-screen enemy is hit for massive damage in a petal explosion |
-| **Mochi** (neko-girl) | cream bob + cat ears, golden cat eyes, oversized lavender paw hoodie, tail | Yarn Orbit | +15 % move speed, +20 % pickup radius, 1 armor | **Nyan Stampede** — 40 cats gallop across the screen in waves, trampling (damage + big knockback) |
+| **Mochi** (neko-girl) | cream bob + cat ears, golden cat eyes, oversized lavender paw hoodie, tail | Yarn Orbit | +15 % move speed, +20 % pickup radius, 1 armor | **Nyan Stampede** — 60 big (2×) glowing cats in warm creams / peaches only (never the enemy pastels) gallop across the screen in 5 walls of two staggered rows, trampling (damage + big knockback); each wall: dust row, speed lines, "NYA!" |
 
 ### 3.2 Weapons (5 levels each) and evolutions
 Base stats are multiplied by passives (Might, Area, Cooldown, Amount...).
@@ -136,7 +137,10 @@ death burst in their own colours.
 
 ### 3.5 Bosses
 Intro: 3 s red WARNING banner + siren → boss enters with name card ("KING
-PUFF — Ruler of the Squish Kingdom"), slight zoom-out, boss music. Boss HP bar
+PUFF — Ruler of the Squish Kingdom"), slight zoom-out, boss music. The boss
+spawns already on screen, its sprite top just under the HUD (landscape: from
+the left side), so the name card plays next to it (portrait: in the top letterbox band, above the boss); a 120 ms freeze-frame + short
+0.4× slow-mo mark the entrance and no new enemies spawn for 1.6 s. Boss HP bar
 at the top. Death: 1.2 s slow-mo at 0.25×, chained explosions, white flash,
 golden chest with a light beam. Boss HP follows the player's level around the
 level the fight is tuned for: `HP × clamp(1 + 0.035 × (level − ref), 0.5, 1.8)`
@@ -186,20 +190,21 @@ Cost grows ~1.6× per rank.
 
 | Event | Effects |
 | --- | --- |
-| Enemy hit | White flash (shader) 0.08 s · squash 1.25/0.8 springing back over 0.12 s · knockback · damage number pops (scale 1.6→1 bounce, rises, fades 0.6 s; crit = yellow, ×2 size, wobble, sparkle) · weapon-tinted `fx_hit` · `hit` sfx (rate-limited, ±2 st random) |
+| Enemy hit | White flash (shader) 0.08 s · squash 1.25/0.8 springing back over 0.12 s · knockback · damage number pops (scale 1.6→1 bounce, rises, fades 0.6 s; crit = yellow, ×2 size, wobble, sparkle) · weapon-tinted `fx_hit` · `hit` sfx (rate-limited, ±2 st random). Crits never wall off the hero: one per enemy per 0.3 s, at most 16 alive (8 at peak load), a crit landing on a fresh one merges into it (summed, re-pops), enemy numbers over the hero shrink and fade, the crit micro-shake fires at most every 0.15 s |
 | Enemy death | Pop (scale 1.3 + flash) → 8-14 confetti particles in the enemy's colours + white sparkles · `fx_puff` · expanding `fx_ring` · gem hops out in a little arc |
 | Elite death | + shockwave distortion · 30 particles · coin shower · hitstop 60 ms · `eliteDie` |
 | Player hurt | Red vignette flash · shake 0.35 · chromatic aberration pulse · hitstop 50 ms · blinking i-frames · red number · haptic 30 ms. HP < 30 %: heartbeat vignette pulse |
+| Player death | Hero-focused beat on real time (the sim has stopped): camera zooms to 1.35×, the frame drains to a dim desaturated grade over 0.8 s, the hero is knocked down (6 px hop, quarter turn, dust puff) and drawn above her killer with a plum outline, enemies around her fade to 50 %. A revive restores zoom + colour within a second |
 | Gem pickup | Gem streaks in with a stretched trail · sparkle on collect · `gem` sfx pitch climbs per chained pickup (resets after 0.6 s) · XP bar shimmer |
 | Level up | See §2.3: hitstop, 24-ray burst, light pillar, 2 rings, golden flash, bouncing "LEVEL UP!", confetti |
-| Evolution | Rainbow flash, hue-cycling grade for 0.6 s, "EVOLUTION!" banner, hero cast pose |
-| Explosion | `fx_explosion` scaled to radius · additive glow flash · shockwave distortion · shake 0.2-0.5 · debris · scorch decal fading over 6 s |
+| Evolution | Rainbow flash, hue-cycling grade for 0.6 s, "EVOLUTION!" HUD banner (+ weapon name), hero cast pose, fireworks. Picked in a level-up / chest modal: the celebration waits until the modal closes |
+| Explosion | `fx_explosion` scaled to radius · additive glow flash · shockwave distortion · shake 0.2-0.5 · debris · a faint scorch ring fading over 2.5 s (at most 10 alive; never a filled disc, which reads as a shadow / landing telegraph) |
 | Lightning | Jagged polyline (midpoint displacement) with white core + cyan glow, flickers 0.12 s · impact flash · `w_bell` marker |
 | Dash | 5 fading afterimages (cyan/pink) · dust puffs · speed streaks · zoom punch |
 | Ultimate | Screen darkens, radial speed lines, portrait (f1) slides in on a diagonal band, huge outlined title text shakes in, voice blips, then flash + effect + max shake + bloom surge |
 | Boss warning | Red pulsing border, hazard-stripe WARNING banner scrolling, siren |
 | Combo | Bouncing counter; rank letter stamps in rotated with a shine; SSS = rainbow text + glowing screen border |
-| Ambient | Screen-space petals & sparkle motes · deco sways · day → dusk → night colour grade across the run · fireflies at night |
+| Ambient | Screen-space petals & sparkle motes · deco sways · day → dusk → night colour grade across the run (soft: the violet mood is in the lift + fireflies; enemy bullets, gems, shots and crits are protected from the grade) · fireflies at night |
 
 Global helpers: **hitstop(ms)**, **slowmo(scale, seconds)**, **shake(trauma)**
 (trauma²-scaled smooth noise, decays), **zoomPunch(amount)**,
@@ -347,10 +352,15 @@ src/
 - Seeded RNG (`?seed=`).
 
 ### 8.3 Performance budget (mid-range phone, 60 fps)
-300 enemies + 2000 particles + 400 gems + 150 projectiles. Auto quality:
-rolling 2 s frame-time average; > 20 ms steps quality down (fewer particles,
-smaller glow buffer, lower enemy cap), < 12 ms steps up. Particles are
-struct-of-arrays in typed arrays. No allocations per frame in hot loops.
+300 enemies + 2000 particles + 400 gems + 150 projectiles. Phones / tablets
+start at `mid`, desktops at `high`. Auto quality judges 2 s windows against the
+display's own refresh interval (the window's median frame time, 60 Hz at the
+slowest): more than 10 % of frames over 1.3× refresh, or average JS time above
+0.75× refresh, steps quality down (fewer particles, smaller glow buffer, lower
+enemy cap; 4 s cooldown); 8 s without a bad window and JS under 0.4× refresh
+steps it back up (cooldown 8 s + 12 s per earlier down-step). Paused / modal /
+settings frames are not judged. Particles are struct-of-arrays in typed arrays
+(a tier change keeps the live ones). No allocations per frame in hot loops.
 
 ### 8.4 Persistence
 `localStorage['kko.save.v1']` = `{ coins, meta: {...ranks}, settings, best:

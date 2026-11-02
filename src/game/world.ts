@@ -15,7 +15,7 @@ import { Rng } from "../core/rng";
 import { PooledList } from "../core/pool";
 import { SpatialHash } from "../core/spatial";
 import { clamp, damp, TAU } from "../core/math";
-import { CFG, CHANNELS, CH_MISC, RANKS, bossHpScale, enemyDmgScale, enemyHpScale, gemXpScale, rankFor, xpToNext } from "./config";
+import { CFG, CHANNELS, CH_MISC, CH_ULT, RANKS, bossHpScale, enemyDmgScale, enemyHpScale, gemXpScale, rankFor, xpToNext } from "./config";
 import { createBus, type GameEvents, type HitEvent, type KillEvent, type GemEvent } from "./events";
 import { heroDef } from "./heroes";
 import { applyMeta, type MetaRanks } from "./meta";
@@ -23,7 +23,7 @@ import { PASSIVE_BY_ID } from "./passives";
 import { ULTIMATES, WEAPONS, enemyDef } from "./registry";
 import { baseStats, finalizeStats, type Stats } from "./stats";
 import { Director } from "./director/director";
-import { applyCard, makeOffer, rollChest } from "./upgrades";
+import { applyCard, canChangeOffer, makeOffer, rollChest } from "./upgrades";
 import {
   MODE_AI,
   MODE_STRAIGHT,
@@ -113,6 +113,16 @@ export interface RunSummary {
 
 export type Phase = "play" | "dead" | "victory";
 
+/** Homing projectiles look for a new target within this radius (px). */
+const HOMING_RANGE = 140;
+
+/** True if projectile `p` (hitEvery 0) already hit the enemy with this uid. */
+function hasHit(p: Projectile, uid: number): boolean {
+  const m = Math.min(p.nHits, p.hits.length);
+  for (let h = 0; h < m; h++) if (p.hits[h] === uid) return true;
+  return false;
+}
+
 // ------------------------------------------------------------------ factories
 const newEnemy = (): Enemy => ({
   uid: 0,
@@ -162,6 +172,7 @@ export function resetProjectile(p: Projectile): void {
   p.x = p.y = p.vx = p.vy = p.z = p.vz = p.ox = p.oy = p.ang = p.angV = p.speed = 0;
   p.homing = 0;
   p.target = null;
+  p.targetUid = 0;
   p.shape = SHAPE_CIRCLE;
   p.r = 4;
   p.hw = p.hh = 0;
@@ -355,6 +366,9 @@ export class World {
     if (this.phase !== "play") {
       this.input.dash = this.input.ult = false;
       this.updateGemsIdle(dt);
+      // (projectiles ended by win() outside a step - e.g. the Overdrive's - leave the list)
+      const pr = this.projectiles;
+      for (let i = pr.count - 1; i >= 0; i--) if (pr.items[i].dead) pr.removeAt(i);
       return;
     }
     const u = this.ult;
@@ -897,6 +911,21 @@ export class World {
     if (this.phase !== "play") return;
     this.phase = "victory";
     this.endCombo();
+    // the final blow can land mid-Overdrive: step() stops updating the ult once the run is
+    // over, so close it here (no stuck time-stop tint / cast pose / frozen cats or meteors)
+    const u = this.ult;
+    if (u) {
+      if (u.phase === "active") u.def.end?.(this, u);
+      this.ult = null;
+      this.timeStop = false;
+      const ultId = this.hero.ult;
+      const pr = this.projectiles;
+      for (let i = 0; i < pr.count; i++) {
+        const p = pr.items[i];
+        if (!p.dead && (p.ch === CH_ULT || p.source === ultId)) p.dead = true;
+      }
+      this.emit("ultEnd", { ult: u.def.id });
+    }
     this.emit("victory", { time: this.t });
   }
 
@@ -937,6 +966,24 @@ export class World {
     }
     return n;
   }
+
+  /**
+   * New target for a homing projectile: the nearest live enemy within maxR that a
+   * pierce-once projectile (hitEvery 0) has not hit yet (it could never hit it again).
+   */
+  homingTarget(p: Projectile, maxR: number): Enemy | null {
+    this.homingP = p;
+    const id = this.grid.nearest(p.x, p.y, maxR, this.acceptHoming);
+    this.homingP = null;
+    return id >= 0 ? this.enemies.items[id] : null;
+  }
+  private homingP: Projectile | null = null;
+  private acceptHoming = (id: number): boolean => {
+    const e = this.enemies.items[id];
+    if (!e || e.dead || e.def.prop) return false;
+    const p = this.homingP;
+    return !p || p.hitEvery > 0 || !hasHit(p, e.uid);
+  };
 
   /** Nearest valid target (not dead, not a prop) to (x, y) within maxR, or null. */
   nearestEnemy(x: number, y: number, maxR: number): Enemy | null {
@@ -1100,8 +1147,12 @@ export class World {
         case PK_FREE: {
           if (p.homing > 0 && p.age >= p.delay) {
             let t = p.target;
-            if (!t || t.dead) {
-              t = p.target = this.nearestEnemy(p.x, p.y, 140);
+            // (pooled enemies: a dead target's object may already be a NEW enemy elsewhere - compare uids;
+            // a pierce-once shot that already hit its surviving target moves on too)
+            if (t && (t.dead || t.uid !== p.targetUid || (p.hitEvery <= 0 && hasHit(p, t.uid)))) t = p.target = null;
+            if (!t) {
+              t = p.target = this.homingTarget(p, HOMING_RANGE);
+              p.targetUid = t ? t.uid : 0;
             }
             if (t) {
               const want = Math.atan2(t.y - t.cy - p.y, t.x - p.x);
@@ -1371,7 +1422,9 @@ export class World {
 
   private updateGems(dt: number): void {
     const p = this.player;
-    const pr = CFG.pickupRadius * this.stats.pickup;
+    let pr = CFG.pickupRadius * this.stats.pickup;
+    // starter vacuum: the first level-ups come in seconds, whatever the hero does
+    if (this.level < 3 && this.t < CFG.starterVacuumTime) pr = Math.max(pr, CFG.starterVacuum);
     const pr2 = pr * pr;
     const tx = p.x;
     const ty = p.y - 6;
@@ -1479,7 +1532,9 @@ export class World {
       if (this.pickups.count > CFG.maxCoins) this.mergeCoins();
     }
     const p = this.player;
-    const pr = CFG.pickupRadius * this.stats.pickup;
+    let pr = CFG.pickupRadius * this.stats.pickup;
+    // starter vacuum: the first level-ups come in seconds, whatever the hero does
+    if (this.level < 3 && this.t < CFG.starterVacuumTime) pr = Math.max(pr, CFG.starterVacuum);
     const pr2 = pr * pr;
     const tx = p.x;
     const ty = p.y - 6;
@@ -1722,9 +1777,16 @@ export class World {
   /** Spend a reroll; returns the new offer, or null when none are left. */
   reroll(): UpgradeCard[] | null {
     if (this.rerolls <= 0) return null;
+    // a maxed build only gets the Heal / Star Pouch fallbacks: rerolling can't change anything, keep the reroll
+    if (!this.canReroll) return this.offer();
     this.rerolls--;
     this.currentOffer = makeOffer(this, this.stats.cards);
     return this.currentOffer;
+  }
+
+  /** A reroll could produce a different offer (false once only the heal / coins fallbacks remain). */
+  get canReroll(): boolean {
+    return canChangeOffer(this);
   }
 
   /** Apply a level-up card and consume one pending level. */

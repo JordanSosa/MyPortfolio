@@ -4,45 +4,61 @@
  */
 import { curve, kitFor } from "./synth";
 
+/** Longest generated impulse response (s): longer tails cost boot time for little audible gain. */
+export const IR_MAX = 1.2;
+/** The envelope / brightness curves are evaluated exactly every IR_BLOCK samples and interpolated in between. */
+const IR_BLOCK = 128;
+
 /**
  * Stereo impulse response: a few early reflections, then exponentially decaying
  * noise that gets darker over time (one-pole low-pass whose cutoff falls), with
- * decorrelated L/R for width.
+ * decorrelated L/R for width. Capped at IR_MAX s. The decay envelope and the
+ * brightness curve are evaluated once per IR_BLOCK samples (pow / exp) and stepped
+ * linearly per sample, so a phone CPU builds it in a few ms instead of ~100.
  */
 export function makeImpulse(ctx: BaseAudioContext, seconds: number, decay: number, bright = 0.6, seed = 1): AudioBuffer {
   const sr = ctx.sampleRate;
-  const len = Math.max(1, Math.floor(sr * seconds));
+  const len = Math.max(1, Math.floor(sr * Math.min(seconds, IR_MAX)));
   const buf = ctx.createBuffer(2, len, sr);
   let s = (0x1234567 * seed) >>> 0;
-  const rnd = () => {
-    s = (Math.imul(s, 1103515245) + 12345) >>> 0;
-    return (s / 4294967296) * 2 - 1;
-  };
+  const envAt = (tt: number): number => Math.pow(Math.max(0, 1 - tt), decay) * Math.exp(-tt * 3);
+  const briAt = (tt: number): number => 0.05 + (bright - 0.05) * (1 - tt) * (1 - tt);
+  const pre = Math.floor(sr * 0.012); // pre-delay
+  const finK = 1 / (sr * 0.004); // fade-in over 4 ms after the pre-delay (no hard edge)
   for (let c = 0; c < 2; c++) {
     const d = buf.getChannelData(c);
     let lp = 0;
-    const pre = Math.floor(sr * 0.012); // pre-delay
-    for (let i = 0; i < len; i++) {
-      const tt = i / len;
+    for (let b = 0; b < len; b += IR_BLOCK) {
+      const e = Math.min(len, b + IR_BLOCK);
+      const n = e - b;
+      let env = envAt(b / len);
+      const envStep = (envAt(e / len) - env) / n;
       // brightness falls from `bright` to ~0.05 across the tail
-      const a = 0.05 + (bright - 0.05) * Math.pow(1 - tt, 2);
-      lp += a * (rnd() - lp);
-      const env = i < pre ? 0 : Math.pow(1 - tt, decay) * Math.exp(-tt * 3);
-      // fade-in over 4 ms after the pre-delay to avoid a hard edge
-      const fin = i < pre ? 0 : Math.min(1, (i - pre) / (sr * 0.004));
-      d[i] = lp * env * fin;
+      let a = briAt(b / len);
+      const aStep = (briAt(e / len) - a) / n;
+      for (let i = b; i < e; i++) {
+        s = (Math.imul(s, 1103515245) + 12345) >>> 0;
+        lp += a * ((s / 4294967296) * 2 - 1 - lp);
+        const fin = i < pre ? 0 : Math.min(1, (i - pre) * finK);
+        d[i] = lp * env * fin;
+        env += envStep;
+        a += aStep;
+      }
     }
     // early reflections
     const taps = [0.013, 0.019, 0.027, 0.034, 0.041, 0.053, 0.067];
+    let g = 0.5;
     for (let k = 0; k < taps.length; k++) {
       const i = Math.floor(sr * (taps[k] + (c ? 0.0023 * k : 0)));
-      if (i < len) d[i] += (rnd() > 0 ? 1 : -1) * 0.5 * Math.pow(0.8, k);
+      s = (Math.imul(s, 1103515245) + 12345) >>> 0;
+      if (i < len) d[i] += (s >= 2147483648 ? 1 : -1) * g;
+      g *= 0.8;
     }
     // normalise energy so different lengths sit at a similar level
-    let e = 0;
-    for (let i = 0; i < len; i++) e += d[i] * d[i];
-    const g = 1 / Math.sqrt(Math.max(e, 1e-9)) * 0.9;
-    for (let i = 0; i < len; i++) d[i] *= g;
+    let en = 0;
+    for (let i = 0; i < len; i++) en += d[i] * d[i];
+    const gn = (1 / Math.sqrt(Math.max(en, 1e-9))) * 0.9;
+    for (let i = 0; i < len; i++) d[i] *= gn;
   }
   return buf;
 }
@@ -52,7 +68,12 @@ export interface Reverb {
   output: GainNode;
 }
 
-export function makeReverb(ctx: BaseAudioContext, dest: AudioNode, seconds: number, decay: number, wet: number, bright = 0.6, seed = 1): Reverb {
+/**
+ * Convolution reverb. `lazyMs` >= 0 (realtime contexts) builds the impulse in a
+ * later macrotask, so the unlock gesture handler only creates nodes; the
+ * convolver is silent until then. Offline renders pass -1 (built now).
+ */
+export function makeReverb(ctx: BaseAudioContext, dest: AudioNode, seconds: number, decay: number, wet: number, bright = 0.6, seed = 1, lazyMs = -1): Reverb {
   const input = ctx.createGain();
   // keep low end out of the reverb (mud) and tame fizz
   const hp = ctx.createBiquadFilter();
@@ -60,7 +81,15 @@ export function makeReverb(ctx: BaseAudioContext, dest: AudioNode, seconds: numb
   hp.frequency.value = 260;
   const conv = ctx.createConvolver();
   conv.normalize = false;
-  conv.buffer = makeImpulse(ctx, seconds, decay, bright, seed);
+  const build = (): void => {
+    try {
+      conv.buffer = makeImpulse(ctx, seconds, decay, bright, seed);
+    } catch (e) {
+      console.warn("[audio] reverb impulse failed", e);
+    }
+  };
+  if (lazyMs >= 0) setTimeout(build, lazyMs);
+  else build();
   const output = ctx.createGain();
   output.gain.value = wet;
   input.connect(hp).connect(conv).connect(output).connect(dest);

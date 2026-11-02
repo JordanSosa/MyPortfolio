@@ -18,7 +18,7 @@ import { C } from "../art/palette";
 import type { SfxId } from "../audio";
 import { rainbow } from "../core/color";
 import { TAU } from "../core/math";
-import { P, type BoltOpts, type EmitterDef, type Fx } from "../fx";
+import { P, emitScorch, type BoltOpts, type EmitterDef, type Fx } from "../fx";
 import { Flag, Layer } from "../render/layers";
 import type { Renderer } from "../render/renderer";
 import type { WeaponFxEvent } from "../game/events";
@@ -210,6 +210,9 @@ const BOLT_WHIP: BoltOpts = { color: C.cyan, thickness: 1, life: 0.14, branches:
 
 type SfxFn = (id: SfxId, vol: number, pitch: number, x: number) => void;
 
+/** Beams start this far from the wand (~ the hero's centre) and fade in over BEAM_FADE px. */
+const BEAM_CLEAR = 14;
+const BEAM_FADE = 20;
 const POP_BUDGET = 8;
 const BOLT_FX_BUDGET = 10;
 const ID_BUBBLE = "bubble_aura";
@@ -299,7 +302,7 @@ export class WeaponFx {
           ps.emit(P.flare, e.x2, e.y2, 1, NaN, C.aqua, 1.1);
           ps.emit(elecSpark, e.x2, e.y2, 6);
           ps.emit(P.ringThin, e.x2, e.y2, 1, NaN, C.cyan, e.r > 0 ? e.r / 16 : 0.9);
-          ps.emit(P.scorch, e.x2, e.y2 + 6, 1, NaN, -1, e.r > 0 ? e.r / 22 : 0.45);
+          // (no scorch for ordinary bell strikes: dozens of decals a second piled into grey discs)
           if (e.r > 0) ps.emit(P.ring, e.x2, e.y2, 1, NaN, C.paleYellow, e.r / 16);
         }
         if (!calm) juice.shake(0.07);
@@ -324,7 +327,7 @@ export class WeaponFx {
           ps.emit(P.rays, e.x2, e.y2, 6, NaN, C.yellow, 0.8, 0.8);
           ps.emit(elecSpark, e.x2, e.y2, 10, NaN, -1, 1.2, 1.3);
           ps.emit(P.debris, e.x2, e.y2, 4);
-          ps.emit(P.scorch, e.x2, e.y2 + 4, 1, NaN, -1, s * 0.7);
+          emitScorch(ps, e.x2, e.y2 + 4, s * 0.7);
           if (!calm) juice.shockwave(e.x2, e.y2, 0.55, e.r * 2.2, 0.45);
         }
         if (!calm) juice.shake(0.11);
@@ -523,12 +526,14 @@ export class WeaponFx {
       if (p.hh > 0.25) any = p;
     }
     if (!any) return;
-    // one muzzle for all beams: a prism spark at the wand
+    // one muzzle for all beams: a prism spark where the visible beam starts (not on the hero's body)
     const r = this.r;
     const pulse = 1 + 0.2 * Math.sin(time * 40);
     const k = Math.min(1, any.hh / Math.max(0.5, any.vz));
-    r.glow(any.ox, any.oy, (cannon ? 11 : 7) * pulse * k, cannon ? rainbow(time * 0.9, 0.5) : C.aqua, 0.38);
-    r.batch.drawP(Layer.FxAdd, this.hFlare, any.ox, any.oy, 0.6 * pulse * k, 0.6 * pulse * k, time * 6, C.white, 0.8, 0, Flag.Add | Flag.Glow | Flag.NoSnap, 8, 8);
+    const mx = any.ox + Math.cos(any.ang) * BEAM_CLEAR;
+    const my = any.oy + Math.sin(any.ang) * BEAM_CLEAR;
+    r.glow(mx, my, (cannon ? 9 : 6) * pulse * k, cannon ? rainbow(time * 0.9, 0.5) : C.aqua, 0.3);
+    r.batch.drawP(Layer.FxAdd, this.hFlare, mx, my, 0.5 * pulse * k, 0.5 * pulse * k, time * 6, C.white, 0.7, 0, Flag.Add | Flag.Glow | Flag.NoSnap, 8, 8);
   }
 
   private drawBeam(p: Projectile, time: number, dt: number, cannon: boolean, idx: number): void {
@@ -539,19 +544,27 @@ export class WeaponFx {
     const L = p.a;
     const ca = Math.cos(p.ang);
     const sa = Math.sin(p.ang);
-    // the body starts just off the wand so the hero stays readable
-    const off = cannon ? 7 : 5;
+    // the body starts BEAM_CLEAR px off the hero's centre and fades in over BEAM_FADE px: with
+    // several evolved beams converging on her, the hero must stay the clearest spot on screen
+    const off = BEAM_CLEAR;
     const ox = p.ox + ca * off;
     const oy = p.oy + sa * off;
     const ex = p.ox + ca * L;
     const ey = p.oy + sa * L;
     const len = L - off;
+    if (len <= 4) return;
+    const fade = Math.min(BEAM_FADE, len * 0.5);
+    const fx0 = ox + ca * fade;
+    const fy0 = oy + sa * fade;
     const hue = time * (cannon ? 0.9 : 0.5) + idx * 0.33;
     // hue-shimmering outer haze (additive, under the body) + a soft bloom-only halo: the body
     // itself stays out of the bloom buffer so the rainbow stripes never wash out to white
     const haze = rainbow(hue, 0.75);
-    r.line(Layer.FxAdd, ox, oy, ex, ey, hh * 2 + (cannon ? 5 : 3), haze, cannon ? 0.2 : 0.14, Flag.Add);
-    r.line(Layer.FxAdd, ox, oy, ex, ey, hh * 1.5, haze, cannon ? 0.24 : 0.16, Flag.GlowOnly);
+    const hzA = cannon ? 0.2 : 0.14;
+    const hlA = cannon ? 0.24 : 0.16;
+    r.line(Layer.FxAdd, fx0, fy0, ex, ey, hh * 2 + (cannon ? 5 : 3), haze, hzA, Flag.Add);
+    r.line(Layer.FxAdd, fx0, fy0, ex, ey, hh * 1.5, haze, hlA, Flag.GlowOnly);
+    r.line(Layer.FxAdd, ox, oy, fx0, fy0, hh * 2 + (cannon ? 5 : 3), haze, hzA * 0.35, Flag.Add);
     // body: w_beam_seg tiles along the beam, width waves travelling outward
     const n = Math.ceil(len / 8);
     const fr = this.hSeg + (Math.floor(time * 18) % this.nSeg);
@@ -560,10 +573,11 @@ export class WeaponFx {
       const d = k * 8 + 4;
       const wave = 1 + 0.16 * Math.sin(k * 0.9 - time * 34);
       const tint = cannon ? rainbow(hue + k * 0.035, 0.38) : 0xffffff;
-      b.drawP(Layer.Fx, fr, ox + ca * d, oy + sa * d, 1.08, baseSy * wave, p.ang, tint, 1, 0, Flag.NoSnap, 4, 6);
+      const a = d < fade ? 0.2 + (0.8 * d) / fade : 1;
+      b.drawP(Layer.Fx, fr, ox + ca * d, oy + sa * d, 1.08, baseSy * wave, p.ang, tint, a, 0, Flag.NoSnap, 4, 6);
     }
     // white-hot core
-    r.line(Layer.FxAdd, ox, oy, ex, ey, Math.max(1, hh * 0.3), C.white, 0.4, Flag.Add);
+    r.line(Layer.FxAdd, fx0, fy0, ex, ey, Math.max(1, hh * 0.3), C.white, 0.4, Flag.Add);
     // impact tip
     const pulse = 1 + 0.2 * Math.sin(time * 40 + idx);
     const tip = this.hTip + (Math.floor(time * 16 + idx) % this.nTip);

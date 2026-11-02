@@ -20,6 +20,7 @@
  */
 import { C } from "../../art/palette";
 import { CFG } from "../config";
+import { minBossFeetY } from "./_entrance";
 import { TAU, clamp } from "../../core/math";
 import type { Enemy, EnemyDef } from "../types";
 import type { World } from "../world";
@@ -94,7 +95,8 @@ function hover(e: Enemy, w: World, k: number): void {
     // (entering straight down from above the player counts as the left side)
     const side = e.x > p.x + 2 ? 1 : -1;
     tx = p.x + side * Math.min(96, w.viewW * 0.24);
-    ty = p.y - 18 + Math.sin(e.t * 0.6) * 14;
+    // (never so high that the top HUD covers her head)
+    ty = Math.max(minBossFeetY(w, e.cy * 2 + 6), p.y - 18 + Math.sin(e.t * 0.6) * 14);
   } else {
     tx = p.x + Math.sin(e.t * 0.6) * 36;
     ty = p.y - Math.min(HOVER, w.viewH * 0.5 - 70);
@@ -293,9 +295,12 @@ export const ladyLunatic: EnemyDef = {
 
     switch (e.state) {
       case LL_ENTER: {
-        // glide down from the top of the screen
+        // glide down from the top of the screen (spawned just under the HUD: Director.spawnBoss),
+        // her head kept clear of the HUD while she settles
         hover(e, w, 1.6);
-        e.z = Math.max(6, e.z - dt * 18);
+        e.z = Math.max(6, e.z - dt * 40);
+        const minY = minBossFeetY(w, e.cy * 2 + e.z);
+        if (e.y < minY + 2) e.vy = Math.max(e.vy, (minY + 2 - e.y) * 4);
         // arrived once she is on screen and has (nearly) stopped gliding
         const settled = Math.abs(e.vx) + Math.abs(e.vy) < 18 && onScreen(w, e.x, lunaBodyY(e), -20);
         if ((settled && e.timer > 1.2) || e.timer > 2.8) {

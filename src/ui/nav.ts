@@ -49,6 +49,17 @@ export class Nav {
     return Array.from(l.root.querySelectorAll<HTMLElement>("[data-nav]")).filter((e) => !e.hasAttribute("disabled") && e.offsetParent !== null);
   }
 
+  /**
+   * After a layer re-rendered its items in place (level-up reroll / next queued level):
+   * restore the keyboard / gamepad focus, preferring `prefer` (if still focusable),
+   * else the layer's `data-nav-default` item. No-op while the pointer is in use.
+   */
+  refocus(l: NavLayer, prefer: HTMLElement | null = null): void {
+    if (!this.kb) return;
+    if (prefer && this.items(l).includes(prefer)) this.setFocus(l, prefer);
+    else this.ensureFocus(l);
+  }
+
   private ensureFocus(l: NavLayer): void {
     const items = this.items(l);
     if (!items.length) return;
@@ -108,8 +119,13 @@ export class Nav {
       return;
     }
     if (input.pressed("back") && l.onBack) {
+      // the same button / key also maps to gameplay actions (gamepad B = back + OVERDRIVE,
+      // Esc = back + pause): a back that closes a menu must not also cast / dash / re-pause
       input.consume("back");
       input.consume("pause");
+      input.consume("ult");
+      input.consume("dash");
+      input.consume("confirm");
       l.onBack();
     }
   }

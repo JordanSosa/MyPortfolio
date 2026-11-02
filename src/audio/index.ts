@@ -7,6 +7,11 @@
  *   (phone call, Siri, tab switch), the next tap/click/key re-unlocks it.
  * - Every call is safe before unlock (sfx = no-op, music/volumes are remembered)
  *   and when WebAudio is missing entirely (silent fallback). Nothing here throws.
+ * - The unlock gesture stays short on a phone CPU: it only creates + resumes the
+ *   context and plays the 1-sample kick. The node graph (Engine) is built one
+ *   macrotask later, the reverb impulses in later macrotasks still (fxchain
+ *   makeReverb), the noise buffers on first use (synth kitFor), and a music() call
+ *   within MUSIC_DEFER_MS of the unlock compiles its song one macrotask later.
  */
 import type { AudioAPI, MusicTrack, SfxId, SfxOpts } from "./api";
 import { Engine } from "./engine";
@@ -14,6 +19,8 @@ import { Engine } from "./engine";
 export type { AudioAPI, MusicTrack, SfxId, SfxOpts } from "./api";
 
 const TICK_MS = 25;
+/** music() this soon after the context was created (the unlock gesture) is deferred one macrotask. */
+const MUSIC_DEFER_MS = 50;
 const GESTURES = ["pointerup", "touchend", "click", "keydown", "mousedown"] as const;
 
 type Ctor = new (opts?: AudioContextOptions) => AudioContext;
@@ -30,6 +37,10 @@ class RealtimeAudio implements AudioAPI {
   private track: MusicTrack = "none";
   private intensity = 0;
   private muffled = false;
+  /** performance.now() when the context was created; a pending deferred music() call. */
+  private createdAt = -1e9;
+  private musicTimer: ReturnType<typeof setTimeout> | null = null;
+  private musicFade = 1;
 
   get unlocked(): boolean {
     return this.everRunning;
@@ -70,6 +81,20 @@ class RealtimeAudio implements AudioAPI {
       ctx = new C();
     }
     this.ctx = ctx;
+    this.createdAt = now();
+    const onState = () => {
+      if (ctx.state === "running") this.everRunning = true;
+    };
+    ctx.addEventListener?.("statechange", onState);
+    onState();
+    // the node graph is built one macrotask later: the gesture only creates + resumes the context
+    // (sfx before that are no-ops, music / volumes are remembered and applied then)
+    setTimeout(() => this.build(ctx), 0);
+  }
+
+  /** Build the engine (node graph) for the context created in the unlock gesture. */
+  private build(ctx: AudioContext): void {
+    if (this.ctx !== ctx || this.engine) return;
     try {
       this.engine = new Engine(ctx);
     } catch (e) {
@@ -88,12 +113,7 @@ class RealtimeAudio implements AudioAPI {
     eng.setVolumes({ master: this.vols.master ?? 1, music: this.vols.music ?? 1, sfx: this.vols.sfx ?? 1 });
     eng.setIntensity(this.intensity);
     eng.setMuffled(this.muffled);
-    if (this.track !== "none") eng.music(this.track, 0.3);
-    const onState = () => {
-      if (ctx.state === "running") this.everRunning = true;
-    };
-    ctx.addEventListener?.("statechange", onState);
-    onState();
+    if (this.track !== "none") this.startMusic(0.3);
     this.timer = setInterval(() => this.tick(), TICK_MS);
   }
 
@@ -160,10 +180,32 @@ class RealtimeAudio implements AudioAPI {
   music(track: MusicTrack, fade = 1): void {
     if (track === this.track) return;
     this.track = track;
+    if (this.engine) this.startMusic(fade);
+  }
+
+  /** Switch the engine to this.track; right after the unlock gesture the song compile waits a macrotask. */
+  private startMusic(fade: number): void {
+    this.musicFade = fade;
+    if (now() - this.createdAt < MUSIC_DEFER_MS) {
+      if (!this.musicTimer)
+        this.musicTimer = setTimeout(() => {
+          this.musicTimer = null;
+          this.playTrack(this.musicFade);
+        }, 0);
+      return;
+    }
+    if (this.musicTimer) {
+      clearTimeout(this.musicTimer);
+      this.musicTimer = null;
+    }
+    this.playTrack(fade);
+  }
+
+  private playTrack(fade: number): void {
     try {
-      this.engine?.music(track, fade);
+      this.engine?.music(this.track, fade);
     } catch (e) {
-      console.warn("[audio] music failed", track, e);
+      console.warn("[audio] music failed", this.track, e);
     }
   }
 
@@ -215,6 +257,10 @@ class RealtimeAudio implements AudioAPI {
     this.wantSuspended = false;
     this.kick();
   }
+}
+
+function now(): number {
+  return typeof performance !== "undefined" ? performance.now() : Date.now();
 }
 
 const impl = new RealtimeAudio();

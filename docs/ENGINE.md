@@ -167,10 +167,19 @@ r.post.load;                        // 0..1 peak-chaos load (read-only; fed by e
 r.post.vignette = 0.32;             // base vignette amount
 r.setGrade(GRADES.night, 3);        // ease the colour grade over 3 s (GRADES: day, dusk, night, dim, neutral)
 r.post.blendGrade(GRADES.day, GRADES.night, runProgress);  // drive day -> night directly
+r.post.gradeProtect = 0.8;          // how much glowing gameplay sprites escape the grade (0 = graded like the rest)
 ```
 
 A `Grade` is `{ tint: [r,g,b], lift: [r,g,b], saturation, contrast, brightness, hue }`.
 Bloom is added **after** grading, so glowing things stay luminous at night.
+**Grade protect mask:** sprites drawn with `Flag.Glow` in normal blend (enemy
+bullets, gems, player shots, crit numbers) leave their coverage in the glow
+buffer's alpha (additive draws leave 0). The composite mixes the ungraded colour
+back in by `clamp(glow.a x 1.5, 0, 1) x gradeProtect` (before the hue rotation,
+so evolution hue cycles still apply), so dusk / night tint the meadow and the
+actors while bullets stay bright and high-contrast. Off when bloom is off (no glow
+pass). The dusk / night presets are soft (night: tint 0.88/0.86/1.0, a violet
+lift, saturation 1.08) - the night mood comes from the lift and the fireflies.
 Only sprites flagged `Glow` or `GlowOnly` bloom; the pastel ground never does.
 Because bloom is composited after the scene, a dark full-screen *sprite* cannot
 dim glowing things - use `r.post.dim` for that (the ultimate cut-in does).
@@ -198,8 +207,12 @@ hero beacon above player fx).
 ### Particles (`fx.ps`)
 
 Particles are struct-of-arrays in typed arrays with a fixed capacity
-(`setCapacity(n)` per quality tier). When full, the oldest slots are overwritten.
-`ps.density` scales emit counts.
+(`setCapacity(n)` per quality tier; it copies the first min(count, n) live
+particles into the new arrays, so a tier change mid-fight keeps the screen's
+particles). When full, the oldest slots are overwritten. `ps.density` scales emit
+counts. `ps.position(i, out)` reads a live particle's position (tests / debug).
+`emitScorch(ps, x, y, sizeMul)` emits the budgeted scorch ring (at most
+`SCORCH_MAX` = 10 alive; `P.scorch` is a faint `fx_ring_thick`, 2.5 s).
 
 ```ts
 import { P } from "./fx";
@@ -239,7 +252,15 @@ fx.dmg.text(x, y, "MISS", C.lavender);
 fx.dmg.enabled = settings.damageNumbers;  // hides normal/crit only; fx.dmg.scale = global size
 fx.dmg.busy = r.post.load;                // 0..1: enemy numbers fade (-40%), lose the spawn flash, crits shrink + stop blooming
 fx.dmg.alive;                             // live numbers (kept incrementally, cheap to read per hit)
+fx.dmg.aliveCrit;                         // live crit numbers (same bookkeeping; the feedback bridge caps them)
+fx.dmg.focusX = px; fx.dmg.focusY = py - 9; fx.dmg.focusOn = true;  // hero exclusion zone (set every frame)
+fx.dmg.after = drawBanners;               // called once at the end of draw(), then cleared (draw on top of numbers)
 ```
+
+A crit spawned within 14 px of a live crit younger than 0.15 s merges into it
+(values summed, codes rewritten, re-pops) instead of allocating a slot. Enemy
+numbers (normal / crit) whose centre is within 26 px of the focus point draw at
+0.6x and 35 % alpha, so a pile of numbers never hides the hero.
 
 At most 150 are alive (a ring buffer recycles the oldest). Spawning does not
 allocate. Large values are compacted (`123K`, `12M`). Edit `fx.dmg.styles` to
@@ -320,8 +341,12 @@ input.facing                          // last non-zero direction (unit)
 input.pressed("dash" | "ult" | "pause" | "confirm" | "back" | "up" | "down" | "left" | "right")   // edge this frame
 input.held("dash");  input.consume("ult");  input.trigger("dash");   // inject (bots)
 input.lastDevice                      // "keyboard" | "gamepad" | "touch" | "mouse"
-input.haptic(30);  input.haptics = settings.haptics;
+input.haptic(30);  input.haptics = settings.haptics;   // single pulses: >= 20 ms, at most one per 50 ms (patterns pass through)
 ```
+
+A gamepad disconnect (event, or no connected pad while polling) clears every
+gamepad hold and the pending edges only the pad produced, so DASH / OVERDRIVE
+can't stay latched.
 
 Key bindings: WASD/arrows move, Space/Shift dash, E/Enter ult, Esc/P pause,
 Enter/Space confirm, Esc/Backspace back. Gamepad: left stick or d-pad moves, A/X/LB/RB
@@ -339,6 +364,14 @@ input.setUltCharge(meter / 100, ready);   // OVERDRIVE ring fill + rainbow pulse
 input.setDashCharge(1 - cd / maxCd);  // DASH ring (1 = ready, pops when it becomes ready)
 input.deny("ult");                    // shake the button (pressed while not ready)
 ```
+
+Phone-CPU budget: every looping animation of the overlay is compositor-only. The
+OVERDRIVE-ready rainbow is three static pre-coloured glow layers (`.kk-btn .gl`)
+cross-fading by opacity (no animated `box-shadow`) plus the `scale` pulse and
+the ring ping; the cooldown rings have no transition / filter (a static soft halo
+stroke `.glo` instead) and their `stroke-dashoffset` writes are quantised to 40
+steps and throttled to ~15 per second; the ready pop and the deny shake use the
+Web Animations API (no forced reflow). `.kk-btn` has `contain: layout style`.
 
 - **Floating joystick:** a touch-down anywhere that is not a button sets the origin. The knob radius is 48 CSS px, with a radial 0.15 deadzone and analog output. If the finger goes past the radius, the origin is dragged along.
 - **Ignored targets:** touches that start on `button, a, input, select, textarea, label, [data-ui], [data-no-joystick]` never start the joystick. Put `data-ui` on HUD elements that should block it, such as the pause button.
@@ -432,7 +465,7 @@ defaults, so new fields get defaults and fields whose type changed are dropped.
 
 - `input.haptic()` is a no-op until the page has had a user gesture (`navigator.userActivation.hasBeenActive`), so Chrome no longer logs a vibrate intervention error.
 - `atlas.canvas()` / `atlas.dataURL()` use CPU-side 2D contexts (`willReadFrequently`) so encoding DOM icons never stalls on a GPU readback. The UI always encodes sprites at 1x (`src/ui/dom.ts sprite()`) and upscales with `image-rendering: pixelated`, and pre-encodes all icons/portraits in idle time at boot.
-- `P.scorch` is a soft purple "magic burn" (alpha 0.2) instead of a dark outline-coloured hole.
+- `P.scorch` is a soft purple "magic burn" ring (alpha 0.12, 2.5 s, budgeted through `emitScorch`) instead of a dark outline-coloured hole.
 - The app sets `r.bloom = 0.8` (late-game fights stay readable).
 
 ## 8. Changes made by the integration pass

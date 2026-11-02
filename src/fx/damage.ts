@@ -1,6 +1,10 @@
 /**
  * Pooled damage numbers (bitmap font). Pop 1.6 -> 1 with easeOutBack, rise +
  * slight x drift, fade at the end of 0.6 s. Max ~150 alive; the oldest is recycled.
+ * A crit landing next to a fresh crit (< 0.15 s old, within 14 px) merges into it
+ * (summed value, re-pop) instead of stacking; `aliveCrit` counts live crits for the
+ * caller's cap. Enemy numbers near `focus` (the hero) shrink and fade so a wall of
+ * numbers never hides the hero.
  *
  *   dmg.spawn(x, y, 12)                 // normal (white)
  *   dmg.spawn(x, y, 48, "crit")         // yellow x2, wobble, sparkle, "!"
@@ -23,6 +27,8 @@ const MAXC = 12;
 
 interface Num {
   active: boolean;
+  /** Displayed value (crits merge into it). */
+  value: number;
   x: number;
   y: number;
   vx: number;
@@ -39,6 +45,12 @@ interface Num {
 }
 
 const KIND: Record<DamageKind, number> = { normal: 0, crit: 1, player: 2, heal: 3, text: 4 };
+const K_CRIT = 1;
+/** Crit merge window: a new crit within MERGE_PX of a crit younger than MERGE_T s adds to it. */
+const MERGE_T = 0.15;
+const MERGE_PX = 14;
+/** Enemy numbers whose centre is within FOCUS_R px of the focus point draw small + faint. */
+const FOCUS_R = 26;
 
 export interface DamageStyle {
   color: number;
@@ -60,6 +72,19 @@ export class DamageNumbers {
    * damage / heal numbers are never dimmed.
    */
   busy = 0;
+  /**
+   * Hero exclusion zone (world px): set every frame by the feedback bridge. Enemy
+   * numbers (normal / crit) whose centre is within FOCUS_R px are drawn at 0.6x and
+   * 35 % alpha, so the hero stays readable under a pile of crits.
+   */
+  focusX = 0;
+  focusY = 0;
+  focusOn = false;
+  /**
+   * Called once at the end of draw() (then cleared): the owner of in-world banner
+   * texts sets it every frame so those draw on top of the numbers (same layer, later).
+   */
+  after: (() => void) | null = null;
   readonly styles: Record<DamageKind, DamageStyle> = {
     normal: { color: C.white, scale: 1, life: 0.6, rise: 14 },
     crit: { color: C.yellow, scale: 2, life: 0.75, rise: 18 },
@@ -77,18 +102,32 @@ export class DamageNumbers {
     capacity = 150,
   ) {
     for (let i = 0; i < capacity; i++)
-      this.pool.push({ active: false, x: 0, y: 0, vx: 0, rise: 0, t: 0, life: 1, scale: 1, color: 0, wobble: 0, codes: new Uint8Array(MAXC), n: 0, kind: 0, seq: 0 });
+      this.pool.push({ active: false, value: 0, x: 0, y: 0, vx: 0, rise: 0, t: 0, life: 1, scale: 1, color: 0, wobble: 0, codes: new Uint8Array(MAXC), n: 0, kind: 0, seq: 0 });
   }
 
   /** Live numbers (kept incrementally: read per hit event by the feedback bridge). */
   private live = 0;
+  /** Live crit numbers (kept incrementally like `live`). */
+  private liveCrit = 0;
 
   private alloc(): Num {
     // ring buffer: the next slot is the oldest one
     const n = this.pool[this.head];
     this.head = (this.head + 1) % this.pool.length;
     if (!n.active) this.live++;
+    else if (n.kind === K_CRIT) this.liveCrit--;
     return n;
+  }
+
+  /** A live crit younger than MERGE_T within MERGE_PX of (x, y), or null. */
+  private mergeTarget(x: number, y: number): Num | null {
+    const pool = this.pool;
+    for (let i = 0; i < pool.length; i++) {
+      const d = pool[i];
+      if (!d.active || d.kind !== K_CRIT || d.t >= MERGE_T) continue;
+      if (Math.abs(d.x - x) < MERGE_PX && Math.abs(d.y - y) < MERGE_PX) return d;
+    }
+    return null;
   }
 
   /** Spawn a number. Returns nothing; zero allocations. */
@@ -96,8 +135,21 @@ export class DamageNumbers {
     if (this.hideAll) return;
     if (!this.enabled && (kind === "normal" || kind === "crit")) return;
     const st = this.styles[kind];
+    if (kind === "crit") {
+      // crits landing on the same spot within a blink sum into one number that re-pops
+      const m = this.mergeTarget(x, y);
+      if (m) {
+        m.value += value;
+        m.t = 0;
+        let n = writeNumber(m.codes, 0, m.value);
+        if (n < MAXC) m.codes[n++] = 33; // '!'
+        m.n = n;
+        return;
+      }
+    }
     const d = this.alloc();
     d.active = true;
+    d.value = value;
     d.x = x + fxRng.spread(3);
     d.y = y + fxRng.spread(2);
     d.vx = fxRng.spread(10);
@@ -107,6 +159,7 @@ export class DamageNumbers {
     d.scale = st.scale * this.scale;
     d.color = color >= 0 ? color : st.color;
     d.kind = KIND[kind];
+    if (d.kind === K_CRIT) this.liveCrit++;
     d.wobble = kind === "crit" ? 1 : 0;
     d.seq = ++this.seq;
     let n = 0;
@@ -125,6 +178,7 @@ export class DamageNumbers {
     const st = this.styles.text;
     const d = this.alloc();
     d.active = true;
+    d.value = 0;
     d.x = x;
     d.y = y;
     d.vx = 0;
@@ -149,6 +203,7 @@ export class DamageNumbers {
       if (d.t >= d.life) {
         d.active = false;
         this.live--;
+        if (d.kind === K_CRIT) this.liveCrit--;
       }
     }
   }
@@ -156,10 +211,15 @@ export class DamageNumbers {
   clear(): void {
     for (const d of this.pool) d.active = false;
     this.live = 0;
+    this.liveCrit = 0;
   }
 
   draw(): void {
     const text = this.r.text;
+    const fx = this.focusX;
+    const fy = this.focusY;
+    const focus = this.focusOn;
+    const fr2 = FOCUS_R * FOCUS_R;
     for (let k = 0; k < this.pool.length; k++) {
       // draw oldest first so new numbers are on top
       const d = this.pool[(this.head + k) % this.pool.length];
@@ -167,22 +227,42 @@ export class DamageNumbers {
       const u = d.t / d.life;
       const pop = d.t < 0.2 ? 1.6 + (1 - 1.6) * easeOutBack(d.t / 0.2, 2.2) : 1;
       // (busy screens: crits shrink toward normal size)
-      const s = d.scale * pop * (d.kind === 1 ? 1 - 0.3 * this.busy : 1);
+      let s = d.scale * pop * (d.kind === 1 ? 1 - 0.3 * this.busy : 1);
       const rise = d.rise * (1 - (1 - u) * (1 - u) * (1 - u));
       const x = d.x + d.vx * d.t;
       const y = d.y - rise;
       const enemy = d.kind <= 1;
       const dim = enemy ? this.busy : 0;
-      const alpha = (u < 0.7 ? 1 : 1 - (u - 0.7) / 0.3) * (1 - 0.4 * dim);
+      let alpha = (u < 0.7 ? 1 : 1 - (u - 0.7) / 0.3) * (1 - 0.4 * dim);
+      let glow = d.kind === 1 && dim < 0.5 ? Flag.Glow : 0;
+      // hero exclusion zone: enemy numbers right over the hero shrink + fade (never a wall over her)
+      if (enemy && focus) {
+        const dx = x - fx;
+        const dy = y - fy;
+        if (dx * dx + dy * dy < fr2) {
+          s *= 0.6;
+          alpha *= 0.35;
+          glow = 0;
+        }
+      }
       const flash = d.t < 0.06 ? (1 - d.t / 0.06) * (1 - dim) : 0;
       const rot = d.wobble ? Math.sin(d.t * 26) * 0.12 * (1 - u) : 0;
-      const glow = d.kind === 1 && dim < 0.5 ? Flag.Glow : 0;
       text.drawCodes(Layer.Text, d.codes, d.n, x, y, s, d.color, alpha, glow, flash, d.wobble ? 1.2 : 0, d.t, rot);
+    }
+    const after = this.after;
+    if (after) {
+      this.after = null;
+      after();
     }
   }
 
   get alive(): number {
     return this.live;
+  }
+
+  /** Live crit numbers (the feedback bridge caps them). */
+  get aliveCrit(): number {
+    return this.liveCrit;
   }
 }
 

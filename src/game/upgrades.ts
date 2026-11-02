@@ -152,6 +152,33 @@ export function makeOffer(w: World, count: number = w.stats.cards): UpgradeCard[
   return out;
 }
 
+/**
+ * Whether a re-rolled level-up offer could differ from the current one (no RNG is
+ * consumed). False when the pool fits in the offer entirely (every candidate is
+ * always shown) and none of them can roll the epic double level, e.g. a maxed
+ * build that only gets the Heal / Star Pouch fallbacks.
+ */
+export function canChangeOffer(w: World, count: number = w.stats.cards): boolean {
+  let n = evolutionCards(w).length;
+  let epic = false;
+  for (const inst of w.weapons) {
+    const max = inst.def.levels.length;
+    if (inst.level >= max) continue;
+    n++;
+    if (inst.level + 1 < max) epic = true;
+  }
+  for (const pi of w.passives) {
+    const max = pi.def.levels.length;
+    if (pi.level >= max) continue;
+    n++;
+    if (pi.level + 1 < max) epic = true;
+  }
+  if (w.weapons.length < CFG.weaponSlots)
+    for (const def of baseWeapons()) if (!w.hasWeapon(def.id) && !(def.evolution && w.hasWeapon(def.evolution.into))) n++;
+  if (w.passives.length < CFG.passiveSlots) for (const def of PASSIVES) if (w.passiveLevel(def.id) <= 0) n++;
+  return n > count || (n > 0 && epic && w.stats.luck > 0);
+}
+
 /** Apply a card to the build. */
 export function applyCard(w: World, card: UpgradeCard): void {
   switch (card.kind) {
@@ -184,12 +211,14 @@ export function applyCard(w: World, card: UpgradeCard): void {
 /**
  * Chest rewards: 1 upgrade (golden: 3, 5% x luck JACKPOT: 5), evolutions first,
  * then upgrades of owned items, then new items, then coins. Applied immediately.
+ * `coins` in the result is the total coin delta (bonus + any Star Pouch rewards).
  */
 export function rollChest(w: World, golden: boolean): ChestResult {
   const jackpot = w.rng.next() < 0.05 * w.stats.luck;
   const n = jackpot ? 5 : golden ? 3 : 1;
   const rewards: UpgradeCard[] = [];
-  const coins = Math.round((golden ? 60 : 15 + w.rng.int(0, 15)) * (jackpot ? 3 : 1) * w.stats.greed);
+  const bonus = Math.round((golden ? 60 : 15 + w.rng.int(0, 15)) * (jackpot ? 3 : 1) * w.stats.greed);
+  const before = w.coins;
   for (let i = 0; i < n; i++) {
     let card: UpgradeCard | null = evolutionCards(w)[0] ?? null;
     if (!card) {
@@ -206,6 +235,7 @@ export function rollChest(w: World, golden: boolean): ChestResult {
     applyCard(w, card);
     rewards.push(card);
   }
-  w.coins += coins;
-  return { golden, jackpot, rewards, coins };
+  w.coins += bonus;
+  // every coin this chest gave (the bonus + Star Pouch fallbacks on a maxed build): the UI toast reads it
+  return { golden, jackpot, rewards, coins: Math.round(w.coins - before) };
 }

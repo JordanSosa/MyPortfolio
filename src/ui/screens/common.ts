@@ -1,5 +1,18 @@
 /** Shared bits for screens. */
+import { HEROES } from "../../game/heroes";
+import { img } from "../dom";
 import type { NavLayer } from "../nav";
+
+/**
+ * The three heroes' portraits (frame 0) for the splash / title key art: a
+ * staggered idle bob and a one-shot shine sweep (transform-only animations).
+ * Layout (row under the logo / flanking it) is up to the screen's CSS.
+ */
+export function heroLineup(color: (id: string) => string): string {
+  return `<div class="lineup">${HEROES.map(
+    (hd, i) => `<div class="lp lp${i}" style="--i:${i};--hc:${color(hd.id)}"><div class="lpi">${img(hd.portrait, "px", 0, 3)}</div></div>`,
+  ).join("")}</div>`;
+}
 
 /** Twinkling star field markup. */
 export function sparkles(n: number): string {

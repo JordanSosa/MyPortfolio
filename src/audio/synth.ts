@@ -29,28 +29,48 @@ export type WaveName =
   /** bright, buzzy (saw with a stronger upper end) */
   | "buzz";
 
-/** Per-context shared resources (noise buffers, periodic waves, curves). */
+/**
+ * Per-context shared resources (noise buffers, periodic waves, curves). The
+ * looping noise buffers are generated on first use (not inside the unlock gesture).
+ */
 export interface Kit {
   ctx: BaseAudioContext;
-  white: AudioBuffer;
-  pink: AudioBuffer;
+  readonly white: AudioBuffer;
+  readonly pink: AudioBuffer;
   waves: Map<string, PeriodicWave>;
   curves: Map<string, Float32Array<ArrayBuffer>>;
 }
 
 const kits = new WeakMap<BaseAudioContext, Kit>();
 
+class LazyKit implements Kit {
+  waves = new Map<string, PeriodicWave>();
+  curves = new Map<string, Float32Array<ArrayBuffer>>();
+  private w: AudioBuffer | null = null;
+  private p: AudioBuffer | null = null;
+  constructor(readonly ctx: BaseAudioContext) {}
+  get white(): AudioBuffer {
+    return (this.w ??= makeNoise(this.ctx, false));
+  }
+  get pink(): AudioBuffer {
+    return (this.p ??= makeNoise(this.ctx, true));
+  }
+}
+
 export function kitFor(ctx: BaseAudioContext): Kit {
   let k = kits.get(ctx);
   if (!k) {
-    k = { ctx, white: makeNoise(ctx, false), pink: makeNoise(ctx, true), waves: new Map(), curves: new Map() };
+    k = new LazyKit(ctx);
     kits.set(ctx, k);
   }
   return k;
 }
 
+/** Looping noise length (s): a 1 s loop is inaudible as a loop under the envelopes. */
+const NOISE_SECONDS = 1;
+
 function makeNoise(ctx: BaseAudioContext, pink: boolean): AudioBuffer {
-  const len = Math.floor(ctx.sampleRate * 2);
+  const len = Math.floor(ctx.sampleRate * NOISE_SECONDS);
   const buf = ctx.createBuffer(1, len, ctx.sampleRate);
   const d = buf.getChannelData(0);
   // tiny deterministic LCG so offline renders are reproducible

@@ -52,11 +52,15 @@ export function showSelect(app: App): UiScreen {
   };
   render(app.hero);
 
+  // a tap / click on a portrait only selects (a second tap on the glowing one must not start the run:
+  // only GO! does); confirm on the already-selected focused tab (keyboard / gamepad, detail 0) quick-starts
   for (const t of el.querySelectorAll<HTMLElement>(".tab"))
-    onTap(t, () => {
+    onTap(t, (e) => {
+      const pointer = (e as MouseEvent).detail > 0;
       if (t.dataset.hero === app.hero) {
+        if (pointer) return;
         app.sfx("uiConfirm");
-        app.startRun(app.hero);
+        app.startRun(app.hero, true);
         return;
       }
       app.sfx("cardFlip");
@@ -64,7 +68,7 @@ export function showSelect(app: App): UiScreen {
     });
   onTap(el.querySelector('[data-act="go"]'), () => {
     app.sfx("uiConfirm");
-    app.startRun(app.hero);
+    app.startRun(app.hero, true);
   });
   const back = () => {
     app.sfx("uiBack");

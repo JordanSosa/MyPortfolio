@@ -64,9 +64,13 @@ Tip: on a phone, use **Add to Home Screen** to play full-screen.
 - **Audio:** sound effects and seven original chiptune tracks are synthesised
   at runtime. Battle music adds layers as the fight intensifies, music is
   muffled while you pick upgrades, and a limiter keeps the mix from clipping.
-- **Mobile:** multi-touch floating joystick, safe-area-aware HUD, a guard so a
-  finger still held from moving can't pick a level-up card, auto-pause when the
-  app is backgrounded, automatic quality scaling, haptics and a PWA manifest.
+- **Mobile:** multi-touch floating joystick, safe-area-aware HUD with 44 px
+  touch targets, a guard so a finger still held from moving can't pick a
+  level-up card, the Android Back gesture pauses instead of leaving the run,
+  auto-pause when the app is backgrounded, the screen stays awake during a run,
+  fullscreen on the first tap, first-run hints for moving, dashing and the
+  OVERDRIVE, automatic quality scaling measured against the display's own
+  refresh rate, haptics and a PWA manifest.
 
 Docs: [`docs/DESIGN.md`](docs/DESIGN.md) (design spec) ·
 [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) (code map, events, how to add content) ·

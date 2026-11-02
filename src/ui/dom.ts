@@ -40,12 +40,23 @@ export function sprite(id: string, frame = 0, _scale = 1): string {
   }
 }
 
+/** Decoded <img> per warmed sprite URL: keeps the decoded bitmaps in the browser's image cache. */
+const decoded: HTMLImageElement[] = [];
+
 /**
- * Encode the UI sprites ahead of time in small idle chunks, so opening a
- * modal never stalls on PNG encoding mid-game.
+ * Encode the UI sprites ahead of time in small idle chunks, and decode them
+ * (img.decode()), so opening a modal never stalls on PNG encoding or on
+ * decoding a dozen icons inside its first paint mid-game.
  */
 export function prewarmSprites(ids: [string, number][]): void {
   let i = 0;
+  const decode = (url: string) => {
+    if (!url || typeof Image === "undefined") return;
+    const im = new Image();
+    im.src = url;
+    decoded.push(im);
+    im.decode?.().catch(() => {});
+  };
   const idle = (cb: () => void) => {
     const ric = (window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number }).requestIdleCallback;
     if (ric) ric(cb, { timeout: 300 });
@@ -55,7 +66,7 @@ export function prewarmSprites(ids: [string, number][]): void {
     const t0 = performance.now();
     while (i < ids.length && performance.now() - t0 < 6) {
       const [id, f] = ids[i++];
-      sprite(id, f);
+      decode(sprite(id, f));
     }
     if (i < ids.length) idle(step);
   };
@@ -73,9 +84,31 @@ export function fmtTime(t: number): string {
   return `${String(Math.floor(s / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
 }
 
+/** [divisor, suffix, values below this (in units) keep one decimal]. */
+const NUM_UNITS: readonly [number, string, number][] = [
+  [1e3, "K", 100],
+  [1e6, "M", 10],
+];
+
+/**
+ * Compact counter text: 9999, 12.3K, 150K, 1.0M, 25M. Rounds to the shown
+ * precision first and then picks the unit, so 99,950 reads "100K" (not
+ * "100.0K") and 999,500 reads "1.0M" (not "1000K").
+ */
 export function fmtNum(n: number): string {
-  if (n >= 1e6) return `${(n / 1e6).toFixed(n >= 1e7 ? 0 : 1)}M`;
-  if (n >= 1e4) return `${(n / 1e3).toFixed(n >= 1e5 ? 0 : 1)}K`;
+  if (!(n >= 1e4)) return String(Math.floor(n));
+  for (let u = 0; u < NUM_UNITS.length; u++) {
+    const [div, suf, decBelow] = NUM_UNITS[u];
+    const x = n / div;
+    let d = x < decBelow ? 1 : 0;
+    let r = Number(x.toFixed(d));
+    if (d === 1 && r >= decBelow) {
+      d = 0;
+      r = Number(x.toFixed(0));
+    }
+    if (r >= 1000 && u < NUM_UNITS.length - 1) continue;
+    return `${r.toFixed(d)}${suf}`;
+  }
   return String(Math.floor(n));
 }
 
@@ -87,9 +120,51 @@ export function letters(text: string, cls = "ltr", step = 0.06): string {
     .join("");
 }
 
-/** Restart a CSS animation class on an element. */
+/**
+ * Restart a CSS animation class on an element. Forces a synchronous reflow:
+ * only for one-off, non-HUD screens. Per-frame HUD juice uses `Bump`.
+ */
 export function replay(el: Element, cls: string): void {
   el.classList.remove(cls);
   void (el as HTMLElement).offsetWidth;
   el.classList.add(cls);
+}
+
+/**
+ * A reusable one-shot WAAPI animation on one element ("bump", "pop", "stamp"):
+ * no class toggling, no forced reflow, no allocation per play (the Animation
+ * object is created once and rewound). `play()` is rate-limited: it does nothing
+ * while the previous play is still running (so a bump always plays out instead
+ * of restarting every frame) or within `gapMs` of the last start; `force`
+ * restarts regardless (rank stamps).
+ */
+export class Bump {
+  private anim: Animation | null = null;
+  private last = -1e9;
+
+  constructor(
+    readonly el: Element,
+    private readonly frames: Keyframe[],
+    private readonly opts: KeyframeAnimationOptions,
+    private readonly gapMs = 120,
+  ) {}
+
+  play(force = false, now = performance.now()): boolean {
+    let a = this.anim;
+    if (!force && (now - this.last < this.gapMs || a?.playState === "running")) return false;
+    this.last = now;
+    if (!a) {
+      if (typeof this.el.animate !== "function") return false;
+      a = this.anim = this.el.animate(this.frames, this.opts);
+      return true;
+    }
+    a.currentTime = 0;
+    a.play();
+    return true;
+  }
+
+  /** Stop and drop the effect (e.g. when another animation takes over the element). */
+  cancel(): void {
+    this.anim?.cancel();
+  }
 }

@@ -4,8 +4,9 @@
  * in. Pure DOM/CSS. The in-animation (0.92 s) ends on a held pose; the exit is
  * driven by the SIM: call `end()` when the world starts the ultimate
  * (`ultStart`, after CFG.cutinTime of sim time), so the overlay can't vanish
- * early on a slow device whose sim runs on clamped frame time. A safety
- * timeout removes it if the run ends mid cut-in.
+ * early on a slow device whose sim runs on clamped frame time. There is no
+ * wall-clock fallback: App ends it whenever the sim is no longer in its cut-in
+ * and whenever the run / screen ends (a paused game keeps it up, untouched).
  */
 import { esc, h, sprite } from "./dom";
 
@@ -22,8 +23,6 @@ export interface CutinHandle {
 
 /** Exit animation length (matches `.cutin.out` in styles.css). */
 const OUT_MS = 200;
-/** Last-resort removal if nobody calls end() (run ended / screen changed mid cut-in). */
-const SAFETY_MS = 8000;
 
 export function showCutin(parent: HTMLElement, heroId: string, portrait: string, title: string): CutinHandle {
   const [c1, c2, c3] = BAND[heroId] ?? BAND.hoshi;
@@ -45,11 +44,5 @@ export function showCutin(parent: HTMLElement, heroId: string, portrait: string,
     el.classList.add("out");
     setTimeout(() => el.remove(), OUT_MS);
   };
-  const safety = setTimeout(end, SAFETY_MS);
-  return {
-    end() {
-      clearTimeout(safety);
-      end();
-    },
-  };
+  return { end };
 }

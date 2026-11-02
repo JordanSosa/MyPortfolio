@@ -24,7 +24,12 @@ function maxLevel(c: UpgradeCard): number {
   return 0;
 }
 
-function cardHtml(c: UpgradeCard, i: number): string {
+/**
+ * Upgrade card markup (rarity frame, icon, name, Lv a -> b, description, pips;
+ * rainbow frame for evolutions). Level-up cards are focusable buttons; the
+ * chest reuses the same card as a static reveal (`interactive` false).
+ */
+export function cardHtml(c: UpgradeCard, i: number, interactive = true): string {
   const max = maxLevel(c);
   let tag = "";
   let line = "";
@@ -49,7 +54,8 @@ function cardHtml(c: UpgradeCard, i: number): string {
     pips += "</div>";
   }
   const plus = c.kind === "evolution" && c.with ? `<span class="plus">${img(PASSIVE_BY_ID.get(c.with)?.icon ?? "")}</span>` : "";
-  return `<button class="card ${c.rarity}" data-nav style="--i:${i}" data-i="${i}">
+  const open = interactive ? `<button class="card ${c.rarity}" data-nav${i === 0 ? " data-nav-default" : ""} style="--i:${i}" data-i="${i}">` : `<div class="card ${c.rarity} reveal" style="--i:${i}">`;
+  return `${open}
     <div class="shimmer"></div>
     <span class="rar">${RARITY_LABEL[c.rarity] ?? ""}</span>${tag}
     <div class="ic">${img(c.icon, "px", 0, 4)}${plus}</div>
@@ -57,7 +63,7 @@ function cardHtml(c: UpgradeCard, i: number): string {
     <div class="lvl-ch">${line}</div>
     <div class="ds">${esc(c.desc)}</div>
     ${pips}
-  </button>`;
+  </${interactive ? "button" : "div"}>`;
 }
 
 export function openLevelUp(app: App, w: World): UiScreen {
@@ -79,18 +85,23 @@ export function openLevelUp(app: App, w: World): UiScreen {
   const L = layer(el);
 
   const render = (list: UpgradeCard[]) => {
+    // keyboard / gamepad focus survives the in-place re-render (reroll, next queued level)
+    const prevAct = L.focus?.dataset.act ?? null;
     cards = list;
-    cardsEl.innerHTML = list.map(cardHtml).join("");
+    cardsEl.innerHTML = list.map((c, i) => cardHtml(c, i)).join("");
     sub.textContent = `LV ${w.level - w.pendingLevels + 1}${w.pendingLevels > 1 ? `  ·  +${w.pendingLevels - 1} MORE` : ""}  ·  CHOOSE ONE`;
     rerollBtn.innerHTML = `${img("icon_reroll")} REROLL ×${w.rerolls}`;
-    rerollBtn.disabled = w.rerolls <= 0;
+    // (a maxed build only gets the Heal / Star Pouch fallbacks: a reroll could not change them)
+    rerollBtn.disabled = w.rerolls <= 0 || !w.canReroll;
     list.forEach((_, i) => setTimeout(() => app.sfx("cardFlip", 0.7, i * 2), 110 + i * 110));
     openT = 0;
     autoT = 0;
+    L.focus?.classList.remove("nav-focus");
     L.focus = null;
     for (const b of cardsEl.querySelectorAll<HTMLElement>(".card")) {
       b.addEventListener("click", (e) => onPick(e, Number(b.dataset.i)));
     }
+    if (app.nav.top === L) app.nav.refocus(L, prevAct ? el.querySelector<HTMLElement>(`[data-act="${prevAct}"]`) : null);
   };
 
   const onPick = (e: Event, i: number) => {
@@ -124,7 +135,7 @@ export function openLevelUp(app: App, w: World): UiScreen {
   };
 
   onTapGuarded(rerollBtn, () => {
-    if (busy || openT < GUARD || w.rerolls <= 0) return;
+    if (busy || openT < GUARD || w.rerolls <= 0 || !w.canReroll) return;
     const next = w.reroll();
     if (next) {
       app.sfx("reroll");

@@ -8,8 +8,9 @@
 import { C } from "../art/palette";
 import { audio, type SfxId } from "../audio";
 import { rainbow } from "../core/color";
-import { clamp } from "../core/math";
+import { clamp, smoothstep } from "../core/math";
 import type { Input } from "../core/input";
+import { time } from "../core/time";
 import { CONFETTI_COLORS, fxDash, fxEliteDeath, fxEnemyDeath, fxExplosion, fxFirework, fxHit, fxLevelUp, fxPickup, P, type Fx } from "../fx";
 import { GRADES } from "../render/post";
 import { Layer } from "../render/layers";
@@ -68,10 +69,23 @@ const NUM_HARD = 110;
  * Tracked in a small uid-hashed table (no per-hit allocation).
  */
 const NUM_REPEAT = 0.22;
+/** Crits get their own (longer) per-enemy repeat window, and at most CRIT_CAP alive (halved at peak load). */
+const CRIT_REPEAT = 0.3;
+const CRIT_CAP = 16;
+/** One crit micro-shake per CRIT_SHAKE_EVERY s (a crit storm used to shake the camera every frame). */
+const CRIT_SHAKE_EVERY = 0.15;
 const NUM_SLOTS = 1024;
 /** Boss hits: one summed damage number every BOSS_NUM_EVERY s, one hit spark every BOSS_SPARK_EVERY s. */
 const BOSS_NUM_EVERY = 0.14;
 const BOSS_SPARK_EVERY = 0.05;
+/** Meteor impacts (Supernova Shower): at most one impact shake per METEOR_SHAKE_EVERY s. */
+const METEOR_SHAKE_EVERY = 0.125;
+/** Evolutions celebrated while a modal is open (level-up / chest pick) wait for it to close: queue size, stagger. */
+const EVO_QUEUE = 6;
+const EVO_STAGGER = 0.6;
+/** Death beat: the grade eases to GRADES.dim over DEATH_FADE s (WorldView.deathK), the camera zooms in. */
+const DEATH_FADE = 0.8;
+const DEATH_ZOOM = 1.35;
 
 export class Feedback {
   private offs: (() => void)[] = [];
@@ -91,7 +105,25 @@ export class Feedback {
   private gemChain = 0;
   private gemT = 0;
   private now = 0;
+  /**
+   * Clock for after(): advances only while no modal pauses the game (time.paused), so
+   * delayed world effects (boss WARNING sirens, fireworks, chained booms) never play
+   * behind a level-up / chest / pause modal.
+   */
+  private playNow = 0;
   private later: { t: number; fn: () => void }[] = [];
+  private critCap = CRIT_CAP;
+  private critShakeAt = -1;
+  private meteorShakeAt = -1;
+  /** Evolutions waiting for the modal to close (ring of EVO_QUEUE, no per-event allocation). */
+  private readonly evoX = new Float64Array(EVO_QUEUE);
+  private readonly evoY = new Float64Array(EVO_QUEUE);
+  private readonly evoName: string[] = new Array<string>(EVO_QUEUE).fill("");
+  private evoHead = 0;
+  private evoN = 0;
+  private evoNextAt = 0;
+  /** Real seconds since the hero went down (-1 = alive). */
+  private deathT = -1;
   /** Reused ambient density target (day -> night), set every frame without allocating. */
   private readonly amb = { petals: 12, motes: 10, fireflies: 0 };
   private beat = 0;
@@ -127,7 +159,10 @@ export class Feedback {
     this.offs = [];
     this.opts.hooks?.cutinEnd?.();
     this.later.length = 0;
+    this.evoN = 0;
     this.r.post.damageFloor = 0;
+    this.view.deathK = 0;
+    this.fx.dmg.focusOn = false;
   }
 
   private sfx(id: SfxId, vol = 1, pitch = 0, x = NaN): void {
@@ -144,13 +179,16 @@ export class Feedback {
     this.opts.input?.haptic(ms);
   }
 
+  /** Run `fn` after `sec` seconds of unpaused real time (see playNow). */
   private after(sec: number, fn: () => void): void {
-    this.later.push({ t: this.now + sec, fn });
+    this.later.push({ t: this.playNow + sec, fn });
   }
 
   /** Per-frame: reset budgets, run scheduled effects, low-HP heartbeat, grade + ambient. */
   frame(realDt: number): void {
     this.now += realDt;
+    const paused = time.paused;
+    if (!paused) this.playNow += realDt;
     this.hitFx = this.deathFx = this.nums = this.booms = this.hitSfx = 0;
     // peak chaos (adaptive bloom limiter load): fewer sparks / puffs / numbers, fainter numbers.
     // A screen full of enemy bullets counts as busy too: the bullets must read, not our numbers.
@@ -160,15 +198,29 @@ export class Feedback {
     this.numBudget = Math.round(NUM_BUDGET * (1 - 0.6 * load));
     this.numSoft = Math.round(NUM_SOFT * (1 - 0.55 * load));
     this.numHard = Math.round(NUM_HARD * (1 - 0.5 * load));
+    this.critCap = Math.round(CRIT_CAP * (1 - 0.5 * load));
     this.fx.dmg.busy = load;
-    if (this.later.length) {
+    // hero exclusion zone for enemy numbers
+    const dmg = this.fx.dmg;
+    dmg.focusX = this.w.player.x;
+    dmg.focusY = this.w.player.y - 9;
+    dmg.focusOn = true;
+    if (this.later.length && !paused) {
       for (let i = this.later.length - 1; i >= 0; i--) {
         const l = this.later[i];
-        if (this.now >= l.t) {
+        if (this.playNow >= l.t) {
           this.later.splice(i, 1);
           l.fn();
         }
       }
+    }
+    // evolutions picked inside a modal: celebrate once it has closed, staggered
+    if (this.evoN > 0 && !paused && this.now >= this.evoNextAt) {
+      const i = this.evoHead;
+      this.evoHead = (this.evoHead + 1) % EVO_QUEUE;
+      this.evoN--;
+      this.evoNextAt = this.now + EVO_STAGGER;
+      this.celebrateEvolution(this.evoX[i], this.evoY[i], this.evoName[i]);
     }
     this.gemT -= realDt;
     if (this.gemT <= 0) this.gemChain = 0;
@@ -187,6 +239,12 @@ export class Feedback {
       const pulse = Math.max(Math.exp(-ph * 14), ph > 0.18 ? Math.exp(-(ph - 0.18) * 14) * 0.7 : 0);
       this.r.post.damageFloor = 0.18 + 0.32 * pulse * (1 - k / 0.3 + 0.4);
     } else this.r.post.damageFloor = Math.max(0, this.r.post.damageFloor - realDt);
+    // death beat: the frame drains toward GRADES.dim (applied by WorldView on top of any grade);
+    // a revive drains it back within half a second
+    if (this.deathT >= 0 && w.phase === "dead") {
+      this.deathT += realDt;
+      this.view.deathK = smoothstep(0, DEATH_FADE, this.deathT);
+    } else if (this.view.deathK > 0) this.view.deathK = Math.max(0, this.view.deathK - realDt * 2.2);
     // day -> dusk -> night over the 9 minutes to the final boss
     const prog = clamp(w.t / 540, 0, 1);
     if (prog < 0.5) this.r.post.blendGrade(GRADES.day, GRADES.dusk, prog * 2);
@@ -198,6 +256,23 @@ export class Feedback {
     amb.fireflies = Math.round(22 * night);
     this.fx.ambient.set(amb);
     if (this.opts.sound) audio.setIntensity(clamp(w.enemyCount / 110 + Math.max(0, w.comboRank) * 0.08 + (w.boss ? 0.4 : 0), 0, 1));
+  }
+
+  /** The evolution celebration (flash, hue cycle, fireworks, cast pose, banner, sfx). */
+  private celebrateEvolution(x: number, y: number, name: string): void {
+    const fx = this.fx;
+    const juice = fx.juice;
+    const w = this.w;
+    juice.flash(C.white, 0.6, 0.5);
+    juice.hueCycle(0.7);
+    juice.bloomSurge(1, 1);
+    juice.shockwave(x, y - 8, 1.5, 120, 0.8);
+    for (let i = 0; i < 6; i++) this.after(i * 0.08, () => fxFirework(fx, w.player.x + (Math.random() - 0.5) * 90, w.player.y - 20 - Math.random() * 50));
+    // (no in-world "EVOLUTION!" text: the HUD banner already shows EVOLUTION! + the weapon name)
+    this.view.pose(0.9);
+    this.opts.hooks?.banner?.("evolution", "EVOLUTION!", name);
+    this.sfx("evolve");
+    this.haptic(40);
   }
 
   private bind(): void {
@@ -252,8 +327,12 @@ export class Feedback {
           const special = e.crit;
           const uid = e.enemy.uid;
           const slot = uid & (NUM_SLOTS - 1);
-          const repeat = !special && this.numUid[slot] === uid && this.now - this.numAt[slot] < NUM_REPEAT;
-          if (!repeat && (alive < this.numSoft || (alive < this.numHard && special))) {
+          // (crits too: a crit storm on one enemy used to stack a column of "40!" over the hero)
+          const win = special ? CRIT_REPEAT : NUM_REPEAT;
+          const repeat = this.numUid[slot] === uid && this.now - this.numAt[slot] < win;
+          const room = alive < this.numSoft || (alive < this.numHard && special);
+          const critOk = !special || fx.dmg.aliveCrit < this.critCap;
+          if (!repeat && room && critOk && !this.view.texts.covers(e.x, e.y - 8, w.player.x, w.player.y)) {
             this.numUid[slot] = uid;
             this.numAt[slot] = this.now;
             this.nums++;
@@ -266,7 +345,10 @@ export class Feedback {
           const id = (boss ? "bossHit" : e.crit ? "hitCrit" : (def?.hitSfx as SfxId | undefined) ?? "hit") as SfxId;
           this.sfx(id, 0.7, (Math.random() * 4 - 2) | 0, e.x);
         }
-        if (e.crit && !calm) juice.shake(0.04);
+        if (e.crit && !calm && this.now - this.critShakeAt >= CRIT_SHAKE_EVERY) {
+          this.critShakeAt = this.now;
+          juice.shake(0.04);
+        }
       }),
       bus.on("enemyKilled", (e) => {
         const en = e.enemy;
@@ -298,6 +380,18 @@ export class Feedback {
         this.sfx("propBreak", 1, 0, e.x);
       }),
       bus.on("explosion", (e) => {
+        if (e.source === "supernova_shower") {
+          // meteor impact: a big white-gold flash + its own shockwave, a rate-limited thump
+          fx.ps.emit(P.flare, e.x, e.y, 1, NaN, C.white, e.r / 11);
+          fx.ps.emit(P.ringThin, e.x, e.y, 1, NaN, C.paleYellow, e.r / 12);
+          if (!calm) {
+            juice.shockwave(e.x, e.y, 0.9, e.r * 2.4, 0.5);
+            if (this.now - this.meteorShakeAt >= METEOR_SHAKE_EVERY) {
+              this.meteorShakeAt = this.now;
+              juice.shake(0.12);
+            }
+          }
+        }
         if (this.booms >= BOOM_BUDGET) {
           fx.ps.emit(P.flare, e.x, e.y, 1, NaN, C.paleYellow, e.r / 16);
           return;
@@ -354,6 +448,10 @@ export class Feedback {
         this.sfx("heal");
       }),
       bus.on("playerDied", (e) => {
+        // hero-focused beat (the sim has stopped: everything here runs on real time): zoom in on her,
+        // drain the colour (Feedback.frame -> WorldView.deathK), knock-down pose drawn above the killer
+        this.deathT = 0;
+        this.r.camera.zoomTo(DEATH_ZOOM, 5); // (lambda: ~95 % in 0.6 s)
         juice.slowmo(0.2, 1.4);
         juice.flash(C.red, 0.5, 0.5);
         juice.shake(0.7);
@@ -366,6 +464,8 @@ export class Feedback {
         this.opts.hooks?.died?.();
       }),
       bus.on("playerRevived", (e) => {
+        this.deathT = -1;
+        this.r.camera.zoomTo(w.boss ? 0.86 : 1, 5);
         juice.flash(C.white, 0.8, 0.6);
         juice.shake(0.6);
         juice.shockwave(e.x, e.y - 8, 2, 160, 0.9);
@@ -393,16 +493,19 @@ export class Feedback {
         this.opts.hooks?.levelUp?.(e.level);
       }),
       bus.on("evolution", (e) => {
-        juice.flash(C.white, 0.6, 0.5);
-        juice.hueCycle(0.7);
-        juice.bloomSurge(1, 1);
-        juice.shockwave(e.x, e.y - 8, 1.5, 120, 0.8);
-        for (let i = 0; i < 6; i++) this.after(i * 0.08, () => fxFirework(fx, w.player.x + (Math.random() - 0.5) * 90, w.player.y - 20 - Math.random() * 50));
-        this.view.texts.add("EVOLUTION!", 0, -40, { anchor: 1, scale: 3, rainbow: true, life: 1.8, wobble: 2 });
-        this.view.pose(0.9);
-        this.opts.hooks?.banner?.("evolution", "EVOLUTION!", e.name);
-        this.sfx("evolve");
-        this.haptic(40);
+        // picked inside the level-up / chest modal: the celebration waits until it closes (frame())
+        if (time.paused || this.evoN > 0) {
+          if (this.evoN < EVO_QUEUE) {
+            const i = (this.evoHead + this.evoN) % EVO_QUEUE;
+            this.evoX[i] = e.x;
+            this.evoY[i] = e.y;
+            this.evoName[i] = e.name;
+            this.evoN++;
+          }
+          return;
+        }
+        this.evoNextAt = this.now + EVO_STAGGER;
+        this.celebrateEvolution(e.x, e.y, e.name);
       }),
       bus.on("gem", (e) => {
         this.gemChain = this.gemT > 0 ? this.gemChain + 1 : 0;
@@ -518,8 +621,20 @@ export class Feedback {
         this.sfx("explosionBig");
         this.haptic(70);
       }),
-      bus.on("ultMeow", () => {
-        juice.shake(0.25);
+      bus.on("ultMeow", (e) => {
+        // a wall of cats bursts in: dust row along the leading edge, speed lines along the run, NYA!
+        const v = this.r.camera.view;
+        const edge = e.dir > 0 ? v.x + 6 : v.x + v.w - 6;
+        const ahead = e.dir > 0 ? 0 : Math.PI;
+        for (let i = 0; i < 8; i++) fx.ps.emit(P.dust, edge, v.y + ((i + 0.5) / 8) * v.h, 3, ahead, -1, 1.4, 1.6);
+        fx.speed.directional(e.dir > 0 ? 0 : Math.PI, 0.55, { color: C.paleYellow, intensity: 0.75 });
+        // (at 60 % height: clear of the combo counter on the right edge and of the touch buttons below it)
+        this.view.texts.add("NYA!", edge + e.dir * 46, v.y + v.h * 0.6, { color: C.paleYellow, scale: 3, life: 0.6, rise: 10, wobble: 2 });
+        if (!calm) {
+          juice.shake(0.45);
+          if (e.wave === 0) juice.hitstop(40);
+        }
+        this.haptic(25);
         this.sfx("meow");
         this.after(0.15, () => this.sfx("meow", 0.8, 3));
       }),
@@ -545,6 +660,11 @@ export class Feedback {
       }),
       bus.on("bossSpawn", (e) => {
         this.r.camera.zoomTo(0.86, 2);
+        // the entrance beat: a freeze-frame, then a short slow-mo while the name card lands
+        if (!calm) {
+          juice.hitstop(120);
+          juice.slowmo(0.4, 0.9);
+        }
         juice.shake(0.5);
         juice.shockwave(e.enemy.x, e.enemy.y, 1.4, 140);
         this.opts.hooks?.banner?.("boss", e.title, e.subtitle);

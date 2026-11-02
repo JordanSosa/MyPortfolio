@@ -41,6 +41,8 @@ export class Bot {
   private wander = 0;
   private think_t = 0;
   private stuck = 0;
+  /** Seconds the Overdrive meter has been full (a player doesn't sit on a charged ult forever). */
+  private ultHeld = 0;
   /** 0..1: how sloppy the bot is (attract mode looks more natural with a bit). */
   sloppiness = 0.15;
   /** Weak-player proxy (balance probe): never dashes. */
@@ -269,7 +271,9 @@ export class Bot {
       }
     }
     // overdrive when it matters
-    if (w.ultReady && (near >= 10 || w.enemyCount >= 40 || w.boss || hpK < 0.4)) out.ult = true;
+    // (a dominant build clears the screen before it ever looks busy: cast it on the next pack after ~20 s)
+    this.ultHeld = w.ultReady ? this.ultHeld + dt : 0;
+    if (w.ultReady && (near >= 10 || w.enemyCount >= 40 || w.boss || hpK < 0.4 || (this.ultHeld > 20 && (near >= 4 || w.enemyCount >= 15)))) out.ult = true;
   }
 
   /** Pick a level-up card. */

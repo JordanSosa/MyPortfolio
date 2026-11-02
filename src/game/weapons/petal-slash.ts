@@ -144,6 +144,7 @@ export const sakuraTempest: WeaponDef = {
       q.r = 4;
       q.homing = 3.2;
       q.target = k === 0 ? tgt : null;
+      q.targetUid = q.target ? q.target.uid : 0;
       q.dmg = pdmg;
       q.pierce = 3;
       q.knock = 30;

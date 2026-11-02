@@ -7,6 +7,15 @@
  *
  * One Renderer / Fx / Input for the whole app. The current Session (real run
  * or attract) is stepped with the global `time` (hitstop, slow-mo, pause).
+ *
+ * Flow rules worth knowing:
+ *  - the ultimate cut-in is never covered or interrupted: modals (level-up,
+ *    chest) wait until the sim has left its cut-in, a pause request during it
+ *    is deferred (`pausePending`), and the overlay always follows the sim;
+ *  - a history entry guards every non-title screen, so Android Back / the
+ *    edge-swipe gesture pauses or steps back instead of leaving mid-run;
+ *  - while a modal or the Results screen is up, the WebGL scene redraws at
+ *    most 30x per second (the DOM on top keeps full rate).
  */
 import { audio, type MusicTrack, type SfxId } from "../audio";
 import { Input } from "../core/input";
@@ -18,7 +27,7 @@ import type { DebugParams } from "../debug/params";
 import { createFx, type Fx } from "../fx";
 import { CFG } from "../game/config";
 import { heroDef } from "../game/heroes";
-import { AutoQuality, guessTier, QUALITY, Renderer, type QualityTier } from "../render";
+import { AutoQuality, guessTier, isQualityTier, QUALITY, Renderer, type QualityTier } from "../render";
 import { showCutin, type CutinHandle } from "./cutin";
 import { prewarmSprites, setAtlas } from "./dom";
 import { MANIFEST } from "../art/manifest";
@@ -37,12 +46,21 @@ import { openSettings } from "./screens/settings";
 import { showSplash } from "./screens/splash";
 import { showTitle } from "./screens/title";
 import { markBorn } from "./screens/common";
+import { Tutorial } from "./tutorial";
+import { ScreenWake } from "./wake";
 import type { RunSummary } from "../game/world";
 
 export type ScreenId = "splash" | "title" | "select" | "game" | "results" | "shop";
 
 /** Same condition as the compact landscape layouts in styles.css. */
 const COMPACT_LANDSCAPE = window.matchMedia("(orientation: landscape) and (max-height: 520px)");
+/** Modal / Results: minimum real time between WebGL redraws (s). */
+const THROTTLED_DRAW = 1 / 30 - 0.002;
+/** The game-over modal opens this long after death (s): Batch-A's knock-down beat runs first. */
+const DEATH_MODAL_DELAY = 2.0;
+/** Run-start stinger: READY? for this long (sim paused), then GO! (s). */
+const INTRO_READY = 0.6;
+const INTRO_END = 1.25;
 
 export interface UiScreen {
   el: HTMLElement;
@@ -62,6 +80,7 @@ export class App {
   readonly hud: Hud;
   readonly fpsMeter: FpsMeter;
   readonly auto: AutoQuality;
+  readonly wake = new ScreenWake();
   tier: QualityTier;
   screen: ScreenId = "splash";
   current: UiScreen | null = null;
@@ -77,13 +96,30 @@ export class App {
   private endT = 0;
   private ended = false;
   private lastSummary: RunSummary | null = null;
-  /** The ultimate cut-in overlay on screen (removed when the sim starts the ult). */
+  /** The ultimate cut-in overlay on screen (removed when the sim leaves its cut-in). */
   private cutin: CutinHandle | null = null;
   private unlocked = false;
+  /** A pause asked for during the cut-in / run-start stinger: opens as soon as it ends. */
+  private pausePending = false;
+  /** Skip gameplay edges (dash / ult / pause) on the frame a modal closed: the B / Enter that closed it must not act twice. */
+  private skipEdges = false;
+  /** Run-start stinger clock (real s; -1 = none) and whether GO! happened. */
+  private introT = -1;
+  private introGo = false;
+  /** Real seconds before AutoQuality samples again (after a screen / modal change). */
+  private aqHold = 1;
+  /** Real / sim time accumulated since the last WebGL draw (throttled draws). */
+  private drawAcc = 0;
+  private drawSimAcc = 0;
+  private ctxToast = false;
+  private tut: Tutorial | null = null;
+  private touchShown = false;
+  /** history.back() calls of our own still to arrive as popstate events. */
+  private selfPops = 0;
 
   constructor(readonly params: DebugParams) {
     const s = save.data.settings;
-    this.tier = params.quality ?? (s.quality !== "auto" ? s.quality : guessTier());
+    this.tier = params.quality ?? (isQualityTier(s.quality) ? s.quality : guessTier());
     this.r = new Renderer({ parent: document.body, quality: QUALITY[this.tier], clearColor: 0x6fbf73 });
     setAtlas(this.r.atlas);
     this.fx = createFx(this.r, { particles: QUALITY[this.tier].particles });
@@ -109,7 +145,11 @@ export class App {
       if (hidden) {
         if (this.screen === "game" && !this.modal) this.pause();
         audio.suspend();
-      } else if (this.unlocked) audio.resume();
+      } else {
+        if (this.unlocked) audio.resume();
+        // the browser drops the wake lock while the page is hidden
+        if (this.screen === "game") this.wake.acquire();
+      }
     };
     // any pointer use hides the keyboard focus ring
     window.addEventListener("pointerdown", () => this.nav.pointerUsed(), { capture: true });
@@ -117,6 +157,12 @@ export class App {
     const unlock = () => this.unlockAudio();
     window.addEventListener("pointerdown", unlock, { capture: true });
     window.addEventListener("keydown", unlock, { capture: true });
+    // Android Back / edge-swipe back: route like Esc instead of leaving the page mid-run
+    window.addEventListener("popstate", () => this.onPopState());
+    // a controller dropping out mid-run pauses (its held stick / buttons are gone)
+    window.addEventListener("gamepaddisconnected", () => {
+      if (this.screen === "game" && !this.modal) this.pause();
+    });
     this.r.onRestore = () => this.hud.refreshIcons();
   }
 
@@ -184,8 +230,58 @@ export class App {
     document.body.classList.toggle("reduce-flash", s.reduceFlashing);
     if (!this.params.quality) {
       this.auto.enabled = s.quality === "auto";
-      if (s.quality !== "auto" && s.quality !== this.tier) this.auto.set(s.quality);
+      if (isQualityTier(s.quality) && s.quality !== this.tier) this.auto.set(s.quality);
     } else this.auto.enabled = false;
+  }
+
+  // ================================================================ history guard (Android Back)
+  /** Arm the Back guard: one same-URL history entry while a non-title screen is up. */
+  private guardHistory(): void {
+    try {
+      if (!(history.state as { kk?: number } | null)?.kk) history.pushState({ kk: 1 }, "");
+    } catch {
+      /* sandboxed / file:// pages: no history API */
+    }
+  }
+
+  /** Back at the root (title): drop the guard so the next Back leaves the page. */
+  private releaseHistory(): void {
+    try {
+      if ((history.state as { kk?: number } | null)?.kk) {
+        this.selfPops++;
+        history.back();
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  private onPopState(): void {
+    if (this.selfPops > 0) {
+      // our own releaseHistory(): if the player already moved on (title -> select), re-arm the guard
+      this.selfPops--;
+      if (this.screen !== "title" && this.screen !== "splash") this.guardHistory();
+      return;
+    }
+    if (this.screen === "title" || this.screen === "splash") {
+      // Back on the title leaves the page; it only closes an open settings panel first
+      if (this.sub) this.nav.top?.onBack?.();
+      return;
+    }
+    // stay on the page: re-arm the guard, then route the gesture like Esc
+    this.guardHistory();
+    if (this.sub) {
+      this.nav.top?.onBack?.();
+      return;
+    }
+    if (this.screen === "game") {
+      if (!this.modal) this.pause();
+      else if (this.modalKind === "pause") this.resume();
+      // level-up / chest / game over: Back is ignored (a choice is required)
+      return;
+    }
+    // select / shop / results: one step back (to the title)
+    this.nav.top?.onBack?.();
   }
 
   // ================================================================ screens
@@ -199,18 +295,24 @@ export class App {
       this.nav.remove(this.current.layer);
       this.current.close();
     }
+    this.endCutin();
     this.screen = id;
     this.current = scr;
     markBorn();
     if (scr?.layer) this.nav.push(scr.layer);
     this.hud.show(id === "game");
     this.input.showTouchControls(false);
+    this.touchShown = false;
+    this.aqHold = 1;
+    if (id !== "title" && id !== "splash") this.guardHistory();
   }
 
   goTitle(): void {
     this.endGame();
+    this.wake.release();
     if (!this.attract) this.startAttract();
     this.setScreen("title", showTitle(this));
+    this.releaseHistory();
     this.music("title");
   }
 
@@ -233,8 +335,11 @@ export class App {
     time.speed = this.params.speed;
   }
 
-  /** Begin a run with `hero`. */
-  startRun(hero: string): void {
+  /**
+   * Begin a run with `hero`. `intro` (GO! on the select screen) plays the
+   * run-start stinger: READY? with the sim paused, HUD fly-in, GO!.
+   */
+  startRun(hero: string, intro = false): void {
     this.hero = heroDef(hero).id;
     save.data.lastHero = this.hero;
     save.save();
@@ -259,19 +364,15 @@ export class App {
     this.ended = false;
     this.endT = 0;
     this.lvIntro = -1;
+    this.pausePending = false;
+    this.skipEdges = false;
     this.setScreen("game", null);
     if (this.params.skip > 0) this.game.skip(this.params.skip);
-    // first few runs: how to play
-    if (save.data.runs < 3 && !this.params.autoplay) {
-      const touch = this.input.lastDevice === "touch";
-      this.hud.hint(
-        touch
-          ? "<b>DRAG ANYWHERE</b> TO MOVE\nATTACKS ARE AUTOMATIC!"
-          : this.input.lastDevice === "gamepad"
-            ? "<b>STICK</b> MOVE · <b>A</b> DASH · <b>B</b> OVERDRIVE\nATTACKS ARE AUTOMATIC!"
-            : "<b>WASD</b> MOVE · <b>SPACE</b> DASH · <b>E</b> OVERDRIVE\nATTACKS ARE AUTOMATIC!",
-      );
-    }
+    this.wake.acquire();
+    // first few runs: how to play (move -> dash -> overdrive)
+    this.tut = save.data.runs < 3 && !this.params.autoplay ? new Tutorial(this.hud, this.input, this.game.world) : null;
+    if (intro && !this.params.autoplay && this.params.skip <= 0) this.beginIntro();
+    else this.tut?.start();
     this.music("battle", 1.5);
     this.sfx("uiConfirm");
   }
@@ -285,15 +386,18 @@ export class App {
       comboBreak: (n: number) => hud.comboBreak(n),
       banner: hud.banner.bind(hud),
       bossBar: hud.bossBar.bind(hud),
+      ultReady: () => hud.ultReady(),
       cutin: (heroId: string, name: string) => {
         this.cutin?.end();
         this.cutin = showCutin(document.body, heroId, heroDef(heroId).portrait, name);
       },
-      cutinEnd: () => {
-        this.cutin?.end();
-        this.cutin = null;
-      },
+      cutinEnd: () => this.endCutin(),
     };
+  }
+
+  private endCutin(): void {
+    this.cutin?.end();
+    this.cutin = null;
   }
 
   private endGame(): void {
@@ -303,6 +407,11 @@ export class App {
       this.sub = null;
     }
     if (this.modal) this.closeModal();
+    this.endCutin();
+    this.endIntro();
+    this.tut?.dispose();
+    this.tut = null;
+    this.pausePending = false;
     if (this.game) {
       this.game.dispose();
       this.game = null;
@@ -320,6 +429,12 @@ export class App {
     this.lastSummary = g.world.summary();
     const summary = this.lastSummary;
     if (this.modal) this.closeModal();
+    this.endCutin();
+    this.endIntro();
+    this.tut?.dispose();
+    this.tut = null;
+    this.pausePending = false;
+    this.wake.release();
     this.input.showTouchControls(false);
     this.setScreen("results", showResults(this, summary));
     this.music(summary.victory ? "victory" : "gameover", 1);
@@ -329,15 +444,54 @@ export class App {
     this.startRun(this.hero);
   }
 
+  // ================================================================ run-start stinger
+  private beginIntro(): void {
+    this.introT = 0;
+    this.introGo = false;
+    time.paused = true;
+    this.game?.view.pose(0.9);
+    this.hud.intro(true);
+    this.sfx("countTick", 0.6, 4);
+  }
+
+  private introFrame(dt: number): void {
+    this.introT += dt;
+    if (!this.introGo && this.introT >= INTRO_READY) {
+      this.introGo = true;
+      if (!this.modal) time.paused = false;
+      this.hud.introGo();
+      this.fx.juice.shake(0.22);
+      this.input.markTouchesStale();
+      this.sfx("uiConfirm");
+      this.tut?.start();
+    }
+    if (this.introT >= INTRO_END) this.endIntro();
+  }
+
+  private endIntro(): void {
+    if (this.introT < 0) return;
+    if (!this.introGo && !this.modal) time.paused = false;
+    this.introT = -1;
+    this.introGo = false;
+    this.hud.intro(false);
+  }
+
+  /** The READY? part of the stinger is running: no input, sim paused. */
+  private get introHold(): boolean {
+    return this.introT >= 0 && !this.introGo;
+  }
+
   // ================================================================ modals
   openModal(kind: string, m: UiScreen): void {
     if (this.modal) this.closeModal();
+    this.hud.blurButtons();
     this.modal = m;
     this.modalKind = kind;
     markBorn();
     if (m.layer) this.nav.push(m.layer);
     time.paused = true;
     this.input.showTouchControls(false);
+    this.touchShown = false;
     this.input.markTouchesStale();
     this.hud.setModalOpen(true);
     // pause / level-up / chest muffle the battle music; the game-over / victory jingles stay clear
@@ -351,13 +505,23 @@ export class App {
     this.modalKind = "";
     this.nav.remove(m.layer);
     m.close();
-    time.paused = false;
+    this.hud.blurButtons();
+    time.paused = this.introHold;
     audio.setMuffled(false);
     this.hud.setModalOpen(false);
+    this.skipEdges = true;
+    this.aqHold = 0.5;
+    if (this.screen === "game") this.wake.acquire();
   }
 
   pause(): void {
     if (this.screen !== "game" || !this.game || this.modal || this.game.world.phase !== "play") return;
+    // never over the cut-in / READY?: open as soon as they end
+    if (this.game.world.ult?.phase === "cutin" || this.introHold) {
+      this.pausePending = true;
+      return;
+    }
+    this.pausePending = false;
     this.sfx("uiConfirm");
     this.openModal("pause", openPause(this, this.game.world));
   }
@@ -374,11 +538,13 @@ export class App {
     if (this.sub) return;
     const under = this.modal ?? this.current;
     if (under) under.el.style.visibility = "hidden";
+    this.guardHistory();
     const m = openSettings(this, () => {
       this.nav.remove(m.layer);
       m.close();
       this.sub = null;
       if (under) under.el.style.visibility = "";
+      if (this.screen === "title") this.releaseHistory();
     });
     this.sub = m;
     markBorn();
@@ -392,65 +558,116 @@ export class App {
     this.input.update();
     this.nav.update(this.input);
     const g = this.game;
+    // WebGL context lost mid-run: the canvas is blank, so the run must not go on
+    if (this.r.contextLost) {
+      if (this.screen === "game" && g && !this.modal && g.world.phase === "play") {
+        this.pause();
+        if (!this.ctxToast) {
+          this.ctxToast = true;
+          this.toast("restoring graphics…");
+        }
+      }
+    } else this.ctxToast = false;
     if (this.screen === "game" && g) this.gameFrame(g, dt);
     this.current?.update?.(dt);
     this.modal?.update?.(dt);
     this.sub?.update?.(dt);
 
-    // title: frame the attract hero below the centred menu (the compact landscape layout
-    // puts logo + menu side by side, so the hero can stay centred there)
+    // menus over the attract game: keep its hero clear of the logo / menu
     if (this.attract) {
-      const stacked = this.screen === "title" && !COMPACT_LANDSCAPE.matches;
-      this.attract.camOffY = stacked ? -0.3 * this.r.camera.view.h : 0;
+      const menu = this.screen === "title" || this.screen === "splash";
+      const compact = COMPACT_LANDSCAPE.matches;
+      const v = this.r.camera.view;
+      // desktop / tablet landscape: logo + portraits on top, the menu (or TAP TO START) stacked in the centre
+      // column down to ~85 % height -> the hero runs in the open meadow left of it (22 %, 62 %)
+      const wide = !compact && v.w > v.h * 1.2;
+      // portrait: below the centred menu (80 % height);
+      // compact landscape: title = logo left, menu right -> the hero runs in the gap between them;
+      // splash = key art in the middle -> the hero runs on the right
+      this.attract.camOffY = menu && !compact ? (wide ? -0.12 : -0.3) * v.h : 0;
+      this.attract.camOffX = !menu ? 0 : wide ? 0.28 * v.w : compact ? (this.screen === "title" ? -0.08 : -0.3) * v.w : 0;
     }
     // results: the finished run stays on screen, frozen
     const s = this.screen === "game" || this.screen === "results" ? g : this.attract;
     if (s && this.screen !== "results") s.tick(time.dt, dt);
     const r = this.r;
-    r.beginFrame(dt);
-    if (s) s.draw(r.time, time.dt, dt);
-    this.fx.update(time.dt, dt);
-    this.fx.draw();
-    r.endFrame();
+    // a modal / Results covers the scene: redraw it at most 30x per second (input, HUD and modals stay full rate)
+    this.drawAcc += dt;
+    this.drawSimAcc += time.dt;
+    const throttled = !!this.modal || this.screen === "results";
+    if (!throttled || this.drawAcc >= THROTTLED_DRAW) {
+      r.beginFrame(this.drawAcc);
+      if (s) s.draw(r.time, this.drawSimAcc, this.drawAcc);
+      this.fx.update(time.dt, dt);
+      this.fx.draw();
+      r.endFrame();
+      this.drawAcc = this.drawSimAcc = 0;
+    } else this.fx.update(time.dt, dt);
     if (g && this.screen === "game") this.hud.update(g.world, dt);
     const cpu = performance.now() - t0;
     this.fpsMeter.frame(dt, cpu, s && this.fpsMeter.visible ? `en ${s.world.enemyCount} p ${this.fx.ps.count} pr ${s.world.projectiles.count} q ${this.tier}` : "");
-    this.auto.sample(dt * 1000);
+    // quality: judge only live gameplay / attract frames (not paused, modal, settings or a fresh screen)
+    if (this.aqHold > 0) this.aqHold -= dt;
+    if (time.paused || this.modal || this.sub || this.aqHold > 0 || this.screen === "results") this.auto.resetWindow();
+    else this.auto.sample(dt * 1000, cpu);
   }
 
   private gameFrame(g: Session, dt: number): void {
     const w = g.world;
     const inp = this.input;
-    if (!this.modal) {
+    const cut = w.ult?.phase === "cutin";
+    // the overlay follows the sim (also covers muted fast-forwards that never emit ultStart)
+    if (this.cutin && !cut) this.endCutin();
+    if (this.introT >= 0) this.introFrame(dt);
+    const hold = this.introHold;
+    const skipEdges = this.skipEdges;
+    this.skipEdges = false;
+    if (!this.modal && !hold) {
       if (!this.params.autoplay) {
         w.input.mx = inp.move.x;
         w.input.my = inp.move.y;
-        if (inp.pressed("dash")) w.input.dash = true;
-        if (inp.pressed("ult")) {
-          if (w.ultReady) w.input.ult = true;
-          else if (!w.ult && w.phase === "play") {
-            inp.deny("ult");
-            this.sfx("uiDeny", 0.6);
+        if (!skipEdges) {
+          if (inp.pressed("dash")) w.input.dash = true;
+          if (inp.pressed("ult")) {
+            // a level-up / chest is about to open: the cut-in must not start under it
+            const queued = this.lvIntro >= 0 || w.pendingLevels > 0 || w.pendingChests.length > 0;
+            if (!queued) {
+              if (w.ultReady) w.input.ult = true;
+              else if (!w.ult && w.phase === "play") {
+                inp.deny("ult");
+                this.sfx("uiDeny", 0.6);
+                this.tut?.denied();
+              }
+            }
           }
         }
       }
-      if (inp.pressed("pause")) {
+      if (!skipEdges && inp.pressed("pause")) {
         inp.consume("pause");
         this.pause();
       }
     }
     // touch controls + meters
-    const playing = w.phase === "play" && !this.modal;
+    const playing = w.phase === "play" && !this.modal && !hold;
     if (inp.touchControlsWanted !== playing) inp.showTouchControls(playing);
+    const shown = inp.touchControlsVisible;
+    if (shown !== this.touchShown) {
+      this.touchShown = shown;
+      this.tut?.relayout();
+    }
     inp.setUltCharge(w.ultMeter / CFG.ultMax, w.ultReady);
     inp.setDashCharge(w.player.dashMax > 0 ? 1 - w.player.dashCd / w.player.dashMax : 1);
 
+    // a pause asked for during the cut-in / READY? opens right after it
+    if (this.pausePending && !this.modal && !cut && !hold) this.pause();
+
     // level-up flow: hitstop/fx happen on the event; ease time to 0.2x then open the modal
-    if (w.phase !== "play" && this.lvIntro >= 0) {
+    if (this.lvIntro >= 0 && (w.phase !== "play" || cut)) {
+      // (a bot-triggered cut-in mid-intro would otherwise crawl at 0.2x; the intro restarts after it)
       this.lvIntro = -1;
       time.easeTo(1, 0.2);
     }
-    if (!this.modal && w.phase === "play") {
+    if (!this.modal && w.phase === "play" && !cut && !hold) {
       if (w.pendingLevels > 0) {
         if (this.lvIntro < 0) {
           this.lvIntro = 0;
@@ -468,7 +685,7 @@ export class App {
     // end of run
     if (!this.ended && (w.phase === "dead" || w.phase === "victory")) {
       this.endT += dt;
-      if (w.phase === "dead" && this.endT > 1.4 && !this.modal) {
+      if (w.phase === "dead" && this.endT > DEATH_MODAL_DELAY && !this.modal) {
         this.ended = true;
         this.openModal("over", openGameOver(this, w, false));
         this.music("gameover", 0.8);
@@ -478,6 +695,7 @@ export class App {
         this.openModal("over", openGameOver(this, w, true));
       }
     }
+    if (!this.modal && w.phase === "play") this.tut?.frame(dt);
   }
 
   /** After the game-over revive. */

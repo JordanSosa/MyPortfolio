@@ -120,7 +120,8 @@ export interface GameEvents {
   ultSlash: { x0: number; y0: number; x1: number; y1: number; i: number };
   /** Rin's ult: the final petal explosion. */
   ultBurst: { x: number; y: number; w: number; h: number };
-  ultMeow: { x: number; y: number };
+  /** Mochi's ult: a wave of cats enters at the view edge x (leading edge), running along `dir` (+1 right, -1 left). */
+  ultMeow: { x: number; y: number; dir: number; wave: number };
   // director
   waveIncoming: { kind: string; x: number; y: number };
   bossWarning: { id: string; title: string; subtitle: string };

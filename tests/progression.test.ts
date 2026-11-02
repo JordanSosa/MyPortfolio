@@ -3,13 +3,14 @@ import { RANKS, rankFor, xpToNext, CFG, bossHpScale, enemyHpScale, gemXpScale } 
 import { World } from "../src/game/world";
 import { COINS_CARD, HEAL_CARD, makeOffer } from "../src/game/upgrades";
 import { PASSIVES } from "../src/game/passives";
-import { WEAPONS } from "../src/game/registry";
+import { WEAPONS, baseWeapons } from "../src/game/registry";
+import { HERO_IDS } from "../src/game/heroes";
 import { META, metaCost } from "../src/game/meta";
 import { ADAPT_FROM, ADAPT_MAX } from "../src/game/director/director";
 
 describe("xp curve", () => {
-  test("curve: 5 at Lv1, steep Lv 6-12, gentle Lv 12-22, steep again from Lv 22 / 38", () => {
-    expect(xpToNext(1)).toBe(5);
+  test("curve: 3 at Lv1, steep Lv 6-12, gentle Lv 12-22, steep again from Lv 22 / 38", () => {
+    expect(xpToNext(1)).toBe(3); // the first level-up in a few seconds (+ the starter vacuum)
     expect(xpToNext(2)).toBe(15);
     expect(xpToNext(6)).toBe(55);
     expect(xpToNext(7)).toBe(93); // +38 per level from Lv 6
@@ -24,10 +25,43 @@ describe("xp curve", () => {
   });
   test("addXp levels up, queues pending levels and carries overflow", () => {
     const w = new World({ hero: "hoshi", seed: 1, director: false });
-    w.addXp(5 + 15 + 3);
+    w.addXp(xpToNext(1) + xpToNext(2) + 3);
     expect(w.level).toBe(3);
     expect(w.pendingLevels).toBe(2);
     expect(w.xp).toBeCloseTo(3);
+  });
+});
+
+describe("first level-up (DESIGN pillar: under 8 s)", () => {
+  test.each(HERO_IDS)("%s reaches Lv 2 within 8 s standing still, running away or circling (starter vacuum)", (hero) => {
+    const times: number[] = [];
+    for (const mode of ["still", "right", "circle"])
+      for (const seed of [1, 2, 3]) {
+        const w = new World({ hero, seed });
+        for (let i = 0; i < 60 * 12 && w.level < 2; i++) {
+          const t = i / 60;
+          w.input.mx = mode === "still" ? 0 : mode === "right" ? 1 : Math.cos(t * 0.8);
+          w.input.my = mode === "circle" ? Math.sin(t * 0.8) : 0;
+          w.step(1 / 60);
+        }
+        expect(w.level, `${hero} ${mode} seed ${seed}`).toBeGreaterThanOrEqual(2);
+        times.push(w.t);
+      }
+    for (const t of times) expect(t).toBeLessThanOrEqual(8);
+    times.sort((a, b) => a - b);
+    expect(times[times.length >> 1]).toBeLessThanOrEqual(6);
+  });
+  test("the starter vacuum only helps the opening (below Lv 3, first 30 s)", () => {
+    expect(CFG.starterVacuum).toBeGreaterThan(CFG.pickupRadius * 3);
+    const w = new World({ hero: "hoshi", seed: 1, director: false });
+    w.dropGem(w.player.x + 80, w.player.y, 1);
+    for (let i = 0; i < 60; i++) w.step(1 / 60);
+    expect(w.gems.count).toBe(0); // pulled in from 80 px
+    w.addXp(xpToNext(1) + xpToNext(2));
+    expect(w.level).toBe(3);
+    w.dropGem(w.player.x + 80, w.player.y, 1);
+    for (let i = 0; i < 60; i++) w.step(1 / 60);
+    expect(w.gems.count).toBe(1); // Lv 3: back to the normal pickup radius
   });
 });
 
@@ -107,6 +141,25 @@ describe("level-up cards", () => {
     expect(w.reroll()).not.toBeNull();
     expect(w.reroll()).toBeNull();
   });
+  test("maxed build: a reroll that cannot change the offer (only Heal / Star Pouch left) is not consumed", () => {
+    const w = maxedWorld();
+    w.addXp(w.xpNext + 0.01);
+    const a = w.offer().map((c) => c.id);
+    expect(a).toEqual([HEAL_CARD.id, COINS_CARD.id]);
+    const r0 = w.rerolls;
+    expect(r0).toBeGreaterThan(0);
+    expect(w.canReroll).toBe(false);
+    const b = w.reroll()!.map((c) => c.id);
+    expect(b).toEqual(a);
+    expect(w.rerolls).toBe(r0);
+    // three unowned passives for three cards: still the same set every time
+    w.passives.pop();
+    w.recomputeStats();
+    expect(w.canReroll).toBe(false);
+    // a lower-level item (could roll epic / a different pick) makes the reroll meaningful again
+    w.setPassiveLevel(w.passives[0].def.id, 2);
+    expect(w.canReroll).toBe(true);
+  });
   test("Luck meta rank 3 grants a 4th card", () => {
     const w = new World({ hero: "hoshi", seed: 6, director: false, meta: { luck: 3 } });
     expect(w.stats.cards).toBe(4);
@@ -124,6 +177,17 @@ describe("chests", () => {
       const b = w.openChest()!;
       expect(b.rewards.length).toBe(b.jackpot ? 5 : 3);
       expect(w.coins).toBeGreaterThan(0);
+    }
+  });
+  test("maxed build: the chest's reported coins (the UI toast) equal the coins actually received", () => {
+    for (const golden of [false, true]) {
+      const w = maxedWorld();
+      const before = w.coins;
+      w.pendingChests.push({ golden });
+      const res = w.openChest()!;
+      expect(res.rewards.every((r) => r.kind === "coins")).toBe(true);
+      expect(w.coins - before).toBe(res.coins);
+      expect(res.coins).toBeGreaterThanOrEqual(50 * res.rewards.length);
     }
   });
   test("chests prioritise evolutions", () => {
@@ -251,3 +315,13 @@ describe("pacing mechanics (balance pass)", () => {
     expect(Math.hypot(g.x - w.player.x, g.y - w.player.y)).toBeLessThan(d0 - CFG.mergedGemDrift * 0.3);
   });
 });
+
+/** Late game: 6 evolutions + 6 maxed passives (level-ups / chests fall back to Heal / Star Pouch). */
+function maxedWorld(): World {
+  const w = new World({ hero: "rin", seed: 9, god: true, director: false });
+  w.weapons.length = 0;
+  for (const b of baseWeapons().slice(0, CFG.weaponSlots)) w.evolveWeapon(w.addWeapon(b.id, 5)!);
+  for (const p of PASSIVES.slice(0, CFG.passiveSlots)) w.addPassive(p.id, p.levels.length);
+  expect(w.weapons.every((i) => i.def.evolved)).toBe(true);
+  return w;
+}

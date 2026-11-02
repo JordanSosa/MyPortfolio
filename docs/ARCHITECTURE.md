@@ -10,7 +10,9 @@ and how to add content without touching other people's files.
 
 ```
 src/
-  main.ts              boot: fonts (@fontsource), styles, App, window.__kk hooks
+  main.ts              boot: fonts (@fontsource), styles, App, window.__kk hooks; removes index.html's static
+                       #boot splash once the app runs; "needs WebGL2" only when WebGL2 is really missing (any
+                       other constructor error resets the settings and retries once, then a generic error)
   core/  render/  fx/  engine (docs/ENGINE.md)
   art/                 palette / format / manifest (frozen contracts) + sprites/*.ts (auto-registered)
   audio/               api.ts (frozen contract) + index.ts `audio` implementation
@@ -54,13 +56,18 @@ src/
                        dim, enrage red, sunrise sweep)
 
   ui/                  DOM: app state machine, HUD, screens, modals, save
-    app.ts             App: loop, screens, modals, level-up / chest / game-over flow, settings
+    app.ts             App: loop, screens, modals, level-up / chest / game-over flow, settings, run-start stinger,
+                       Back-gesture history guard, AutoQuality feed, WebGL draw throttle under modals
     session.ts         Session = World + WorldView + Feedback (real run or attract mode)
-    hud.ts             HUD (XP, level, timer, kills/coins, icons, combo, boss bar, banners)
-    cutin.ts           ultimate anime cut-in overlay
-    nav.ts             keyboard / gamepad menu navigation (spatial focus)
-    save.ts            persisted save (kko.save.v1)
-    dom.ts             tiny DOM helpers (atlas sprite -> <img>)
+    hud.ts             HUD (XP, level, timer, kills/coins, icons, combo, boss bar, banners + boss letterbox,
+                       onboarding hint / bubbles, READY?/GO! stamp); diffed, quantised, WAAPI juice (see 2.1)
+    cutin.ts           ultimate anime cut-in overlay (ended by the sim / App only: no wall-clock timer)
+    tutorial.ts        first-runs onboarding (move hint until moved, DASH bubble until the first dash,
+                       OVERDRIVE-ready bubble x2, "fills as you fight" once per run)
+    wake.ts            Screen Wake Lock during runs (re-acquired when the page is visible again)
+    nav.ts             keyboard / gamepad menu navigation (spatial focus; `refocus` after in-place re-renders)
+    save.ts            persisted save (kko.save.v1), validated on load (`sanitizeSave`), tutorial flags
+    dom.ts             tiny DOM helpers (atlas sprite -> <img>, sprite pre-decode, `Bump` WAAPI one-shots, fmtNum)
     styles.css         all UI styles (palette CSS variables)
     screens/*.ts       splash, title, select, levelup, chest, pause, settings, over, results, shop
 
@@ -75,6 +82,7 @@ tests/                 vitest: core math, xp/cards/chests/meta, headless 3-minut
                        bestiary.test.ts (late enemies, both bosses through every pattern/phase, victory, enrage,
                        bullet hygiene), integrity.test.ts (final boss + death on one step, coin merge, a full
                        unmuted run with a listener on every event: bounded lists, victory)
+                       quality.test.ts (AutoQuality stepping, guessTier, save validation, fmtNum)
 tools/balance.probe.ts `npm run balance`: full headless runs, every hero x seed, good + lazy bot, pacing report (section 6)
 scripts/e2e.mjs        Playwright e2e: desktop / mobile portrait / mobile landscape, screenshots, fails on errors
 scripts/peak.mjs       peak-chaos readability shots (adaptive bloom limiter on / off)
@@ -96,8 +104,10 @@ Loop(dt) -> App.frame
   game frame: input -> world.input (or the bot), pause, touch meters,
               level-up intro (time eases to 0.2x, then modal), chest modal, game over
   session.tick(time.dt, dt): substep(1/60) world.step(); camera.follow; feedback.frame()
-  r.beginFrame -> view.draw -> fx.update/draw -> r.endFrame
+  r.beginFrame -> view.draw -> fx.update/draw -> r.endFrame   (at most 30x/s while a modal or Results is up;
+                                                              fx.update still runs every frame)
   hud.update(world)
+  auto.sample(frameMs, cpuMs)   (skipped while paused / a modal / settings / Results, and 1 s after a screen change)
 ```
 
 Modals set `time.paused` (the sim stops, ambient fx keep animating), hide the
@@ -108,7 +118,76 @@ pauses the world for `CFG.cutinTime` while particles keep running); the view
 darkens the frame through `r.post.dim` meanwhile. The DOM cut-in overlay
 (`ui/cutin.ts`) plays its 0.92 s intro and then *holds* until the sim emits
 `ultStart` (feedback hook `cutinEnd`), so it can't vanish early on a slow device
-whose sim runs on clamped frame time.
+whose sim runs on clamped frame time. App also ends it whenever the sim is no
+longer in its cut-in (muted fast-forwards never emit `ultStart`) and on every
+run end / screen change; a paused game keeps it up untouched.
+
+Flow rules around the cut-in and modals (`App.gameFrame`):
+
+- level-up / chest modals (and the 0.4 s level-up slow-mo intro) never start
+  while `world.ult.phase === "cutin"`; an OVERDRIVE press is ignored while a
+  level-up / chest is queued, so the cut-in never starts under a modal;
+- `pause()` during the cut-in or the run-start READY? sets `pausePending`, and
+  the pause opens on the first frame after it (blur / visibility / gamepad
+  disconnect / WebGL context loss all go through `pause()`);
+- on the frame a modal closed, gameplay edges (dash / ult / pause) are dropped,
+  and a nav "back" consumes back + pause + ult + dash + confirm, so the gamepad B
+  that resumes never casts and Enter never re-clicks the pause button (which is
+  `tabindex=-1` and blurred on click); P / START toggle the pause closed.
+
+Android Back / edge-swipe back: every non-title screen pushes one same-URL
+history entry (`{kk: 1}`); `popstate` re-arms it and routes like Esc (settings
+closes, game pauses, pause resumes, level-up / chest / game over ignore it,
+select / shop / results go to the title). Back at the title the guard is
+dropped (`history.back()`, its own popstate ignored), so Back leaves the page.
+
+Run-start stinger (only GO! on the select screen): READY? with `time.paused`
+for 0.6 s (hero cast pose, HUD flies in via `.hud.intro`), then GO! (light
+shake, uiConfirm), the sim and the touch controls start; input is ignored
+before GO!. Deep links / autoplay / `?skip` / RETRY start without it.
+
+Menus over the attract game (`App.frame`, `Session.camOffX/Y`): the camera is
+offset so the bot's hero runs in open meadow, never under the menu - portrait:
+below the centred menu (80 % height); desktop / wide landscape: left of the
+centred column (22 %, 62 %); compact phone landscape: between the logo and the
+menu (title) or right of the key art (splash).
+
+Small-screen layout rules (styles.css): the touch OVERDRIVE button reaches
+~210 px above the bottom edge, so in touch portrait the onboarding pill sits
+above the hero (25 %); the pause menu and settings fit a 320x568 phone without
+scrolling (`max-height: 620px` portrait rules, six build slots per row under
+360 px); shop cards put the price on its own line under 360 px; Results is a
+two-column panel in phone landscape (stats + buttons left, damage chart right).
+The level-up REROLL is disabled when `world.canReroll` is false (only the Heal /
+Star Pouch fallbacks remain), so it is never spent or tapped for nothing.
+
+### 2.1 DOM performance rules (phones)
+
+- No always-on CSS animation outside the compositor: full-screen glow borders
+  (`.sss-border`, `.danger`, `.warn-border`) are `display: none` until `.on` and
+  then animate opacity only; shine sweeps, XP stripes, hazard stripes and cut-in
+  speed lines move by `transform`.
+- HUD writes are diffed; bars are quantised to 1/400 with pre-built transform
+  strings; counters (kills / coins / combo) are written at most 15x per second
+  with tabular digits in fixed-width boxes; the boss bar's ghost catches up after
+  the HP holds for 0.2 s.
+- Juice (combo bump, level pop, coin bump, XP shim, rank stamp / fall / shine) is
+  WAAPI through `dom.ts Bump` (created once, rewound, rate-limited): no class
+  replays, no forced reflow. `replay()` is for one-off non-HUD screens only.
+- Weapon / passive slots are reused nodes; `.xpbar .combo .stats .bossbar .card`
+  carry `contain: layout style`, modals `contain: strict`.
+- UI sprites are encoded and decoded (`img.decode()`) at idle after boot.
+
+### Quality tiers (render/quality.ts)
+
+Every coarse-pointer device starts at `mid`, desktops at `high`. AutoQuality
+judges 2 s windows against the display's own refresh interval (median frame
+time, never slower than 60 Hz): more than 10 % of frames over 1.3x refresh, or
+average JS time above 0.75x refresh, steps down (4 s cooldown); 8 s without a
+bad window with JS under 0.4x refresh steps up (cooldown 8 s + 12 s per earlier
+down-step). DPR caps are 2 / 2.5 / 3 (the scene renders at art resolution, only
+the nearest-neighbour composite scales; the canvas is `image-rendering:
+pixelated`); each step down also lowers the enemy cap and particle budget.
 
 ### Music per state
 
@@ -120,7 +199,8 @@ whose sim runs on clamped frame time.
 | run | `battle` + `setIntensity(enemies, combo rank, boss)` | `App.startRun`, `Feedback.frame` |
 | boss alive | `def.boss.music` (`boss` / `final`) | `feedback.ts bossSpawn`; back to `battle` 2 s of **game time** (`world.t`) after a non-final boss dies (frame time is clamped on slow devices, so it is not used); `App.revived` restores the right one |
 | level-up / chest / pause | (muffled) | `App.openModal` |
-| death | duck, then `gameover` with the DREAM OVER modal | `feedback.ts playerDied`, `App.gameFrame` |
+| run-start stinger | `battle` starts with READY? | `App.startRun` |
+| death | duck, then `gameover` with the DREAM OVER modal (2.0 s after death) | `feedback.ts playerDied`, `App.gameFrame` |
 | boss phase change | duck 1.9 s | `bestiary-fx.ts bossPhase` |
 | victory | `victory` starts at the dawn flash, 1.7 s after the final blow ("DAWN BREAKS!") | `bestiary-fx.ts victory` |
 | results | keeps `victory` / `gameover` | `App.endRun` |
@@ -333,13 +413,17 @@ start weapon and ultimate. The select screen lists `HEROES` automatically.
 | Lightning (bell bolts, chains, Raijin blasts + drum flash), dome bursts, Sugar Nuke shockwave | `weapon-fx.ts` via `weaponFx` events |
 | Dash (afterimages, dust, speed lines, zoom punch) | `WorldView.drawPlayer` (TrailEmitter), `feedback.ts dash` |
 | Ultimate cut-in (dark, speed lines, portrait band, title, voice blips, blast) | `feedback.ts ultCutin/ultStart`, `ui/cutin.ts`, view darkening |
-| Boss warning / name card / bar / death | `feedback.ts boss*`, HUD banners + bar; death throes (flashing, shaking silhouette) in `bestiary-fx.ts` |
+| Boss warning / name card / bar / death | `feedback.ts boss*`, HUD banners + bar; the name card sits on a dark plate with letterbox bars sliding in / out (`hud.ts banner("boss")`): under the boss bar on desktop / landscape (the boss enters from the left there), inside the top letterbox band in portrait (the boss enters top-centre right under the HUD, where a card under the boss bar would sit on it); the WARNING border follows `director.warning` and banner timers pause under modals; death throes (flashing, shaking silhouette) in `bestiary-fx.ts` |
+| Run start: READY? (sim paused 0.6 s, cast pose, HUD fly-in) -> GO! stamp + shake | `App.beginIntro / introFrame`, `hud.ts intro`, `.hud.intro` / `.go-stamp` |
+| Game over: portrait (greyed), "so close" line, RETRY (banks the run) / RESULTS | `screens/over.ts` |
+| Chest payoff: reels land, then flip into level-up style cards; coins count up in the modal | `screens/chest.ts` (`levelup.ts cardHtml`) |
+| Results: victory = battle-cry portrait, defeat = calm face greyed + sweat drop; S / A gold-rainbow grade + shine + burst | `screens/results.ts`, `.grade` |
 | Telegraphs: eye charge glow, pumpkin shiver + red flash + dash lane (chevrons), wisp fuse blink + blast ring, claw-sweep circle | `bestiary-fx.ts decorate`, `WorldView.drawTelegraphs` |
 | Stomps, skids, dust walls, roars, summons, teleports | `bestiary-fx.ts` via `enemyFx` events |
 | Boss phase change (banner, flash, shockwave, speed lines, duck), enrage (WARNING banner, red grade + vignette) | `bestiary-fx.ts bossPhase / bossEnrage / applyGrade` |
 | VICTORY: slow-mo chained explosions up the final boss, dawn flash at 1.7 s, enemies dissolve into light, "DAWN BREAKS!", sunrise grade sweep + sun + god rays, fireworks, victory music, results modal at 7.2 s | `bestiary-fx.ts finalDeath / victory / drawDawn`, `App.gameFrame` |
 | Bullet clears pop every bullet into a sparkle | `bestiary-fx.ts bulletsCleared` |
-| Combo counter, rank stamps, SSS border, milestone blip every 25 (`comboUp`); the timer bar drains faster at high ranks (gold-pink from S), a rank drop replays the letter falling in + a red flinch on the counter + a soft high `comboBreak` | `hud.ts`, `feedback.ts enemyKilled / comboDrop` |
+| Combo counter, rank stamps (one-shot shine inside the glyph's gradient fill), SSS border (opacity crossfade), milestone blip every 25 (`comboUp`); the timer bar drains faster at high ranks (gold-pink from S), a rank drop replays the letter falling in + a red flinch on the counter + a soft high `comboBreak` | `hud.ts` (WAAPI), `feedback.ts enemyKilled / comboDrop` |
 | Peak-chaos readability: adaptive bloom limiter (`r.post.load` from the glow-instance count), fewer sparks / puffs / numbers, fainter + smaller enemy numbers (a screen with 40+ enemy bullets counts as busy too), hero beacon (faint silhouette + ring above player fx, under bullets; also forced on for ~0.5 s when an explosion / Raijin blast lands on the hero, `WorldView.coverHero`), small player shots fade within 16 px of the hero's body (Galaxy Barrage streams spawn there); the beacon redraws the hero's current frame translucent (its plum outline reads over white blasts and pink star clouds), and the live boss gets the same treatment (boss beacon) so it never vanishes under six evolutions | `render/post.ts feedGlow`, `feedback.ts frame()`, `fx/damage.ts busy`, `WorldView.drawHeroBeacon / drawBossBeacon / drawProjectiles` |
 | HUD banners while a boss is alive drop below the hero and shrink (`.banner.low`): Lady Lunatic fights from the upper half, so ENRAGED! / ELITE! / EVOLUTION! never cover her or her bullets | `hud.ts banner()`, `styles.css` |
 | Enemy bullets (`enemyShoot` sfx, rate-limited; pop-in flash, end-of-life fade, moons rotate along velocity) | `World.spawnBullet` emits `enemyShoot` (one reused payload), `WorldView.drawBullets` |
@@ -498,7 +582,7 @@ runs with the limiter on and off (`node scripts/peak.mjs`, shots in `shots/peak/
 | Audio | `src/audio/*` | audio agent; game calls only `audio.*` from `src/audio/index.ts` |
 | Engine | `src/core`, `src/render`, `src/fx` | keep APIs coherent, document in ENGINE.md |
 | Simulation | `src/game/**` | pure; content = new files in the registry folders |
-| View / UI | `src/view/**`, `src/ui/**`, `src/main.ts`, `index.html` | |
+| View / UI | `src/view/**`, `src/ui/**`, `src/main.ts`, `index.html`, `src/render/quality.ts` | |
 | Debug / tests | `src/debug/**`, `tests/**`, `scripts/e2e.mjs`, `scripts/icons.mjs` | |
 
 Parallel content work: one agent per new file in `weapons/`, `enemies/`,
@@ -512,7 +596,8 @@ Parallel content work: one agent per new file in `weapons/`, `enemies/`,
 
 ```
 npm run typecheck
-npm test                       # unit + headless bot runs (all heroes), bosses, ults, determinism, run integrity
+npm test                       # unit + headless bot runs (all heroes), bosses, ults, determinism, run integrity,
+                               # AutoQuality / save validation / fmtNum (tests/quality.test.ts)
                                # (--testTimeout=60000: the full-run sims take 5-9 s on a loaded / CI machine)
 node scripts/e2e.mjs           # desktop + mobile portrait + mobile landscape, screenshots in shots/e2e/
 node scripts/shot.mjs --path "/?autoplay=1&hero=rin&skip=150" --mobile --wait 5000 --out shots/x.png
@@ -523,7 +608,18 @@ npm run build && npm run build:single   # dist/ (Pages) and dist-single/index.ht
 Headless Chromium renders with SwiftShader at ~5 fps; the loop clamps dt to
 1/20 s, so CSS-free timers that run on frame time (feedback `after()`, modal
 tap guards, results counters) advance ~4x slower than wall time in screenshots.
-Wait on game state (`__kk.*`) rather than fixed sleeps in scripts.
+Wait on game state (`__kk.*`) rather than fixed sleeps in scripts. On a shared,
+loaded machine rAF can drop to a few frames per second: for frame-exact checks,
+stop the loop (`__kk.app.loop.stop()`) and drive `__kk.app.frame(1 / 60)` by hand
+(see `shots/fix-b/throttle.mjs`, `feel-go.mjs`, `death-check.mjs`).
+
+UI flow / platform regression scripts (Playwright, scratch, `shots/fix-b/`):
+`cutin-modal.mjs` / `cutin-quit.mjs` (cut-in vs modals), `history.mjs` (Android Back),
+`gamepad.mjs` / `focus.mjs` / `kbnav.mjs` (pause + menu input routing), `save-boot.mjs`
+(broken saves), `warn-modal.mjs`, `ctxloss.mjs`, `throttle.mjs` (modal draw rate),
+`wake-fs.mjs` (wake lock + fullscreen), `touch-tut.mjs` (onboarding), `chest-check.mjs`,
+`death-check.mjs`, `intro-check.mjs`, `results-shots.mjs`, `anims.mjs` (running CSS
+animations during play), `perf-*.mjs` (production build in `shots/fix-b/dist`).
 
 Handy URLs: `/?screen=title`, `/?screen=select`, `/?autoplay=1&skip=185&god=1`
 (boss), `/?fps=1`, `/?seed=42&hero=mochi`. Console: `__kk.levelUp()`,

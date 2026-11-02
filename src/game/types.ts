@@ -169,6 +169,11 @@ export interface Projectile {
   /** Homing turn rate rad/s (0 = none) and current target. */
   homing: number;
   target: Enemy | null;
+  /**
+   * uid of `target` when it was assigned. Enemies are pooled: a dead target's object
+   * is reused by the next spawn, so homing drops a target whose uid no longer matches.
+   */
+  targetUid: number;
   /** Hit shape. r = 0 disables hits. */
   shape: number;
   r: number;

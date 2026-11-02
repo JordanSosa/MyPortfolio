@@ -105,6 +105,12 @@ const CURVES: Record<Curve, number> = { linear: 0, out: 1, in: 2, pop: 3, none: 
 const ACURVES: Record<AlphaCurve, number> = { linear: 0, late: 1, inout: 2, flicker: 3, none: 4 };
 const MODES: Record<FrameMode, number> = { fixed: 0, random: 1, life: 2, loop: 3 };
 
+/** Any of the particle SoA typed arrays (same-typed pairs are copied by setCapacity). */
+interface SoA {
+  set(src: ArrayLike<number>): void;
+  subarray(begin: number, end: number): ArrayLike<number>;
+}
+
 export class Particles {
   capacity: number;
   count = 0;
@@ -198,13 +204,38 @@ export class Particles {
     this.acurve = new Uint8Array(n);
   }
 
-  /** Change capacity (quality tier). Live particles beyond the new capacity are dropped. */
+  /**
+   * Change capacity (quality tier). Live particles are kept (the first
+   * min(count, n) of them, every SoA field copied), so a tier change mid-fight
+   * doesn't make the screen's particles vanish.
+   */
   setCapacity(n: number): void {
     if (n === this.capacity) return;
+    const keep = Math.min(this.count, n);
+    const old = this.arrays();
     this.alloc(n);
+    const neu = this.arrays();
+    for (let i = 0; i < old.length; i++) neu[i].set(old[i].subarray(0, keep));
     this.capacity = n;
-    this.count = 0;
+    this.count = keep;
     this.cursor = 0;
+  }
+
+  /** Every SoA array, in a fixed order (setCapacity copies field by field). */
+  private arrays(): SoA[] {
+    return [
+      this.x, this.y, this.z, this.vx, this.vy, this.vz, this.age, this.life, this.s0, this.s1, this.rot, this.spin,
+      this.grav, this.drag, this.a0, this.stretch, this.asp, this.sway, this.phase, this.bg, this.br, this.bf,
+      this.flashA, this.glowL, this.c0, this.c1, this.h0, this.nf, this.fps, this.mode, this.fr, this.flags,
+      this.layer, this.scurve, this.acurve,
+    ];
+  }
+
+  /** Read a live particle's position (tests / debug). */
+  position(i: number, out: { x: number; y: number }): { x: number; y: number } {
+    out.x = this.x[i];
+    out.y = this.y[i];
+    return out;
   }
 
   clear(): void {

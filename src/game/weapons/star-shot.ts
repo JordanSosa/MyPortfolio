@@ -30,6 +30,7 @@ function fireStar(w: World, inst: WeaponInstance, S: WStats, index: number): voi
   p.vy = Math.sin(a) * S.speed;
   p.homing = 7.5;
   p.target = target;
+  p.targetUid = target ? target.uid : 0;
   p.r = 5;
   p.dmg = S.dmg;
   p.pierce = S.pierce;

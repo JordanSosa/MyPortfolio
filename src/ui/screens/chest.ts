@@ -1,18 +1,25 @@
 /**
  * Chest opening (DESIGN §2.4): the chest shakes, light beams leak out, the
  * lid bursts, then a slot reel per reward spins and lands (1 / golden 3 /
- * JACKPOT 5). Rewards are applied by world.openChest() when the lid bursts.
- * Tap / confirm skips the spin; continue needs a fresh touch.
+ * JACKPOT 5). When the reels have landed, each reward flips into a level-up
+ * style card (rarity frame, name, Lv a -> b, description, pips; rainbow frame
+ * for evolutions) and the coins count up inside the modal. A single reward
+ * gets a big reel. Rewards are applied by world.openChest() when the lid
+ * bursts. Tap / confirm skips ahead; continue needs a fresh touch.
  */
 import { PASSIVES } from "../../game/passives";
 import { WEAPONS } from "../../game/registry";
 import type { ChestResult } from "../../game/types";
 import type { World } from "../../game/world";
 import type { App, UiScreen } from "../app";
-import { esc, h, sprite } from "../dom";
+import { esc, h, img, sprite } from "../dom";
 import { layer } from "./common";
+import { cardHtml } from "./levelup";
 
-const CELL_EM = 6.4;
+/** Seconds between the last reel landing and the card reveal. */
+const REVEAL_DELAY = 0.35;
+/** Coin count-up duration (s). */
+const COIN_COUNT = 0.7;
 
 export function openChestModal(app: App, w: World): UiScreen {
   const golden = w.pendingChests[0]?.golden ?? false;
@@ -27,19 +34,27 @@ export function openChestModal(app: App, w: World): UiScreen {
     </div>
     <div class="jp"></div>
     <div class="reels"></div>
+    <div class="cards chest-cards"></div>
+    <div class="chest-coins">${img("icon_coin")}<span>+<b>0</b></span></div>
     <div class="cont">TAP TO CONTINUE</div>`;
   app.ui.appendChild(el);
   const stage = el.querySelector(".chest-stage") as HTMLElement;
   const chImg = el.querySelector(".ch img") as HTMLImageElement;
   const reels = el.querySelector(".reels") as HTMLElement;
+  const cardsEl = el.querySelector(".chest-cards") as HTMLElement;
+  const coinsEl = el.querySelector(".chest-coins") as HTMLElement;
+  const coinsN = el.querySelector(".chest-coins b") as HTMLElement;
   const cont = el.querySelector(".cont") as HTMLElement;
   const jp = el.querySelector(".jp") as HTMLElement;
   let t = 0;
-  let phase = 0; // 0 shaking, 1 spinning, 2 done
+  /** 0 shaking, 1 spinning, 2 landed (reveal pending), 3 cards shown */
+  let phase = 0;
   let res: ChestResult | null = null;
   let landAt: number[] = [];
   let landed = 0;
   let tickT = 0;
+  let landedT = 0;
+  let coinT = -1;
   let closed = false;
   app.sfx("chestOpen");
 
@@ -60,6 +75,8 @@ export function openChestModal(app: App, w: World): UiScreen {
       jp.innerHTML = `<div class="jackpot">JACKPOT!</div>`;
       app.sfx("chestJackpot");
     }
+    el.classList.toggle("single", rewards.length <= 1);
+    el.classList.toggle("many", rewards.length > 1);
     reels.innerHTML = rewards
       .map((r, i) => {
         const n = 14 + i * 5;
@@ -77,7 +94,7 @@ export function openChestModal(app: App, w: World): UiScreen {
         const strip = rl.querySelector(".strip") as HTMLElement;
         const n = Number(strip.dataset.n);
         strip.style.transition = `transform ${landAt[i]}s cubic-bezier(0.15, 0.6, 0.25, 1)`;
-        strip.style.transform = `translateY(-${n * CELL_EM}em)`;
+        strip.style.transform = `translateY(calc(var(--cell) * ${-n}))`;
       });
     });
     t = 0;
@@ -87,13 +104,26 @@ export function openChestModal(app: App, w: World): UiScreen {
     reels.querySelectorAll<HTMLElement>(".reel").forEach((rl) => {
       const strip = rl.querySelector(".strip") as HTMLElement;
       strip.style.transition = "none";
-      strip.style.transform = `translateY(-${Number(strip.dataset.n) * CELL_EM}em)`;
+      strip.style.transform = `translateY(calc(var(--cell) * ${-Number(strip.dataset.n)}))`;
       rl.classList.add("landed");
     });
     landed = landAt.length;
     phase = 2;
+    landedT = 0;
+  };
+
+  /** The reels flip into full reward cards; the coins count up under them. */
+  const reveal = () => {
+    phase = 3;
+    const rewards = res?.rewards ?? [];
+    cardsEl.innerHTML = rewards.map((r, i) => cardHtml(r, i, false)).join("");
+    el.classList.add("revealed");
+    if (res && res.coins > 0) {
+      coinsEl.classList.add("on");
+      coinT = 0;
+    }
+    for (let i = 0; i < rewards.length; i++) setTimeout(() => app.sfx("cardFlip", 0.7, i * 2), 90 + i * 110);
     cont.classList.add("on");
-    if (res && res.coins > 0) app.toast(`+${res.coins} coins`);
   };
 
   const proceed = () => {
@@ -101,7 +131,12 @@ export function openChestModal(app: App, w: World): UiScreen {
     if (phase === 0) return;
     if (phase === 1) {
       finishSpin();
+      reveal();
       app.sfx("cardPick");
+      return;
+    }
+    if (phase === 2) {
+      reveal();
       return;
     }
     closed = true;
@@ -126,6 +161,12 @@ export function openChestModal(app: App, w: World): UiScreen {
     },
     update(dt) {
       t += dt;
+      if (coinT >= 0 && res) {
+        coinT += dt;
+        const k = Math.min(1, coinT / COIN_COUNT);
+        coinsN.textContent = String(Math.round(res.coins * (1 - (1 - k) * (1 - k))));
+        if (k >= 1) coinT = -1;
+      }
       if (phase >= 1 && t > 0.3 && (app.input.pressed("confirm") || app.input.pressed("dash"))) {
         proceed();
         return;
@@ -154,7 +195,12 @@ export function openChestModal(app: App, w: World): UiScreen {
         if (landed >= landAt.length && t > (landAt[landAt.length - 1] ?? 0) + 0.25) finishSpin();
         return;
       }
-      if (app.params.autoplay && t > (landAt[landAt.length - 1] ?? 0) + 1.2) proceed();
+      if (phase === 2) {
+        landedT += dt;
+        if (landedT >= REVEAL_DELAY) reveal();
+        return;
+      }
+      if (app.params.autoplay && t > (landAt[landAt.length - 1] ?? 0) + 1.6) proceed();
     },
   };
 }

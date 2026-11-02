@@ -11,6 +11,7 @@ import { clamp, easeOutBack, springStep } from "../core/math";
 import { P, TrailEmitter, type Fx } from "../fx";
 import { Flag, Layer } from "../render/layers";
 import type { Renderer } from "../render/renderer";
+import { GRADES, lerpGrade } from "../render/post";
 import { PK_FALL } from "../game/types";
 import type { World } from "../game/world";
 import { Anims } from "./anims";
@@ -76,6 +77,16 @@ export class WorldView {
   private bossFlash = 0;
   /** Extra transient slash lines (Rin ult) drawn by the view. */
   private lines: { x0: number; y0: number; x1: number; y1: number; t: number }[] = [];
+  /** Real seconds since the hero went down (-1 = alive): knock-down tween + unoccluded death pose. */
+  private deadT = -1;
+  /**
+   * Death beat colour fade 0..1 (Feedback eases it while the hero is down): the frame
+   * eases toward GRADES.dim on top of whatever grade is active (day / night / boss
+   * overrides), applied at the end of draw().
+   */
+  deathK = 0;
+  /** In-world banners draw after the damage numbers (DamageNumbers.after hook, set every frame). */
+  private readonly lateTexts = (): void => this.texts.draw(this.w.player.x, this.w.player.y);
 
   constructor(
     private readonly r: Renderer,
@@ -151,16 +162,20 @@ export class WorldView {
     this.drawPickups(time);
     this.drawGems(time);
     this.drawEnemies(time);
-    this.drawPlayer(time, dt);
+    this.drawPlayer(time, dt, realDt);
     this.weaponFx.draw(time, dt);
     this.drawProjectiles(time);
     this.drawHeroBeacon(time, realDt);
     this.drawBossBeacon();
     this.drawBullets(time);
+    this.drawDeadHero();
     this.bestiary.draw(time, dt, realDt);
     this.drawLines(realDt);
     this.texts.update(realDt);
-    this.texts.draw(w.player.x, w.player.y);
+    // banners ("MAGNET!", "BOOM!") go on top of the damage numbers: drawn at the end of fx.dmg.draw()
+    this.fx.dmg.after = this.lateTexts;
+    // death beat: desaturate / dim on top of the active grade (bestiary overrides included)
+    if (this.deathK > 0) lerpGrade(r.post.grade, GRADES.dim, Math.min(1, this.deathK), r.post.grade);
     // overlays
     if (w.freezeT > 0) {
       const a = Math.min(1, w.freezeT * 2) * 0.16;
@@ -179,6 +194,9 @@ export class WorldView {
     const frozen = w.freezeT > 0 || w.timeStop;
     const cam = r.camera;
     this.bossSeen = false;
+    // hero down: enemies right on top of her fade so the death pose reads
+    const pl = w.player;
+    const down = pl.dead;
     for (let i = 0; i < w.enemies.count; i++) {
       const e = items[i];
       if (e.dead) continue;
@@ -202,12 +220,19 @@ export class WorldView {
       r.shadow(e.x, e.y, def.shadow * e.scale * (1 - Math.min(0.4, e.z / 30)), def.prop ? 0.8 : 1);
       const tint = frozen ? C.lightBlue : 0xffffff;
       const flash = e.flash > 0 ? 1 : 0;
+      let ea = e.alpha;
+      if (down) {
+        const dx = e.x - pl.x;
+        const dy = e.y - e.cy - (pl.y - 8);
+        const rr = 40 + e.r;
+        if (dx * dx + dy * dy < rr * rr) ea *= 0.5;
+      }
       if (e.elite || def.boss) {
         // pulsing rainbow OUTLINE: four 1px-offset tinted silhouettes just behind the
         // sprite (sort key a hair smaller) so the enemy itself stays fully readable.
         const c = e.elite ? rainbow(time * 0.8 + e.uid * 0.1, 0.7) : C.pink;
         const pulse = 0.6 + 0.4 * Math.sin(time * 6 + e.uid);
-        const oa = (def.boss ? 0.45 : 0.95) * pulse * e.alpha;
+        const oa = (def.boss ? 0.45 : 0.95) * pulse * ea;
         r.batch.sortKey = y - 0.01;
         // (no Glow flag: the glow buffer can't see the sprite on top, so glowing copies would
         // bloom over the whole body and wash it out - the soft halo below carries the glow)
@@ -228,12 +253,12 @@ export class WorldView {
         this.bossY = y;
         this.bossSx = sx;
         this.bossSy = sy;
-        this.bossA = e.alpha;
+        this.bossA = ea;
         this.bossTint = tint;
         this.bossFlash = flash;
       }
       if (this.bestiary.decorate(e, h, sx, sy, y, time, tint, flash)) continue;
-      r.spr(Layer.Entity, h, e.x, y, sx, sy, 0, tint, e.alpha, flash, 0);
+      r.spr(Layer.Entity, h, e.x, y, sx, sy, 0, tint, ea, flash, 0);
     }
   }
 
@@ -251,11 +276,16 @@ export class WorldView {
   }
 
   // ---------------------------------------------------------------- player
-  private drawPlayer(time: number, dt: number): void {
+  private drawPlayer(time: number, dt: number, realDt: number): void {
     const r = this.r;
     const w = this.w;
     const p = w.player;
     const H = this.hero;
+    if (p.dead) this.deadT = this.deadT < 0 ? 0 : this.deadT + realDt;
+    else {
+      this.deadT = -1;
+      this.landed = false;
+    }
     springStep(this.heroSq, 1, 300, 15, Math.min(dt, 1 / 30));
     const u = w.ult;
     let h: number;
@@ -282,7 +312,8 @@ export class WorldView {
       const c = rainbow(time * 0.9, 0.6);
       r.glow(p.x, p.y - 10, 18 + 2 * Math.sin(time * 6), c, 0.3);
     }
-    r.spr(Layer.Entity, h, p.x, p.y, sx, sy, 0, 0xffffff, alpha, p.hurtT > 0.22 ? 0.85 : 0, 0);
+    // (down: drawn above the enemies by drawDeadHero instead)
+    if (!p.dead) r.spr(Layer.Entity, h, p.x, p.y, sx, sy, 0, 0xffffff, alpha, p.hurtT > 0.22 ? 0.85 : 0, 0);
     this.heroH = h;
     this.heroSx = sx;
     this.heroSy = sy;
@@ -310,6 +341,36 @@ export class WorldView {
   }
 
   /**
+   * The hero is down: her hurt frame, never hidden by the killer - drawn above the
+   * enemies and the player's fx (Bullets layer) at full alpha with a dark plum
+   * outline (4 one-pixel offset silhouettes), knocked down over 0.5 s (a 6 px hop,
+   * a quarter turn onto her side, a dust puff on landing).
+   */
+  private drawDeadHero(): void {
+    const t = this.deadT;
+    if (t < 0) return;
+    const r = this.r;
+    const p = this.w.player;
+    const k = Math.min(1, t / KNOCK_T);
+    const hop = Math.sin(Math.min(1, k / 0.8) * Math.PI) * 6;
+    // falls backward (away from where she faced), easing out
+    const rot = -p.face * (Math.PI / 2) * (1 - (1 - k) * (1 - k) * (1 - k));
+    const x = p.x;
+    const y = p.y - hop;
+    const h = this.heroH;
+    const sx = this.heroSx;
+    const sy = this.heroSy;
+    for (let i = 0; i < 4; i++) r.spr(Layer.Bullets, h, x + OUT_X[i], y + OUT_Y[i], sx, sy, rot, C.outline, 1, 1, 0);
+    r.spr(Layer.Bullets, h, x, y, sx, sy, rot, 0xffffff, 1, 0, 0);
+    if (t >= KNOCK_T && !this.landed) {
+      this.landed = true;
+      this.fx.ps.emit(P.dust, p.x, p.y, 8, NaN, -1, 1.1, 1.4);
+    }
+  }
+  /** The knock-down landing puff fired (reset when the hero is up again). */
+  private landed = false;
+
+  /**
    * Peak-chaos readability: when the adaptive bloom limiter reports a crowded
    * screen (r.post.load) or a blast just landed on the hero (coverHero), the
    * hero's current frame is redrawn translucent + a thin ring above the
@@ -324,9 +385,15 @@ export class WorldView {
     const k = Math.max(load < 0.2 ? 0 : Math.min(1, (load - 0.2) / 0.5), Math.min(1, this.coverT / 0.2));
     if (k <= 0 || p.dead || !this.heroHud) return;
     const q = 0.5 + 0.5 * Math.sin(time * 5);
-    // the hero's own current frame (dark plum outline: reads over white blasts and pink star clouds alike)
-    this.r.spr(Layer.Bullets, this.heroH, p.x, p.y, this.heroSx, this.heroSy, 0, 0xffffff, (0.5 + 0.12 * q) * k * this.heroA, 0.1, 0);
-    this.r.ring(Layer.Bullets, p.x, p.y - 8, 13, this.w.hero.color, (0.35 + 0.2 * q) * k, 0, false);
+    const r = this.r;
+    // the hero's own current frame (dark plum outline: reads over white blasts and pink star clouds alike).
+    // Late game the evolved beams / star streams converge on her: near-opaque + a 1 px plum outline pass
+    const heavy = clamp((load - 0.5) / 0.2, 0, 1);
+    const a = ((0.5 + 0.12 * q) * (1 - heavy) + 0.85 * heavy) * k * this.heroA;
+    if (heavy > 0)
+      for (let i = 0; i < 4; i++) r.spr(Layer.Bullets, this.heroH, p.x + OUT_X[i], p.y + OUT_Y[i], this.heroSx, this.heroSy, 0, C.outline, a * heavy, 1, 0);
+    r.spr(Layer.Bullets, this.heroH, p.x, p.y, this.heroSx, this.heroSy, 0, 0xffffff, a, 0.1 * (1 - heavy), 0);
+    r.ring(Layer.Bullets, p.x, p.y - 8, 13, this.w.hero.color, (0.35 + 0.2 * q) * k, 0, false);
   }
 
   /** A big blast just burst on top of the hero: show the beacon for `sec` even on a calm screen. */
@@ -569,6 +636,9 @@ export class WorldView {
     }
   }
 }
+
+/** Hero knock-down tween on death (real seconds). */
+const KNOCK_T = 0.5;
 
 /** Radius (art px) around the hero's body inside which small player shots fade (drawProjectiles). */
 const HERO_CLEAR = 16;

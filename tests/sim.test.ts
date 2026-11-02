@@ -4,7 +4,8 @@
  */
 import { describe, expect, test } from "vitest";
 import { Bot, simulate } from "../src/debug/bot";
-import { CFG } from "../src/game/config";
+import { CFG, CH_ULT } from "../src/game/config";
+import { BOSSES } from "../src/game/registry";
 import { HERO_IDS } from "../src/game/heroes";
 import { World } from "../src/game/world";
 
@@ -42,7 +43,7 @@ describe.each(HERO_IDS)("3-minute run: %s", (hero) => {
     // either survived to 3:00 or died (bot) - but it must have played a real run
     expect(w.t).toBeGreaterThan(deaths > 0 ? 30 : 179.9);
     expect(firstLevel).toBeGreaterThan(0);
-    expect(firstLevel).toBeLessThan(10); // DESIGN: first level-up inside ~8 s
+    expect(firstLevel).toBeLessThan(8); // DESIGN pillar: first level-up inside 8 s
     expect(w.level).toBeGreaterThanOrEqual(8);
     expect(w.kills).toBeGreaterThan(250);
     expect(hits).toBeGreaterThan(w.kills);
@@ -146,4 +147,38 @@ test("3:00 boss: WARNING, King Puff enters, slams (telegraph + bullets), dies in
   expect(seen.golden).toBe(1);
   expect(w.boss).toBeNull();
   expect(seen.telegraph + maxBullets).toBeGreaterThan(0);
+});
+
+describe("victory while the Overdrive is active", () => {
+  test.each(HERO_IDS)("%s: the final boss falls mid-ult -> the ult closes (no stuck time-stop, cast pose, frozen cats / meteors)", (hero) => {
+    const H = 1 / 60;
+    const w = new World({ hero, seed: 11, god: true });
+    w.director.warnBoss(BOSSES.get("lady_lunatic")!, 0);
+    w.director.warning!.t = 0;
+    for (let i = 0; i < 10 && !w.boss; i++) w.step(H);
+    const lady = w.boss!;
+    expect(lady.def.id).toBe("lady_lunatic");
+    for (let i = 0; i < 120; i++) w.step(H);
+    let ultEnd = 0;
+    w.bus.on("ultEnd", () => ultEnd++);
+    w.addUlt(100);
+    w.input.ult = true;
+    w.step(H);
+    for (let i = 0; i < 200 && w.ult?.phase === "cutin"; i++) w.step(H);
+    expect(w.ult?.phase).toBe("active");
+    for (let i = 0; i < 12; i++) w.step(H); // 0.2 s in (Rin: time is stopped; cats / meteors in flight)
+    lady.inv = 0;
+    w.hitEnemy(lady, lady.hp * 2, null, 0, 0, 0, "weapon", 0xffffff); // a weapon lands the final blow
+    expect(w.phase).toBe("victory");
+    for (let i = 0; i < 60 * 8; i++) w.step(H); // the dawn sequence
+    expect(w.ult).toBeNull();
+    expect(w.timeStop).toBe(false);
+    expect(ultEnd).toBe(1);
+    let ultProjs = 0;
+    for (let i = 0; i < w.projectiles.count; i++) {
+      const p = w.projectiles.items[i];
+      if (!p.dead && (p.ch === CH_ULT || p.source === w.hero.ult)) ultProjs++;
+    }
+    expect(ultProjs).toBe(0);
+  });
 });

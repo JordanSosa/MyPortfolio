@@ -20,6 +20,9 @@ import { TouchControls } from "./touch";
 export type Action = "dash" | "ult" | "pause" | "confirm" | "back" | "up" | "down" | "left" | "right";
 export type Device = "keyboard" | "gamepad" | "touch" | "mouse";
 
+/** Haptic pulses: at least HAPTIC_MIN ms (shorter can't be felt), at most one per HAPTIC_GAP ms. */
+const HAPTIC_MIN = 20;
+const HAPTIC_GAP = 50;
 const ACTIONS: readonly Action[] = ["dash", "ult", "pause", "confirm", "back", "up", "down", "left", "right"];
 const A: Record<Action, number> = { dash: 0, ult: 1, pause: 2, confirm: 3, back: 4, up: 5, down: 6, left: 7, right: 8 };
 const NA = ACTIONS.length;
@@ -221,18 +224,31 @@ export class Input {
     // unknown pointer (e.g. Safari click MouseEvent): fresh if any pointer went down since stale
     return this.lastDownSeq > this.staleSeq;
   }
-  /** Short vibration (ms) if supported and enabled. */
+  /**
+   * Short vibration (ms) if supported and enabled. Single pulses are at least
+   * HAPTIC_MIN ms (shorter ones can't be felt on most phones) and at most one per
+   * HAPTIC_GAP ms (a burst of hits would otherwise buzz continuously); patterns
+   * pass through unchanged.
+   */
   haptic(ms: number | number[]): void {
     if (!this.haptics) return;
     // Chrome logs an intervention error if vibrate() runs before any user gesture
     const ua = (navigator as Navigator & { userActivation?: { hasBeenActive: boolean } }).userActivation;
     if (ua && !ua.hasBeenActive) return;
+    let pulse: number | number[] = ms;
+    if (typeof ms === "number") {
+      const now = performance.now();
+      if (now - this.hapticAt < HAPTIC_GAP) return;
+      this.hapticAt = now;
+      pulse = Math.max(HAPTIC_MIN, ms);
+    }
     try {
-      navigator.vibrate?.(ms);
+      navigator.vibrate?.(pulse);
     } catch {
       /* ignore */
     }
   }
+  private hapticAt = -1e9;
 
   /** Poll devices and latch edges. Call once per frame before reading. */
   update(): void {
@@ -375,6 +391,8 @@ export class Input {
     });
     this.listen("gamepaddisconnected", () => {
       this.gpConnected = Array.from(navigator.getGamepads?.() ?? []).some((p) => !!p);
+      // a pad yanked mid-hold must not leave DASH / OVERDRIVE (or a direction) latched
+      this.releaseGamepad();
     });
 
     // ---- pointers (capture phase bookkeeping for fresh-touch tracking)
@@ -500,9 +518,21 @@ export class Input {
     if (e.pointerId === this.stickId) this.releaseStick();
   }
 
+  /** Forget every gamepad hold (disconnect / no pad left): no latched buttons, no stale edges. */
+  private releaseGamepad(): void {
+    this.gpMove.x = this.gpMove.y = 0;
+    this.gpStickNav.x = this.gpStickNav.y = 0;
+    for (let i = 0; i < NA; i++) {
+      // drop a pending edge that only the pad produced (not also held on keyboard / touch)
+      if (this.holdGp[i] && !this.holdKb[i] && !this.holdTouch[i]) this.pend[i] = 0;
+    }
+    this.holdGp.fill(0);
+    this.gpPrev.fill(0);
+  }
+
   private pollGamepad(dt: number): void {
     if (!this.gpConnected || typeof navigator === "undefined" || !navigator.getGamepads) {
-      this.gpMove.x = this.gpMove.y = 0;
+      this.releaseGamepad();
       return;
     }
     const pads = navigator.getGamepads();
@@ -515,7 +545,7 @@ export class Input {
       }
     }
     if (!pad) {
-      this.gpMove.x = this.gpMove.y = 0;
+      this.releaseGamepad();
       return;
     }
     const btn = (i: number) => {

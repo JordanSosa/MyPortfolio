@@ -16,6 +16,13 @@ export const CFG = {
   dashCd: 1.2,
   // pickups
   pickupRadius: 24,
+  /**
+   * Early-game "starter vacuum": while the hero is below Lv 3 and in the first
+   * starterVacuumTime seconds, gems within this radius (px) home in, so the first
+   * level-ups land within a few seconds even for a hero standing still / running away.
+   */
+  starterVacuum: 110,
+  starterVacuumTime: 30,
   gemStartSpeed: 60,
   gemAccel: 600,
   collectRadius: 7,
@@ -93,8 +100,9 @@ export const CFG = {
 } as const;
 
 /**
- * XP needed to go from level L to L+1 (piecewise linear). The cost grows by 10 per
- * level up to Lv 6 (Lv 2 after 5 XP, a few seconds in), 38 per level to Lv 12 (the
+ * XP needed to go from level L to L+1 (piecewise linear). Lv 2 costs only 3 XP (the
+ * first level-up lands a few seconds in, with the starter vacuum CFG.starterVacuum),
+ * then the cost grows by 10 per level up to Lv 6 (15 XP for Lv 3), 38 per level to Lv 12 (the
  * starter build forms), only 12 per level to Lv 22 (level-ups keep coming every
  * ~8-12 s while the horde and the bosses ramp up), then 72 and 132 per level from
  * Lv 22 / 38: a snowballed build can't turn the late game into a modal every few
@@ -102,6 +110,7 @@ export const CFG = {
  */
 export function xpToNext(level: number): number {
   const L = Math.max(1, Math.floor(level));
+  if (L === 1) return 3;
   return 5 + (L - 1) * 10 + Math.max(0, L - 6) * 28 - Math.max(0, L - 12) * 26 + Math.max(0, L - 22) * 60 + Math.max(0, L - 38) * 60;
 }
 

@@ -10,6 +10,7 @@ import type { Enemy, EnemyDef } from "../types";
 import type { World } from "../world";
 import { EVENT_HANDLERS } from "./events";
 import { EFX_SUMMON, efx } from "../enemies/_fx";
+import { minBossFeetY } from "../bosses/_entrance";
 import { EVENTS, phaseAt, type SpawnPhase, type TimelineEvent } from "./timeline";
 
 type Task = (dt: number) => boolean;
@@ -28,6 +29,11 @@ export const ADAPT_FLOOR = 0.55;
 export const ADAPT_MAX = 1.5;
 const ADAPT_UP = 0.03;
 const ADAPT_DOWN = 0.02;
+/**
+ * Boss entrance beat (s): no new spawns while the name card plays (enemies already
+ * on screen keep fighting), so the boss arrives into a moment of focus.
+ */
+export const BOSS_INTRO = 1.6;
 
 export class Director {
   /** Spawn-rate multiplier (bosses reduce it while alive). */
@@ -43,6 +49,8 @@ export class Director {
   enraged = false;
   /** Boss currently in its WARNING countdown. */
   warning: { def: EnemyDef; t: number; mul: number } | null = null;
+  /** Seconds left of the boss entrance beat (BOSS_INTRO): continuous spawning pauses. */
+  introT = 0;
   private acc = 0;
   private nextEvent = 0;
   private propT = 8;
@@ -88,16 +96,18 @@ export class Director {
       }
     }
 
-    // continuous spawning
+    // continuous spawning (paused while a boss makes its entrance)
+    if (this.introT > 0) this.introT = Math.max(0, this.introT - dt);
+    const intro = this.introT > 0 ? 0 : 1;
     const ph = phaseAt(w.t);
     const k = ph.to > ph.from && ph.to < 1e8 ? (w.t - ph.from) / (ph.to - ph.from) : 1;
     const cap = Math.min(ph.max, w.maxEnemies);
-    let rate = lerp(ph.rate[0], ph.rate[1], Math.min(1, Math.max(0, k))) * this.spawnMul;
+    let rate = lerp(ph.rate[0], ph.rate[1], Math.min(1, Math.max(0, k))) * this.spawnMul * intro;
     // pressure floor: a strong build shouldn't empty the screen - refill faster when sparse
-    const floor = cap * MIN_ALIVE * this.spawnMul;
+    const floor = cap * MIN_ALIVE * this.spawnMul * intro;
     const deficit = w.enemyCount < floor ? 1 - w.enemyCount / floor : 0;
     if (deficit > 0) rate *= 1 + 3 * deficit;
-    if (w.t >= ADAPT_FROM) {
+    if (w.t >= ADAPT_FROM && intro) {
       const af = cap * ADAPT_FLOOR * this.spawnMul;
       if (w.enemyCount < af) this.adapt = Math.min(ADAPT_MAX, this.adapt + ADAPT_UP * (1 - w.enemyCount / af) * dt);
       else this.adapt = Math.max(0, this.adapt - ADAPT_DOWN * dt);
@@ -217,8 +227,15 @@ export class Director {
     }
     const e = w.spawnEnemy(def, p.x, p.y - w.viewH * 0.5 - 30);
     if (!e || !def.boss) return;
+    // enter on screen, right under the HUD (bosses/_entrance.ts): the name card plays over the boss, not
+    // over empty meadow (sprite top = feet - body height - hover z; init() has set z). Wide landscape views have little
+    // room above the hero, so the boss comes in from the left side there (the touch buttons sit bottom-right).
+    e.y = minBossFeetY(w, e.cy * 2 + e.z);
+    if (w.viewW > w.viewH * 1.2) e.x = p.x - w.viewW * 0.32;
+    e.face = e.x < p.x ? 1 : -1;
     w.boss = e;
     this.spawnMul = mul;
+    this.introT = BOSS_INTRO;
     w.emit("bossSpawn", { enemy: e, title: def.boss.title, subtitle: def.boss.subtitle });
   }
 

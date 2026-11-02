@@ -4,6 +4,8 @@ import { Rng } from "../src/core/rng";
 import { SpatialHash } from "../src/core/spatial";
 import { EventBus } from "../src/core/events";
 import { PooledList } from "../src/core/pool";
+import { Particles, type EmitterDef } from "../src/fx/particles";
+import type { Renderer } from "../src/render/renderer";
 
 describe("math", () => {
   test("clamp / lerp", () => {
@@ -106,5 +108,34 @@ describe("events + pools", () => {
     expect(l.count).toBe(1);
     const c = l.spawn();
     expect(c).toBe(a);
+  });
+});
+
+describe("particles", () => {
+  test("setCapacity keeps live particles (a quality-tier change mid-fight doesn't wipe the screen)", () => {
+    // headless: only the atlas lookup of the emitter's sprite is needed
+    const r = { atlas: { info: () => ({ first: 0, count: 1, fps: 0 }) } } as unknown as Renderer;
+    const ps = new Particles(r, 1500);
+    const def: EmitterDef = { sprite: "fx_px", speed: [0, 0], life: [5, 5] };
+    for (let i = 0; i < 500; i++) ps.emit(def, i, 1000 - i, 1);
+    expect(ps.count).toBe(500);
+    const at = { x: 0, y: 0 };
+    ps.setCapacity(3000);
+    expect(ps.capacity).toBe(3000);
+    expect(ps.count).toBe(500);
+    for (const i of [0, 1, 250, 499]) {
+      ps.position(i, at);
+      expect(at.x).toBe(i);
+      expect(at.y).toBe(1000 - i);
+    }
+    ps.update(0.1);
+    expect(ps.count).toBe(500); // still alive (5 s life), ages copied too
+    ps.setCapacity(200);
+    expect(ps.count).toBe(200);
+    ps.position(199, at);
+    expect(at.x).toBe(199);
+    // and it keeps emitting into the smaller pool
+    ps.emit(def, 7, 7, 10);
+    expect(ps.count).toBe(200);
   });
 });

@@ -9,8 +9,15 @@
  *   music players (dly) -> pingpong delay -/
  *
  * SFX are rate-limited per id, capped per id and globally (oldest / lowest
- * priority voice is stolen with a short fade). Music is scheduled by Player
- * objects; the engine crossfades between them.
+ * priority voice is stolen with a short fade). Low-priority gameplay sounds
+ * (hits, deaths, gems, coins, weapon shots: pri <= 1 and not `free`, plus the
+ * spammy `budget` weapon booms) also share a global new-voice budget
+ * (LOW_PER_FRAME per 1/60 s window, LOW_PER_SECOND on average, at most
+ * LOW_ID_PER_SECOND of it for any one id): a late-game fight would otherwise
+ * build ~1,300 WebAudio nodes a second. UI, level-up, boss, ult, player and
+ * telegraph sounds never touch it. A trigger that is rate-limited away instead
+ * nudges the id's newest voice up (max +3 dB), so a cluster still sounds bigger.
+ * Music is scheduled by Player objects; the engine crossfades between them.
  */
 import type { MusicTrack, SfxId, SfxOpts } from "./api";
 import { makeDelay, makeMaster, makeReverb, type Delay, type Master, type Reverb } from "./fxchain";
@@ -21,6 +28,20 @@ import { SFX } from "./sfx";
 import { kitFor, semis, Voice, type Kit } from "./synth";
 
 export const MAX_VOICES = 24;
+/** Global budget for new low-priority voices: per 1/60 s window, and a token bucket per second. */
+export const LOW_PER_FRAME = 3;
+export const LOW_PER_SECOND = 16;
+const LOW_BURST = 8;
+/** Fair share inside the budget: one id gets at most LOW_ID_PER_SECOND of it (hits can't starve kill pops). */
+export const LOW_ID_PER_SECOND = 4;
+const LOW_ID_BURST = 3;
+/** `budget` ids (higher-priority weapon booms) skip the shared pool but get at most this many voices per second. */
+const BOOM_ID_PER_SECOND = 3;
+/** A rate-limited trigger bumps the id's newest voice by this factor, up to +3 dB in total. */
+const MERGE_BUMP = 1.12;
+const MERGE_MAX = 1.413;
+/** |pan| below this plays centred (no StereoPanner node). */
+const PAN_MIN = 0.15;
 /** music scheduling window (s) */
 export const LOOKAHEAD = 0.15;
 
@@ -35,6 +56,9 @@ interface Active {
   out: GainNode;
   srcs: AudioScheduledSourceNode[];
   stolen: boolean;
+  /** Initial output gain, and how much merged triggers have raised it (x, <= MERGE_MAX). */
+  vol: number;
+  bump: number;
 }
 
 const compiled = new Map<string, CSong>();
@@ -70,6 +94,18 @@ export class Engine {
   private readonly musicDly: Delay;
   private voices: Active[] = [];
   private last = new Map<SfxId, number>();
+  /** Newest voice per id (merge target for rate-limited triggers). */
+  private newest = new Map<SfxId, Active>();
+  // low-priority budget: current 1/60 s window + token bucket
+  private lowWin = -1;
+  private lowWinN = 0;
+  private lowTokens = LOW_BURST;
+  private lowT = 0;
+  /** Per-id share of the low-priority budget: [tokens, last refill time]. */
+  private lowId = new Map<SfxId, [number, number]>();
+  /** Triggers dropped by the low-priority budget, and voices started, per id (debug / probes). */
+  readonly budgetDrops: Partial<Record<SfxId, number>> = {};
+  readonly started: Partial<Record<SfxId, number>> = {};
   private players: Player[] = [];
   private current: Player | null = null;
   track: MusicTrack = "none";
@@ -102,7 +138,8 @@ export class Engine {
     this.sfxVol.connect(this.masterGain);
     this.sfxIn = ctx.createGain();
     this.sfxIn.connect(this.sfxVol);
-    this.sfxRev = makeReverb(ctx, this.sfxVol, 1.1, 2.2, 0.55, 0.7, 7);
+    // (realtime: the impulses are built in later macrotasks, so the unlock gesture stays short)
+    this.sfxRev = makeReverb(ctx, this.sfxVol, 1.1, 2.2, 0.55, 0.7, 7, this.realtime ? 30 : -1);
 
     this.duckGain = ctx.createGain();
     this.duckGain.connect(this.masterGain);
@@ -116,7 +153,7 @@ export class Engine {
     this.musicVol.connect(this.musicLP);
     this.musicIn = ctx.createGain();
     this.musicIn.connect(this.musicVol);
-    this.musicRev = makeReverb(ctx, this.musicIn, 1.8, 2.4, 0.75, 0.55, 3);
+    this.musicRev = makeReverb(ctx, this.musicIn, 1.8, 2.4, 0.75, 0.55, 3, this.realtime ? 60 : -1);
     this.musicDly = makeDelay(ctx, this.musicIn, 0.3, 0.38, 0.55);
   }
 
@@ -173,7 +210,16 @@ export class Engine {
     this.prune(now);
     const pri = def.pri ?? 1;
     const lastT = this.last.get(id);
-    if (lastT !== undefined && t0 - lastT < (def.gap ?? 0.02) && t0 >= lastT) return -1;
+    if (lastT !== undefined && t0 - lastT < (def.gap ?? 0.02) && t0 >= lastT) {
+      this.merge(id, now);
+      return -1;
+    }
+    // global new-voice budget for low-priority gameplay sounds (UI / boss / player sounds bypass it)
+    if ((def.budget || (pri <= 1 && !def.free)) && !this.lowBudget(id, t0, !!def.budget)) {
+      this.budgetDrops[id] = (this.budgetDrops[id] ?? 0) + 1;
+      this.merge(id, now);
+      return -1;
+    }
     const max = def.max ?? 3;
     let same = 0;
     let oldestSame: Active | null = null;
@@ -199,7 +245,7 @@ export class Engine {
     const out = ctx.createGain();
     out.gain.value = vol;
     const pan = opts.pan ?? 0;
-    if (pan && ctx.createStereoPanner) {
+    if (Math.abs(pan) >= PAN_MIN && ctx.createStereoPanner) {
       const p = ctx.createStereoPanner();
       p.pan.value = Math.max(-1, Math.min(1, pan));
       out.connect(p).connect(this.sfxIn);
@@ -218,8 +264,57 @@ export class Engine {
       // a bad automation value must never take the game down
       console.warn(`[audio] sfx ${id} failed`, e);
     }
-    this.voices.push({ id, pri, start: t0, end: v.end + 0.02, out, srcs: v.srcs, stolen: false });
+    const a: Active = { id, pri, start: t0, end: v.end + 0.02, out, srcs: v.srcs, stolen: false, vol, bump: 1 };
+    this.voices.push(a);
+    this.newest.set(id, a);
+    this.started[id] = (this.started[id] ?? 0) + 1;
     return v.end;
+  }
+
+  /**
+   * Take a slot from the low-priority budget for `id` at time t (false = over budget).
+   * `boom` ids only use their own (smaller) per-id share, never the shared pool.
+   */
+  private lowBudget(id: SfxId, t: number, boom: boolean): boolean {
+    const win = Math.floor(t * 60);
+    if (win !== this.lowWin) {
+      this.lowWin = win;
+      this.lowWinN = 0;
+    }
+    if (t > this.lowT) {
+      this.lowTokens = Math.min(LOW_BURST, this.lowTokens + (t - this.lowT) * LOW_PER_SECOND);
+      this.lowT = t;
+    }
+    let b = this.lowId.get(id);
+    if (!b) {
+      b = [LOW_ID_BURST, t];
+      this.lowId.set(id, b);
+    } else if (t > b[1]) {
+      b[0] = Math.min(LOW_ID_BURST, b[0] + (t - b[1]) * (boom ? BOOM_ID_PER_SECOND : LOW_ID_PER_SECOND));
+      b[1] = t;
+    }
+    if (boom) {
+      if (b[0] < 1) return false;
+      b[0] -= 1;
+      return true;
+    }
+    if (this.lowWinN >= LOW_PER_FRAME || this.lowTokens < 1 || b[0] < 1) return false;
+    this.lowWinN++;
+    this.lowTokens -= 1;
+    b[0] -= 1;
+    return true;
+  }
+
+  /** A trigger merged into the id's newest still-playing voice: a little louder (max +3 dB), no new nodes. */
+  private merge(id: SfxId, now: number): void {
+    const a = this.newest.get(id);
+    if (!a || a.stolen || a.end <= now || a.bump >= MERGE_MAX) return;
+    a.bump = Math.min(MERGE_MAX, a.bump * MERGE_BUMP);
+    try {
+      a.out.gain.value = a.vol * a.bump;
+    } catch {
+      /* ignore */
+    }
   }
 
   get activeVoices(): number {

@@ -1,4 +1,8 @@
-/** Results: time, level, kills, max combo, coins, per-weapon damage bars, grade, NEW BEST badges; RETRY / TITLE. */
+/**
+ * Results: time, level, kills, max combo, coins, per-weapon damage bars, grade, NEW BEST badges; RETRY / TITLE.
+ * The portrait reads the outcome: the battle-cry face (frame 1) after a victory, the calm face greyed with a
+ * sweat drop after a defeat. S / A grades stamp in gold-rainbow with a sparkle burst.
+ */
 import { heroDef } from "../../game/heroes";
 import type { RunSummary } from "../../game/world";
 import type { App, UiScreen } from "../app";
@@ -22,9 +26,9 @@ export function showResults(app: App, s: RunSummary): UiScreen {
   el.innerHTML = `
     <div class="panel res-panel">
       <div class="res-head">
-        <div class="por" style="--hc:${app.heroColor(hd.id)}">${img(hd.portrait, "px", s.victory ? 0 : 1, 2)}</div>
+        <div class="por${s.victory ? " won" : " lost"}" style="--hc:${app.heroColor(hd.id)}">${img(hd.portrait, "px", s.victory ? 1 : 0, 2)}${s.victory ? "" : '<i class="sweat"></i>'}</div>
         <div class="ttl"><div class="h1">${s.victory ? "VICTORY!" : "RESULTS"}</div><div class="h2">${esc(hd.name)} · ${esc(hd.title)}</div></div>
-        <div class="grade ${g}">${g}</div>
+        <div class="grade ${g}">${g}${g === "S" || g === "A" ? '<i class="burst"></i>' : ""}</div>
       </div>
       <div class="res-rows">
         <div class="res-row" style="--i:0"><span>TIME</span><b data-count="${s.time}" data-fmt="time">00:00</b>${nb(rec.newBest.time)}</div>

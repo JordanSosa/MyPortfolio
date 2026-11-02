@@ -28,8 +28,10 @@ export interface Grade {
 export const GRADES: Record<"day" | "dusk" | "night" | "neutral" | "dim", Grade> = {
   neutral: { tint: [1, 1, 1], lift: [0, 0, 0], saturation: 1, contrast: 1, brightness: 1, hue: 0 },
   day: { tint: [1.02, 1.0, 0.98], lift: [0.0, 0.0, 0.02], saturation: 1.06, contrast: 1.03, brightness: 1.0, hue: 0 },
-  dusk: { tint: [1.08, 0.86, 0.84], lift: [0.07, 0.01, 0.07], saturation: 1.02, contrast: 1.05, brightness: 0.95, hue: 0 },
-  night: { tint: [0.6, 0.62, 0.98], lift: [0.05, 0.02, 0.13], saturation: 0.82, contrast: 1.1, brightness: 0.92, hue: 0 },
+  // dusk / night stay readable (DESIGN pillar 5): the mood comes from the warm / violet lift and the
+  // fireflies, not from muting the frame; glowing gameplay sprites are protected in the composite too
+  dusk: { tint: [1.05, 0.93, 0.92], lift: [0.05, 0.01, 0.05], saturation: 1.04, contrast: 1.04, brightness: 0.97, hue: 0 },
+  night: { tint: [0.88, 0.86, 1.0], lift: [0.03, 0.0, 0.08], saturation: 1.08, contrast: 1.06, brightness: 0.97, hue: 0 },
   dim: { tint: [0.55, 0.5, 0.7], lift: [0.02, 0.0, 0.06], saturation: 0.7, contrast: 1.05, brightness: 0.75, hue: 0 },
 };
 
@@ -81,6 +83,13 @@ export class PostFx {
    * this because bloom is added after the scene in the composite.
    */
   dim = 0;
+  /**
+   * How much glowing gameplay sprites (enemy bullets, gems, shots, crit numbers -
+   * everything drawn with Flag.Glow in normal blend, i.e. with coverage in the glow
+   * buffer's alpha) escape the colour grade, 0..1: the night grade tints the meadow
+   * and the actors, while the bullets stay bright and high-contrast.
+   */
+  gradeProtect = 0.8;
   /** Multipliers applied by settings ("reduce flashing"). */
   flashScale = 1;
   aberrationScale = 1;
@@ -317,6 +326,7 @@ uniform float u_sat;
 uniform float u_contrast;
 uniform float u_bright;
 uniform float u_hue;
+uniform float u_protect;
 uniform float u_vig;
 uniform vec3 u_vigColor;
 uniform float u_dmg;
@@ -391,7 +401,8 @@ void main() {
     col = texture(u_scene, sharpUv(t)).rgb;
   }
 
-  // grade
+  // grade (glowing gameplay sprites - coverage in the glow buffer's alpha - are protected from it)
+  vec3 raw = col;
   col *= u_tint;
   float l0 = dot(col, LUMA);
   col += u_lift * (1.0 - clamp(l0, 0.0, 1.0));
@@ -399,11 +410,13 @@ void main() {
   col = mix(vec3(l), col, u_sat);
   col = (col - 0.5) * u_contrast + 0.5;
   col *= u_bright;
+  vec2 fsc = clamp(t, vec2(0.0), u_sceneUsed);
+  vec4 glowS = texture(u_glow, min(fsc * u_glowK, u_glowMax));
+  col = mix(col, raw, clamp(glowS.a * 1.5, 0.0, 1.0) * u_protect);
   if (u_hue != 0.0) col = hueRotate(col, u_hue);
 
   // bloom (added after grading so glowing things stay luminous at night)
-  vec2 fsc = clamp(t, vec2(0.0), u_sceneUsed);
-  vec3 glow = texture(u_glow, min(fsc * u_glowK, u_glowMax)).rgb;
+  vec3 glow = glowS.rgb;
   vec3 bloom = texture(u_bloom, min(fsc * u_bloomK, u_bloomMax)).rgb;
   col += glow * u_glowCore + bloom * u_bloomStr;
   col += vec3(ring * 0.16);
@@ -588,6 +601,7 @@ export class PostPipeline {
     gl.uniform1f(u.u_contrast, gr.contrast);
     gl.uniform1f(u.u_bright, gr.brightness);
     gl.uniform1f(u.u_hue, fx.hue);
+    gl.uniform1f(u.u_protect, bloomOn ? clamp(fx.gradeProtect, 0, 1) : 0);
     gl.uniform1f(u.u_vig, fx.vignette);
     gl.uniform3f(u.u_vigColor, fx.vignetteColor[0], fx.vignetteColor[1], fx.vignetteColor[2]);
     gl.uniform1f(u.u_dmg, Math.min(1, Math.max(fx.damageAmount, fx.damageFloor)));

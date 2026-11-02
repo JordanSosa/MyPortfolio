@@ -21,6 +21,10 @@ export interface SfxDef {
   pri?: number;
   rev?: number;
   rnd?: number;
+  /** Never subject to the engine's global low-priority voice budget (UI ticks, boss hits). */
+  free?: boolean;
+  /** Always subject to that budget despite a higher priority (spammy weapon booms). */
+  budget?: boolean;
 }
 
 // note frequencies used a lot
@@ -60,7 +64,7 @@ function boom(v: Voice, t: number, f: number, dur: number, vol: number): void {
 export const SFX: Record<SfxId, SfxDef> = {
   // ------------------------------------------------------------------ UI
   uiMove: {
-    vol: 0.41, gap: 0.03, max: 2, pri: 1,
+    vol: 0.41, gap: 0.03, max: 2, pri: 1, free: true,
     play(v, p) {
       v.tone({ w: "triangle", f: E6 * p, f2: G6 * p, gt: 0.02, a: 0.001, d: 0.055, v: 0.32 });
       v.tone({ w: "sine", f: E6 * 2 * p, a: 0.001, d: 0.03, v: 0.05 });
@@ -88,7 +92,7 @@ export const SFX: Record<SfxId, SfxDef> = {
     },
   },
   cardFlip: {
-    vol: 0.79, gap: 0.04, max: 3, pri: 1,
+    vol: 0.79, gap: 0.04, max: 3, pri: 1, free: true,
     play(v, p) {
       v.noise({ a: 0.004, d: 0.09, v: 0.26, bp: 1800 * p, bp2: 6500 * p, bpt: 0.08, q: 1.5 });
       v.tone({ t: 0.05, w: "triangle", f: 1760 * p, a: 0.001, d: 0.05, v: 0.16 });
@@ -113,7 +117,7 @@ export const SFX: Record<SfxId, SfxDef> = {
     },
   },
   countTick: {
-    vol: 0.43, gap: 0.035, max: 2, pri: 0,
+    vol: 0.43, gap: 0.035, max: 2, pri: 0, free: true,
     play(v, p) {
       v.tone({ w: "square", f: 1200 * p, a: 0.001, d: 0.028, v: 0.12, lp: 5000 });
       v.tone({ w: "sine", f: 2400 * p, a: 0.001, d: 0.02, v: 0.04 });
@@ -306,7 +310,7 @@ export const SFX: Record<SfxId, SfxDef> = {
     },
   },
   chestReel: {
-    vol: 0.59, gap: 0.045, max: 2, pri: 1,
+    vol: 0.59, gap: 0.045, max: 2, pri: 1, free: true,
     play(v, p) {
       v.tone({ w: "square", f: 900 * p, a: 0.001, d: 0.03, v: 0.12, lp: 4000 });
       v.tone({ t: 0.008, w: "triangle", f: 1800 * p, a: 0.001, d: 0.04, v: 0.12 });
@@ -382,7 +386,7 @@ export const SFX: Record<SfxId, SfxDef> = {
     },
   },
   bossHit: {
-    vol: 0.49, gap: 0.06, max: 2, pri: 1, rnd: 0.5,
+    vol: 0.49, gap: 0.06, max: 2, pri: 1, free: true, rnd: 0.5,
     play(v, p) {
       v.tone({ w: "sine", f: 220 * p, f2: 80 * p, gt: 0.06, a: 0.001, d: 0.12, v: 0.42 });
       v.tone({ w: "square", f: 560 * p, f2: 240 * p, gt: 0.04, a: 0.001, d: 0.06, v: 0.1, lp: 2500 });
@@ -417,7 +421,7 @@ export const SFX: Record<SfxId, SfxDef> = {
     },
   },
   explosionBig: {
-    vol: 0.58, gap: 0.09, max: 3, pri: 2, rev: 0.3, rnd: 0.7,
+    vol: 0.58, gap: 0.09, max: 3, pri: 2, budget: true, rev: 0.3, rnd: 0.7,
     play(v, p) {
       boom(v, 0, 42 * p, 0.85, 0.75);
       v.tone({ w: "sine", f: 80, f2: 30, gt: 0.6, a: 0.002, d: 1.0, v: 0.35 });
@@ -428,7 +432,7 @@ export const SFX: Record<SfxId, SfxDef> = {
     },
   },
   thunder: {
-    vol: 0.32, gap: 0.08, max: 2, pri: 2, rev: 0.35, rnd: 1,
+    vol: 0.32, gap: 0.08, max: 2, pri: 2, budget: true, rev: 0.35, rnd: 1,
     play(v, p) {
       // crack: bright crackling noise + zap
       v.noise({ a: 0.0008, d: 0.18, v: 0.45, hp: 1800 * p, crackle: 61 });
@@ -527,7 +531,7 @@ export const SFX: Record<SfxId, SfxDef> = {
     },
   },
   beamBig: {
-    vol: 1.97, gap: 0.3, max: 1, pri: 2, rev: 0.3,
+    vol: 1.97, gap: 0.3, max: 1, pri: 2, budget: true, rev: 0.3,
     play(v, p) {
       for (const det of [-14, 0, 14]) v.tone({ w: "sawtooth", f: 110 * p, f2: 220 * p, gt: 0.25, det, a: 0.02, d: 0.3, s: 0.7, len: 0.9, r: 0.3, v: 0.07, lp: 3000, q: 2 });
       v.tone({ w: "sine", f: 55, a: 0.02, d: 0.3, s: 0.8, len: 0.9, r: 0.3, v: 0.3 });

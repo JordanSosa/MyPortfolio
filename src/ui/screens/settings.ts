@@ -1,7 +1,9 @@
 /**
  * Settings panel (DESIGN §7): master / music / sfx volume, screen shake
  * 0/50/100 %, reduce flashing, damage numbers, quality auto/low/mid/high,
- * haptics, show FPS. Persisted immediately; works with touch, mouse, keys
+ * haptics (only where the browser can vibrate), show FPS, and a Fullscreen
+ * switch where the Fullscreen API exists (not persisted). Changes apply live;
+ * slider drags are saved when the finger lifts. Works with touch, mouse, keys
  * (left/right adjusts the focused slider/segment) and gamepad.
  */
 import type { App, UiScreen } from "../app";
@@ -21,6 +23,8 @@ export function openSettings(app: App, onClose: () => void): UiScreen {
       .map(([t, v]) => `<button data-nav data-v="${v}">${t}</button>`)
       .join("")}</div></div>`;
   const tog = (k: Key, label: string) => `<div class="set-row"><span>${label}</span><button class="tog" data-nav data-k="${k}" aria-label="${label}"></button></div>`;
+  const canVibrate = typeof navigator !== "undefined" && "vibrate" in navigator;
+  const canFullscreen = typeof document !== "undefined" && document.fullscreenEnabled === true && typeof document.documentElement.requestFullscreen === "function";
   el.innerHTML = `
     <div class="panel settings-panel">
       <div class="h1">SETTINGS</div>
@@ -40,15 +44,17 @@ export function openSettings(app: App, onClose: () => void): UiScreen {
         ["MID", "mid"],
         ["HIGH", "high"],
       ])}
-      ${tog("haptics", "Vibration")}
+      ${canVibrate ? tog("haptics", "Vibration") : ""}
       ${tog("showFps", "Show FPS")}
+      ${canFullscreen ? `<div class="set-row"><span>Fullscreen</span><button class="tog" data-nav data-fs aria-label="Fullscreen"></button></div>` : ""}
       <div class="btn-row" style="margin-top:.6em"><button class="btn small" data-nav data-nav-default data-act="done">✓ DONE</button></div>
     </div>`;
   app.ui.appendChild(el);
 
-  const set = (k: Key, v: unknown) => {
+  /** Apply a setting live; `persist` false while a slider is being dragged (saved on release). */
+  const set = (k: Key, v: unknown, persist = true) => {
     (s as unknown as Record<string, unknown>)[k] = v;
-    save.save();
+    if (persist) save.save();
     app.applySettings();
     refresh();
   };
@@ -62,7 +68,8 @@ export function openSettings(app: App, onClose: () => void): UiScreen {
       const cur = String(s[g.dataset.k as Key]);
       for (const b of g.querySelectorAll<HTMLElement>("button")) b.classList.toggle("on", b.dataset.v === cur);
     }
-    for (const t of el.querySelectorAll<HTMLElement>(".tog")) t.classList.toggle("on", !!s[t.dataset.k as Key]);
+    for (const t of el.querySelectorAll<HTMLElement>(".tog[data-k]")) t.classList.toggle("on", !!s[t.dataset.k as Key]);
+    el.querySelector(".tog[data-fs]")?.classList.toggle("on", !!document.fullscreenElement);
   };
   refresh();
 
@@ -72,9 +79,15 @@ export function openSettings(app: App, onClose: () => void): UiScreen {
     const apply = (e: PointerEvent) => {
       const r = b.getBoundingClientRect();
       const v = Math.round(Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * 20) / 20;
-      set(k, v);
+      if (v !== s[k]) set(k, v, false);
     };
     let drag = false;
+    const endDrag = () => {
+      if (!drag) return;
+      drag = false;
+      save.save();
+      app.sfx("uiMove");
+    };
     b.addEventListener("pointerdown", (e) => {
       drag = true;
       try {
@@ -85,10 +98,10 @@ export function openSettings(app: App, onClose: () => void): UiScreen {
       apply(e);
     });
     b.addEventListener("pointermove", (e) => drag && apply(e));
-    b.addEventListener("pointerup", () => {
-      drag = false;
-      app.sfx("uiMove");
-    });
+    b.addEventListener("pointerup", endDrag);
+    // the OS took the touch (scroll, system gesture): stop dragging, keep what was set
+    b.addEventListener("pointercancel", endDrag);
+    b.addEventListener("lostpointercapture", endDrag);
     b.addEventListener("click", (e) => {
       e.stopPropagation();
       if ((e as MouseEvent).detail === 0) set(k, s[k] === 0 ? 0.8 : 0);
@@ -104,13 +117,27 @@ export function openSettings(app: App, onClose: () => void): UiScreen {
         app.sfx("uiMove");
       });
   }
-  for (const t of el.querySelectorAll<HTMLElement>(".tog"))
+  for (const t of el.querySelectorAll<HTMLElement>(".tog[data-k]"))
     onTap(t, () => {
       const k = t.dataset.k as Key;
       set(k, !s[k]);
       app.sfx("uiMove");
       if (k === "haptics" && s.haptics) app.input.haptic(30);
     });
+  const fsBtn = el.querySelector<HTMLElement>(".tog[data-fs]");
+  const onFs = () => refresh();
+  if (fsBtn) {
+    document.addEventListener("fullscreenchange", onFs);
+    onTap(fsBtn, () => {
+      app.sfx("uiMove");
+      try {
+        if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
+        else void document.documentElement.requestFullscreen({ navigationUI: "hide" }).catch(() => {});
+      } catch {
+        /* not allowed here */
+      }
+    });
+  }
   const close = () => {
     app.sfx("uiBack");
     onClose();
@@ -131,6 +158,7 @@ export function openSettings(app: App, onClose: () => void): UiScreen {
     el,
     layer: L,
     close() {
+      document.removeEventListener("fullscreenchange", onFs);
       el.classList.add("out");
       setTimeout(() => el.remove(), 220);
     },

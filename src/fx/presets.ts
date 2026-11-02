@@ -242,16 +242,20 @@ export const P = {
     glow: true,
     layer: Layer.FxAdd,
   },
-  /** Scorch decal that fades over ~6 s (sizeMul = radius / 16). */
+  /**
+   * Scorch decal: a faint burnt ring that fades over 2.5 s (sizeMul = radius / 16).
+   * A ring, never a filled disc: filled grey discs read as shadows / King Puff's
+   * landing telegraph. Emit through `emitScorch` (live budget of SCORCH_MAX).
+   */
   scorch: {
-    sprite: "fx_circle",
+    sprite: "fx_ring_thick",
     frames: "fixed",
     speed: [0, 0],
-    life: [6, 6],
-    size: [1, 0.9],
+    life: [2.5, 2.5],
+    size: [0.9, 0.85],
     // purple-tinted "magic burn" rather than a black hole on the pastel meadow
     colors: 0x4b3470,
-    alpha: 0.2,
+    alpha: 0.12,
     alphaCurve: "linear",
     layer: Layer.Decal,
   },
@@ -289,6 +293,26 @@ export interface FxKit {
   juice?: Juice;
 }
 
+/** At most this many scorch decals alive at once (explosions + Raijin blasts share it). */
+export const SCORCH_MAX = 10;
+const scorchUntil = new Float64Array(SCORCH_MAX);
+let scorchClock = 0;
+
+/**
+ * Emit a scorch decal if fewer than SCORCH_MAX are alive (a ring of expiry
+ * timestamps on the real clock: no allocation). Returns whether it was emitted.
+ */
+export function emitScorch(ps: Particles, x: number, y: number, sizeMul: number): boolean {
+  const now = (scorchClock = typeof performance !== "undefined" ? performance.now() / 1000 : scorchClock + 0.016);
+  for (let i = 0; i < SCORCH_MAX; i++)
+    if (scorchUntil[i] <= now) {
+      scorchUntil[i] = now + 2.5;
+      ps.emit(P.scorch, x, y, 1, NaN, -1, sizeMul);
+      return true;
+    }
+  return false;
+}
+
 /** Enemy death: pop -> confetti in its colours + white sparkles + puff + expanding ring. */
 export function fxEnemyDeath(k: FxKit, x: number, y: number, colors: readonly number[], scale = 1): void {
   const ps = k.ps;
@@ -322,7 +346,7 @@ export function fxHit(k: FxKit, x: number, y: number, color: number = C.white, a
   k.ps.emit(P.sparkle, x, y, 2, angle, -1, 0.8, 1.6);
 }
 
-/** Explosion scaled to radius: sprite + flare + rays + debris + smoke + ring + scorch decal (+ juice). */
+/** Explosion scaled to radius: sprite + flare + rays + debris + smoke + ring + scorch ring (budgeted) (+ juice). */
 export function fxExplosion(k: FxKit, x: number, y: number, radius = 28, juice = true): void {
   const ps = k.ps;
   const s = radius / 16;
@@ -333,7 +357,7 @@ export function fxExplosion(k: FxKit, x: number, y: number, radius = 28, juice =
   ps.emit(P.ember, x, y, 6 + Math.round(radius / 5), NaN, -1, 1, 0.7 + s * 0.3);
   ps.emit(P.debris, x, y, 5 + Math.round(radius / 6));
   ps.emit(P.smoke, x, y, 2 + Math.round(radius / 16), NaN, -1, 0.6 + s * 0.3, 1.5);
-  ps.emit(P.scorch, x, y, 1, NaN, -1, s * 0.75);
+  emitScorch(ps, x, y, s * 0.75);
   if (juice && k.juice) {
     const p = Math.min(1, radius / 64);
     k.juice.shake(0.2 + 0.3 * p);

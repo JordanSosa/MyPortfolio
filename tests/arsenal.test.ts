@@ -9,7 +9,8 @@ import { describe, expect, test } from "vitest";
 import { CFG } from "../src/game/config";
 import { WEAPONS } from "../src/game/registry";
 import { evolutionCards, makeOffer } from "../src/game/upgrades";
-import type { WeaponInstance } from "../src/game/types";
+import type { Enemy, WeaponInstance } from "../src/game/types";
+import { Bot, simulate } from "../src/debug/bot";
 import { World } from "../src/game/world";
 
 const DT = 1 / 60;
@@ -233,4 +234,60 @@ test.each([
   expect(w.kills).toBeGreaterThan(1500);
   expect(hits).toBeGreaterThan(w.kills);
   for (const inst of w.weapons) expect(inst.damage).toBeGreaterThan(0);
+});
+
+describe("homing projectiles and pooled enemies", () => {
+  test("a homing star never keeps chasing a pooled Enemy object that was recycled into a new enemy", () => {
+    const w = new World({ hero: "hoshi", seed: 21 });
+    const bot = new Bot(3);
+    simulate(w, 150, 1 / 30, bot);
+    // per projectile: the enemy object + uid it was chasing last step
+    const seen = new Map<number, { obj: Enemy; uid: number }>();
+    let stale = 0;
+    let checks = 0;
+    simulate(w, 60, DT, bot, (ww) => {
+      for (let i = 0; i < ww.projectiles.count; i++) {
+        const p = ww.projectiles.items[i];
+        if (p.dead || p.homing <= 0 || !p.target) continue;
+        checks++;
+        const t = p.target;
+        // the locked-on uid must still be the object's uid (a retarget re-locks: targetUid follows)
+        if (t.uid !== p.targetUid) stale++;
+        const rec = seen.get(p.uid);
+        // same object, new uid, but the projectile never re-locked onto it: it is chasing a stranger
+        if (rec && rec.obj === t && rec.uid !== t.uid && p.targetUid !== t.uid) stale++;
+        seen.set(p.uid, { obj: t, uid: t.uid });
+      }
+    });
+    expect(checks).toBeGreaterThan(1000);
+    expect(stale).toBe(0);
+  });
+
+  test("a pierce-once star that already hit its surviving target moves on to one it has not hit", () => {
+    const w = new World({ hero: "hoshi", seed: 5, god: true, director: false });
+    const tough = w.spawnEnemy("teddy", w.player.x + 50, w.player.y, true)!;
+    tough.hp = tough.maxHp = 1e9;
+    const other = w.spawnEnemy("puff", w.player.x + 50, w.player.y + 60)!;
+    other.hp = other.maxHp = 1e9;
+    const p = w.spawnProjectile(w.weapons[0]);
+    p.x = tough.x - 4;
+    p.y = tough.y - tough.cy;
+    p.vx = 160;
+    p.speed = 160;
+    p.homing = 7.5;
+    p.target = tough;
+    p.targetUid = tough.uid;
+    p.r = 5;
+    p.dmg = 1;
+    p.pierce = 4;
+    p.life = 3;
+    for (let i = 0; i < 10 && p.target === tough; i++) {
+      tough.x = w.player.x + 50;
+      tough.kx = tough.ky = 0;
+      w.step(DT);
+    }
+    expect(p.nHits).toBeGreaterThanOrEqual(1);
+    expect(p.target).toBe(other);
+    expect(p.targetUid).toBe(other.uid);
+  });
 });
