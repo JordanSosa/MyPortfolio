@@ -15,7 +15,7 @@ export const puff: EnemyDef = {
   fps: 8,
   hp: 8,
   speed: 32,
-  dmg: 6,
+  dmg: 5,
   radius: 6,
   height: 11,
   xp: 1,

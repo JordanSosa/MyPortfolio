@@ -53,6 +53,13 @@ export class DamageNumbers {
   hideAll = false;
   /** Global scale multiplier (e.g. 0.8 on small screens). */
   scale = 1;
+  /**
+   * Peak-chaos dimmer 0..1 (the feedback bridge sets it from r.post.load each
+   * frame): enemy damage numbers get fainter, lose the spawn flash and crits stop
+   * blooming, so a wall of numbers never covers the hero or the bullets. Player
+   * damage / heal numbers are never dimmed.
+   */
+  busy = 0;
   readonly styles: Record<DamageKind, DamageStyle> = {
     normal: { color: C.white, scale: 1, life: 0.6, rise: 14 },
     crit: { color: C.yellow, scale: 2, life: 0.75, rise: 18 },
@@ -73,10 +80,14 @@ export class DamageNumbers {
       this.pool.push({ active: false, x: 0, y: 0, vx: 0, rise: 0, t: 0, life: 1, scale: 1, color: 0, wobble: 0, codes: new Uint8Array(MAXC), n: 0, kind: 0, seq: 0 });
   }
 
+  /** Live numbers (kept incrementally: read per hit event by the feedback bridge). */
+  private live = 0;
+
   private alloc(): Num {
     // ring buffer: the next slot is the oldest one
     const n = this.pool[this.head];
     this.head = (this.head + 1) % this.pool.length;
+    if (!n.active) this.live++;
     return n;
   }
 
@@ -135,12 +146,16 @@ export class DamageNumbers {
     for (const d of this.pool) {
       if (!d.active) continue;
       d.t += dt;
-      if (d.t >= d.life) d.active = false;
+      if (d.t >= d.life) {
+        d.active = false;
+        this.live--;
+      }
     }
   }
 
   clear(): void {
     for (const d of this.pool) d.active = false;
+    this.live = 0;
   }
 
   draw(): void {
@@ -151,21 +166,23 @@ export class DamageNumbers {
       if (!d.active) continue;
       const u = d.t / d.life;
       const pop = d.t < 0.2 ? 1.6 + (1 - 1.6) * easeOutBack(d.t / 0.2, 2.2) : 1;
-      const s = d.scale * pop;
+      // (busy screens: crits shrink toward normal size)
+      const s = d.scale * pop * (d.kind === 1 ? 1 - 0.3 * this.busy : 1);
       const rise = d.rise * (1 - (1 - u) * (1 - u) * (1 - u));
       const x = d.x + d.vx * d.t;
       const y = d.y - rise;
-      const alpha = u < 0.7 ? 1 : 1 - (u - 0.7) / 0.3;
-      const flash = d.t < 0.06 ? 1 - d.t / 0.06 : 0;
+      const enemy = d.kind <= 1;
+      const dim = enemy ? this.busy : 0;
+      const alpha = (u < 0.7 ? 1 : 1 - (u - 0.7) / 0.3) * (1 - 0.4 * dim);
+      const flash = d.t < 0.06 ? (1 - d.t / 0.06) * (1 - dim) : 0;
       const rot = d.wobble ? Math.sin(d.t * 26) * 0.12 * (1 - u) : 0;
-      text.drawCodes(Layer.Text, d.codes, d.n, x, y, s, d.color, alpha, d.kind === 1 ? Flag.Glow : 0, flash, d.wobble ? 1.2 : 0, d.t, rot);
+      const glow = d.kind === 1 && dim < 0.5 ? Flag.Glow : 0;
+      text.drawCodes(Layer.Text, d.codes, d.n, x, y, s, d.color, alpha, glow, flash, d.wobble ? 1.2 : 0, d.t, rot);
     }
   }
 
   get alive(): number {
-    let n = 0;
-    for (const d of this.pool) if (d.active) n++;
-    return n;
+    return this.live;
   }
 }
 

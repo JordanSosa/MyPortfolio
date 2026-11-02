@@ -17,6 +17,8 @@ import { Anims } from "./anims";
 import { Ground } from "./ground";
 import { WorldTexts } from "./texts";
 import { TRAILS } from "./trails";
+import { WeaponFx } from "./weapon-fx";
+import { BestiaryFx } from "./bestiary-fx";
 
 interface HeroAnims {
   idle: number;
@@ -38,6 +40,10 @@ export class WorldView {
   readonly anims: Anims;
   readonly ground: Ground;
   readonly texts: WorldTexts;
+  /** Arsenal visuals (auras, beams, bomb markers, lightning events). */
+  readonly weaponFx: WeaponFx;
+  /** Bestiary visuals (telegraph looks, boss auras, moon ring, death throes, victory dawn, grade overrides). */
+  readonly bestiary: BestiaryFx;
   private hero!: HeroAnims;
   private heroSq = { x: 1, v: 0 };
   private trail: TrailEmitter;
@@ -51,6 +57,23 @@ export class WorldView {
   private hFlare: number;
   /** In-world hero HUD (HP bar, dash pip). Off for the title-screen attract mode. */
   heroHud = true;
+  /** Seconds left of the hero beacon forced on by a blast over the hero (coverHero). */
+  private coverT = 0;
+  /** The hero frame drawn this frame (the beacon redraws it above the player's fx). */
+  private heroH = 0;
+  private heroSx = 1;
+  private heroSy = 1;
+  private heroA = 1;
+  /** The live boss's frame drawn this frame (drawBossBeacon). */
+  private bossSeen = false;
+  private bossH = 0;
+  private bossX = 0;
+  private bossY = 0;
+  private bossSx = 1;
+  private bossSy = 1;
+  private bossA = 1;
+  private bossTint = 0xffffff;
+  private bossFlash = 0;
   /** Extra transient slash lines (Rin ult) drawn by the view. */
   private lines: { x0: number; y0: number; x1: number; y1: number; t: number }[] = [];
 
@@ -62,6 +85,8 @@ export class WorldView {
     this.anims = new Anims(r);
     this.ground = new Ground(r, this.anims);
     this.texts = new WorldTexts(r);
+    this.weaponFx = new WeaponFx(r, fx, this.anims, this.texts, (sec) => this.coverHero(sec));
+    this.bestiary = new BestiaryFx(r, fx, this.anims, this.texts, (s) => this.pose(s));
     this.trail = new TrailEmitter(fx.ghosts, 0.024, 0.3, 0.62);
     this.hStreak = r.atlas.handle("fx_streak");
     this.hBeam = r.atlas.handle("fx_beam");
@@ -88,6 +113,8 @@ export class WorldView {
     };
     this.texts.clear();
     this.lines.length = 0;
+    this.weaponFx.setWorld(w);
+    this.bestiary.setWorld(w);
     this.hpGhost = 1;
   }
 
@@ -125,8 +152,12 @@ export class WorldView {
     this.drawGems(time);
     this.drawEnemies(time);
     this.drawPlayer(time, dt);
+    this.weaponFx.draw(time, dt);
     this.drawProjectiles(time);
+    this.drawHeroBeacon(time, realDt);
+    this.drawBossBeacon();
     this.drawBullets(time);
+    this.bestiary.draw(time, dt, realDt);
     this.drawLines(realDt);
     this.texts.update(realDt);
     this.texts.draw(w.player.x, w.player.y);
@@ -147,6 +178,7 @@ export class WorldView {
     const items = w.enemies.items;
     const frozen = w.freezeT > 0 || w.timeStop;
     const cam = r.camera;
+    this.bossSeen = false;
     for (let i = 0; i < w.enemies.count; i++) {
       const e = items[i];
       if (e.dead) continue;
@@ -189,8 +221,33 @@ export class WorldView {
         r.spr(Layer.Entity, h, e.x, y, sx, sy, 0, tint, 1, flash, glow ? Flag.Glow : 0);
         continue;
       }
+      if (e === w.boss) {
+        this.bossSeen = true;
+        this.bossH = h;
+        this.bossX = e.x;
+        this.bossY = y;
+        this.bossSx = sx;
+        this.bossSy = sy;
+        this.bossA = e.alpha;
+        this.bossTint = tint;
+        this.bossFlash = flash;
+      }
+      if (this.bestiary.decorate(e, h, sx, sy, y, time, tint, flash)) continue;
       r.spr(Layer.Entity, h, e.x, y, sx, sy, 0, tint, e.alpha, flash, 0);
     }
+  }
+
+  /**
+   * Peak chaos: the boss's current frame redrawn translucent above the player's
+   * weapon fx (under enemy bullets), so a boss soaking six evolutions - bolts,
+   * beams, blasts - never vanishes under them (you must see where Lady Lunatic is).
+   */
+  private drawBossBeacon(): void {
+    if (!this.bossSeen) return;
+    const load = this.r.post.load;
+    if (load < 0.2) return;
+    const k = Math.min(1, (load - 0.2) / 0.5);
+    this.r.spr(Layer.Bullets, this.bossH, this.bossX, this.bossY, this.bossSx, this.bossSy, 0, this.bossTint, 0.42 * k * this.bossA, this.bossFlash, 0);
   }
 
   // ---------------------------------------------------------------- player
@@ -226,6 +283,10 @@ export class WorldView {
       r.glow(p.x, p.y - 10, 18 + 2 * Math.sin(time * 6), c, 0.3);
     }
     r.spr(Layer.Entity, h, p.x, p.y, sx, sy, 0, 0xffffff, alpha, p.hurtT > 0.22 ? 0.85 : 0, 0);
+    this.heroH = h;
+    this.heroSx = sx;
+    this.heroSy = sy;
+    this.heroA = alpha;
 
     // HP bar under the hero
     const k = clamp(p.hp / p.maxHp, 0, 1);
@@ -248,6 +309,31 @@ export class WorldView {
     }
   }
 
+  /**
+   * Peak-chaos readability: when the adaptive bloom limiter reports a crowded
+   * screen (r.post.load) or a blast just landed on the hero (coverHero), the
+   * hero's current frame is redrawn translucent + a thin ring above the
+   * player's own weapon fx (but under enemy bullets, drawn next), so the hero
+   * never disappears in a cloud of evolved-weapon sparkles.
+   */
+  private drawHeroBeacon(time: number, realDt: number): void {
+    const p = this.w.player;
+    const load = this.r.post.load;
+    this.coverT = Math.max(0, this.coverT - realDt);
+    // busy screen (glow load) or a big blast right on top of the hero (coverHero) even on a calm screen
+    const k = Math.max(load < 0.2 ? 0 : Math.min(1, (load - 0.2) / 0.5), Math.min(1, this.coverT / 0.2));
+    if (k <= 0 || p.dead || !this.heroHud) return;
+    const q = 0.5 + 0.5 * Math.sin(time * 5);
+    // the hero's own current frame (dark plum outline: reads over white blasts and pink star clouds alike)
+    this.r.spr(Layer.Bullets, this.heroH, p.x, p.y, this.heroSx, this.heroSy, 0, 0xffffff, (0.5 + 0.12 * q) * k * this.heroA, 0.1, 0);
+    this.r.ring(Layer.Bullets, p.x, p.y - 8, 13, this.w.hero.color, (0.35 + 0.2 * q) * k, 0, false);
+  }
+
+  /** A big blast just burst on top of the hero: show the beacon for `sec` even on a calm screen. */
+  coverHero(sec: number): void {
+    if (sec > this.coverT) this.coverT = sec;
+  }
+
   // ---------------------------------------------------------------- projectiles
   private drawProjectiles(time: number): void {
     const r = this.r;
@@ -256,6 +342,11 @@ export class WorldView {
     const ps = this.fx.ps;
     const busy = ps.count > ps.capacity * 0.75;
     const cam = r.camera;
+    // small shots fade right over the hero's body (stream weapons like Galaxy Barrage spawn there and
+    // would otherwise bury her): full alpha from HERO_CLEAR px out, 30 % at the centre
+    const hx = w.player.x;
+    const hy = w.player.y - 9;
+    const clear = this.heroHud;
     for (let i = 0; i < w.projectiles.count; i++) {
       const p = items[i];
       if (p.dead || !p.sprite) continue;
@@ -282,8 +373,19 @@ export class WorldView {
       } else if (p.shadow) r.shadow(p.x, p.y + p.z, p.shadow * s, 0.5);
       if (p.entity) r.spr(Layer.Entity, h, p.x, y, sx, s, p.rot, p.tint, p.alpha, 0, p.glow ? Flag.Glow : 0);
       else {
-        r.spr(Layer.Fx, h, p.x, y, sx, s, p.rot, p.tint, p.alpha, 0, (p.glow ? Flag.Glow : 0) | Flag.NoSnap);
-        if (p.glow && tr && tr.halo > 0) r.glow(p.x, y, tr.halo * s, tr.color, tr.haloAlpha);
+        let al = p.alpha;
+        let ha = 1;
+        if (clear && !fall && p.r > 0 && p.r <= 9) {
+          const dx = p.x - hx;
+          const dy = y - hy;
+          const d2 = dx * dx + dy * dy;
+          if (d2 < HERO_CLEAR * HERO_CLEAR) {
+            ha = 0.3 + (0.7 * Math.sqrt(d2)) / HERO_CLEAR;
+            al *= ha;
+          }
+        }
+        r.spr(Layer.Fx, h, p.x, y, sx, s, p.rot, p.tint, al, 0, (p.glow ? Flag.Glow : 0) | Flag.NoSnap);
+        if (p.glow && tr && tr.halo > 0) r.glow(p.x, y, tr.halo * s, tr.color, tr.haloAlpha * ha);
       }
       // trails
       if (tr && !busy && (this.frameN + p.uid) % tr.every === 0) {
@@ -328,10 +430,33 @@ export class WorldView {
         r.ring(Layer.Decal, t.x, t.y, t.r, t.color, 0.6 + 0.4 * pulse, 0, true);
         r.ring(Layer.FxAdd, t.x, t.y, t.r, C.white, 0.25 * pulse, Flag.Add);
       } else {
-        r.line(Layer.Decal, t.x, t.y, t.x2, t.y2, t.r * 2, t.color, 0.14 + 0.12 * pulse);
-        const mx = t.x + (t.x2 - t.x) * k;
-        const my = t.y + (t.y2 - t.y) * k;
-        r.line(Layer.Decal, t.x, t.y, mx, my, Math.max(1, t.r * 0.6), t.color, 0.6);
+        // dash lane: tinted band + bright edges + chevrons racing along it, white flash just before it fires
+        const dx = t.x2 - t.x;
+        const dy = t.y2 - t.y;
+        const len = Math.sqrt(dx * dx + dy * dy) || 1;
+        const ux = dx / len;
+        const uy = dy / len;
+        const nx = -uy * t.r;
+        const ny = ux * t.r;
+        r.line(Layer.Decal, t.x, t.y, t.x2, t.y2, t.r * 2, t.color, 0.2 + 0.12 * pulse);
+        const mx = t.x + dx * k;
+        const my = t.y + dy * k;
+        r.line(Layer.Decal, t.x, t.y, mx, my, t.r * 2, t.color, 0.22);
+        const ea = 0.55 + 0.35 * pulse;
+        r.line(Layer.Decal, t.x + nx, t.y + ny, t.x2 + nx, t.y2 + ny, 1, t.color, ea);
+        r.line(Layer.Decal, t.x - nx, t.y - ny, t.x2 - nx, t.y2 - ny, 1, t.color, ea);
+        const step = Math.max(10, t.r * 1.6);
+        const off = (time * 70) % step;
+        const ch = t.r * 0.7;
+        for (let d = off; d < len - 2; d += step) {
+          const cx = t.x + ux * d;
+          const cy = t.y + uy * d;
+          const bx = cx - ux * ch;
+          const by = cy - uy * ch;
+          r.line(Layer.Decal, bx - uy * ch, by + ux * ch, cx, cy, 1.5, C.white, 0.5);
+          r.line(Layer.Decal, bx + uy * ch, by - ux * ch, cx, cy, 1.5, C.white, 0.5);
+        }
+        if (t.life - t.age < 0.14) r.line(Layer.FxAdd, t.x, t.y, t.x2, t.y2, t.r * 2, C.white, 0.35, Flag.Add);
       }
     }
   }
@@ -345,9 +470,16 @@ export class WorldView {
       if (b.dead) continue;
       const a = this.anims.get(b.sprite);
       const h = a.first + (Math.floor(time * a.fps + i * 0.3) % a.count);
-      const col = b.sprite === "eb_moon" ? C.paleYellow : b.sprite === "eb_star" ? C.violet : C.pink;
-      r.glow(b.x, b.y, b.r * 3.2, col, 0.55, Layer.Bullets);
-      r.spr(Layer.Bullets, h, b.x, b.y, 1, 1, b.sprite === "eb_star" ? time * 6 : 0, 0xffffff, 1, 0, Flag.Glow);
+      const moon = b.sprite === "eb_moon";
+      const star = b.sprite === "eb_star";
+      const col = moon ? C.paleYellow : star ? C.violet : C.pink;
+      // pop in with a white flash (never appears "from nowhere"), fade out at the end of its life
+      const born = b.age < 0.12 ? b.age / 0.12 : 1;
+      const s = 0.45 + 0.55 * born;
+      const alpha = Math.min(1, (b.life - b.age) / 0.25);
+      r.glow(b.x, b.y, (moon ? 11 : star ? 9.5 : 8.5) * s, col, 0.6 * alpha, Layer.Bullets);
+      const rot = star ? time * 6 : moon ? Math.atan2(b.vy, b.vx) : 0;
+      r.spr(Layer.Bullets, h, b.x, b.y, s, s, rot, 0xffffff, alpha, 1 - born, Flag.Glow | (moon || star ? Flag.NoSnap : 0));
     }
   }
 
@@ -399,8 +531,12 @@ export class WorldView {
           if (k.state === 1) {
             const ang = Math.atan2(w.player.y - 6 - k.y, w.player.x - k.x);
             b.drawP(Layer.FxAdd, this.hStreak, k.x, k.y - k.z, Math.min(1.4, 0.3 + k.speed * 0.002), 0.7, ang, C.yellow, 0.8, 0, Flag.Add | Flag.Glow | Flag.NoSnap, 16, 2);
-          } else r.shadow(k.x, k.y, 6, 0.55);
-          r.spr(Layer.Entity, h, k.x, k.y - k.z - 3, 1, 1, 0, 0xffffff, 1, 0, Flag.Glow);
+          }
+          // a merged coin (World.mergeCoins: value = the coins folded into it) is drawn bigger + a soft glint
+          const cs = k.value > 1 ? Math.min(1.7, 1 + Math.log2(k.value) * 0.12) : 1;
+          if (k.state !== 1) r.shadow(k.x, k.y, 6 * cs, 0.55);
+          if (cs > 1) r.glow(k.x, k.y - k.z - 3 * cs, 7 * cs, C.yellow, 0.3 + 0.1 * Math.sin(time * 5 + i));
+          r.spr(Layer.Entity, h, k.x, k.y - k.z - 3 * cs, cs, cs, 0, 0xffffff, 1, 0, Flag.Glow);
           break;
         }
         case "chest": {
@@ -433,6 +569,9 @@ export class WorldView {
     }
   }
 }
+
+/** Radius (art px) around the hero's body inside which small player shots fade (drawProjectiles). */
+const HERO_CLEAR = 16;
 
 /** Scale curve for popping orbitals: grow in over 0.15 s, shrink out over the last 0.15 s. */
 function popScale(age: number, life: number): number {

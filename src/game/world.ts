@@ -15,7 +15,7 @@ import { Rng } from "../core/rng";
 import { PooledList } from "../core/pool";
 import { SpatialHash } from "../core/spatial";
 import { clamp, damp, TAU } from "../core/math";
-import { CFG, CHANNELS, CH_MISC, RANKS, enemyHpScale, rankFor, xpToNext } from "./config";
+import { CFG, CHANNELS, CH_MISC, RANKS, bossHpScale, enemyDmgScale, enemyHpScale, gemXpScale, rankFor, xpToNext } from "./config";
 import { createBus, type GameEvents, type HitEvent, type KillEvent, type GemEvent } from "./events";
 import { heroDef } from "./heroes";
 import { applyMeta, type MetaRanks } from "./meta";
@@ -51,7 +51,7 @@ import {
   type WeaponInstance,
 } from "./types";
 
-export const PLAYER_CY = 8;
+export const PLAYER_CY = CFG.playerCy;
 
 export interface WorldOptions {
   hero?: string;
@@ -149,6 +149,7 @@ const newEnemy = (): Enemy => ({
   slowT: 0,
   alpha: 1,
   z: 0,
+  inv: 0,
 });
 
 export function resetProjectile(p: Projectile): void {
@@ -257,13 +258,17 @@ export class World {
   comboRank = -1;
   maxCombo = 0;
   // overdrive
-  ultMeter = 0;
+  ultMeter: number = CFG.ultStart;
   ult: UltState | null = null;
   private ultReadySent = false;
+  /** Meter that ordinary kills may still add (refills at CFG.ultKillCap per second). */
+  private ultKillBudget = 0;
 
   readonly director: Director;
   directorOn: boolean;
   boss: Enemy | null = null;
+  /** The final boss has been defeated (the run is won as soon as the player is alive). */
+  finalBossDown = false;
   /** Clock pickup: enemies frozen while > 0. */
   freezeT = 0;
   /** Ultimates can stop time for enemies. */
@@ -289,6 +294,9 @@ export class World {
   private mergeT = 0;
   private sortIdx: number[] = [];
   private sortKey = new Float64Array(512);
+  /** Sort comparator over `sortKey` (descending, i.e. farthest first); created once, not per merge. */
+  private readonly byFarthest = (a: number, b: number): number => this.sortKey[b] - this.sortKey[a];
+  private coinMergeT = 0;
   private hitEv: HitEvent;
   private killEv: KillEvent;
   private gemEv: GemEvent;
@@ -357,7 +365,7 @@ export class World {
       if (u.t >= CFG.cutinTime) {
         u.phase = "active";
         u.t = 0;
-        this.bullets.clear();
+        this.clearBullets();
         u.def.start(this, u);
         this.emit("ultStart", { ult: u.def.id, x: this.player.x, y: this.player.y });
       }
@@ -384,6 +392,7 @@ export class World {
       if (tg.age >= tg.life) tg.dead = true;
     }
     this.updateCombo(dt);
+    this.ultKillBudget = Math.min(CFG.ultKillCap * 2, this.ultKillBudget + CFG.ultKillCap * dt);
     if (!this.ult) this.addUlt(CFG.ultPerSecond * dt);
     if (this.freezeT > 0) this.freezeT = Math.max(0, this.freezeT - dt);
     this.cleanup();
@@ -484,6 +493,8 @@ export class World {
     p.iframes = CFG.hurtIframes;
     p.hurtT = 0.3;
     this.damageTaken += d;
+    // a hit costs style: the combo drops one rank
+    if (this.comboRank >= 1) this.dropRank();
     // small recoil away from the source
     const ax = p.x - sx;
     const ay = p.y - sy;
@@ -517,7 +528,7 @@ export class World {
     p.hp = Math.round(p.maxHp * 0.5);
     p.iframes = 2.5;
     this.phase = "play";
-    this.bullets.clear();
+    this.clearBullets();
     // screen-clearing burst
     const hw = this.viewW * 0.6;
     const hh = this.viewH * 0.6;
@@ -571,21 +582,38 @@ export class World {
   }
 
   // ================================================================ combo
+  /** Length of the combo timer at the current rank (HUD bar). */
+  get comboWindow(): number {
+    return CFG.comboWindow[this.comboRank + 1];
+  }
   private addCombo(): void {
     this.combo++;
-    this.comboTimer = CFG.comboTime;
+    const win = CFG.comboWindow[this.comboRank + 1];
+    this.comboTimer = Math.min(win, Math.max(0, this.comboTimer) + CFG.comboRefill[this.comboRank + 1]);
     if (this.combo > this.maxCombo) this.maxCombo = this.combo;
     const r = rankFor(this.combo);
     if (r > this.comboRank) {
       this.comboRank = r;
+      // a fresh rank starts with a full (shorter) window
+      this.comboTimer = CFG.comboWindow[r + 1];
       this.emit("comboRank", { rank: r, id: RANKS[r].id, count: this.combo });
     }
   }
   private updateCombo(dt: number): void {
     if (this.combo <= 0) return;
-    // the ult cut-in / time stop shouldn't break combos
+    // (the ult cut-in pauses the whole step, so it never drains the combo)
     this.comboTimer -= dt;
-    if (this.comboTimer <= 0) this.endCombo();
+    if (this.comboTimer > 0) return;
+    if (this.comboRank >= 1) this.dropRank();
+    else this.endCombo();
+  }
+  /** Fall one rank: the count drops to that rank's threshold and its window refills. */
+  private dropRank(): void {
+    const r = this.comboRank - 1;
+    this.comboRank = r;
+    this.combo = RANKS[r].at;
+    this.comboTimer = CFG.comboWindow[r + 1];
+    this.emit("comboDrop", { rank: r, id: RANKS[r].id, count: this.combo });
   }
   private endCombo(): void {
     if (this.combo <= 0) return;
@@ -615,10 +643,11 @@ export class World {
     e.scale = sc;
     e.r = d.radius * sc;
     e.cy = d.height * 0.5 * sc;
-    const hpScale = d.boss || d.prop ? 1 : enemyHpScale(this.t);
+    // (the director is built after the constructor's first lines; nothing spawns before that)
+    const hpScale = d.prop ? 1 : d.boss ? bossHpScale(d.boss.level, this.level) : enemyHpScale(this.t) * (this.director?.hpMul ?? 1);
     e.maxHp = e.hp = Math.max(1, Math.round(d.hp * hpScale * (e.elite ? CFG.elite.hp : 1)));
     e.speed = d.speed * (e.elite ? CFG.elite.speed : 1);
-    e.dmg = d.dmg * (e.elite ? CFG.elite.dmg : 1);
+    e.dmg = d.dmg * (e.elite ? CFG.elite.dmg : 1) * (d.boss || d.prop ? 1 : enemyDmgScale(this.t));
     e.face = x < this.player.x ? 1 : -1;
     e.t = 0;
     e.flash = 0;
@@ -632,6 +661,7 @@ export class World {
     e.slowT = 0;
     e.alpha = 1;
     e.z = 0;
+    e.inv = 0;
     if (d.prop) this.propCount++;
     else this.enemyCount++;
     d.init?.(e, this);
@@ -667,6 +697,7 @@ export class World {
       const d = e.def;
       e.t += dt;
       if (e.flash > 0) e.flash -= dt;
+      if (e.inv > 0) e.inv = Math.max(0, e.inv - dt);
       // cosmetic squash spring (inline springStep)
       const a = -340 * (e.sqX - 1) - 14 * e.sqV;
       e.sqV += a * dt;
@@ -762,7 +793,7 @@ export class World {
 
   /** Damage an enemy. Rolls crit + variance. Returns true if it died. */
   hitEnemy(e: Enemy, base: number, owner: WeaponInstance | null, angle: number, knock: number, critBonus: number, source: string, color: number): boolean {
-    if (e.dead) return false;
+    if (e.dead || e.inv > 0) return false;
     const s = this.stats;
     const crit = this.rng.next() < s.crit + critBonus;
     const v = CFG.damageVariance;
@@ -815,19 +846,27 @@ export class World {
     this.kills++;
     if (owner) owner.kills++;
     this.addCombo();
-    this.addUlt(d.boss ? CFG.ultPerBoss : e.elite ? CFG.ultPerElite : CFG.ultPerKill);
+    if (d.boss) this.addUlt(CFG.ultPerBoss);
+    else if (e.elite) this.addUlt(CFG.ultPerElite);
+    else if (!this.ult) {
+      // ordinary kills charge the meter up to CFG.ultKillCap per second (hordes don't spam ults)
+      const g = Math.min(this.ultKillBudget, CFG.ultPerKill);
+      this.ultKillBudget -= g;
+      this.addUlt(g);
+    }
     d.onDeath?.(e, this);
-    // drops
+    // drops (later enemies are worth more XP)
+    const xs = gemXpScale(this.t);
     if (d.boss) {
-      this.dropGem(e.x, e.y, 100);
+      this.dropGem(e.x, e.y, 100 * xs);
       this.dropPickup("chest", e.x, e.y, 1, true);
       for (let i = 0; i < 16; i++) this.dropPickup("coin", e.x, e.y, 1);
     } else if (e.elite) {
-      this.dropGem(e.x, e.y, Math.max(25, d.xp * 10));
+      this.dropGem(e.x, e.y, Math.max(25, d.xp * 10) * xs);
       this.dropPickup("chest", e.x, e.y, 1, false);
       for (let i = 0; i < 8; i++) this.dropPickup("coin", e.x, e.y, 1);
     } else {
-      if (d.xp > 0) this.dropGem(e.x, e.y, d.xp);
+      if (d.xp > 0) this.dropGem(e.x, e.y, d.xp * xs);
       if (this.rng.next() < CFG.coinDropChance * this.stats.luck) this.dropPickup("coin", e.x, e.y, 1);
     }
     if (!this.muted) {
@@ -845,7 +884,11 @@ export class World {
       this.director.onBossDied(e);
       const final = !!d.boss.final;
       this.emit("bossKilled", { x: e.x, y: e.y, title: d.boss.title, final });
-      if (final) this.win();
+      if (final) {
+        // (the player may have died earlier in this same step: the director then wins the run right after a revive)
+        this.finalBossDown = true;
+        this.win();
+      }
     }
   }
 
@@ -1185,6 +1228,8 @@ export class World {
 
   // ================================================================ enemy bullets
   spawnBullet(x: number, y: number, vx: number, vy: number, dmg: number, sprite = "eb_orb", r = 3, life = 5): Bullet {
+    // hygiene: past the cap the shot is dropped (callers may still configure the returned scratch bullet)
+    if (this.bullets.count >= CFG.maxBullets) return this.droppedBullet;
     const b = this.bullets.spawn();
     b.x = x;
     b.y = y;
@@ -1208,10 +1253,22 @@ export class World {
     return b;
   }
 
+  /** Scratch returned by spawnBullet past the cap (never simulated). */
+  private readonly droppedBullet: Bullet = newBullet();
+
+  /** Remove every enemy bullet (bomb, ultimate, revive, boss phase changes). Emits `bulletsCleared` first. */
+  clearBullets(): void {
+    if (this.bullets.count > 0 && !this.muted) this.bus.emit("bulletsCleared", { n: this.bullets.count });
+    this.bullets.clear();
+  }
+
   private updateBullets(dt: number): void {
     const p = this.player;
     const pcy = p.y - PLAYER_CY;
     const frozen = this.freezeT > 0 || this.timeStop;
+    // off-screen culling bounds (bullets far beyond the view edge can never matter again)
+    const cullX = this.viewW * 0.5 + CFG.bulletCullMargin;
+    const cullY = this.viewH * 0.5 + CFG.bulletCullMargin;
     for (let i = 0; i < this.bullets.count; i++) {
       const b = this.bullets.items[i];
       if (b.dead) continue;
@@ -1238,6 +1295,10 @@ export class World {
       }
       const dx = b.x - p.x;
       const dy = b.y - pcy;
+      if (dx > cullX || dx < -cullX || dy > cullY || dy < -cullY) {
+        b.dead = true;
+        continue;
+      }
       const rr = b.r + CFG.playerRadius - 2;
       if (dx * dx + dy * dy < rr * rr) {
         if (this.hurtPlayer(b.dmg, b.x, b.y)) b.dead = true;
@@ -1337,6 +1398,12 @@ export class World {
         g.y += g.vy * dt;
         g.vx *= decay;
         g.vy *= decay;
+        // merged rainbow gems (the XP left behind) float home on their own
+        if (g.tier === 4 && g.t > 0.6 && d2 > 1) {
+          const d = Math.sqrt(d2);
+          g.x += (dx / d) * CFG.mergedGemDrift * dt;
+          g.y += (dy / d) * CFG.mergedGemDrift * dt;
+        }
         if (d2 < pr2 && g.t > 0.12) {
           g.state = 1;
           g.speed = CFG.gemStartSpeed;
@@ -1392,8 +1459,7 @@ export class World {
     }
     const excess = n - CFG.mergeKeep;
     if (excess <= 1 || idx.length < 2) return;
-    const key = this.sortKey;
-    idx.sort((a, b) => key[b] - key[a]);
+    idx.sort(this.byFarthest);
     const m = Math.min(excess, idx.length);
     let sum = 0;
     const far = items[idx[0]];
@@ -1407,6 +1473,11 @@ export class World {
   }
 
   private updatePickups(dt: number): void {
+    this.coinMergeT -= dt;
+    if (this.coinMergeT <= 0) {
+      this.coinMergeT = 0.5;
+      if (this.pickups.count > CFG.maxCoins) this.mergeCoins();
+    }
     const p = this.player;
     const pr = CFG.pickupRadius * this.stats.pickup;
     const pr2 = pr * pr;
@@ -1456,6 +1527,43 @@ export class World {
     }
   }
 
+  /**
+   * Coins left behind would pile up for the whole run (2 % of kills drop one): above
+   * CFG.maxCoins the farthest resting coins fold into the nearest of them (its value
+   * becomes the sum, drawn as a bigger coin). Nothing is lost or gained: same coins,
+   * same total value, a bounded pickup list.
+   */
+  private mergeCoins(): void {
+    const items = this.pickups.items;
+    const n = this.pickups.count;
+    const p = this.player;
+    const idx = this.sortIdx;
+    idx.length = 0;
+    if (this.sortKey.length < n) this.sortKey = new Float64Array(n * 2);
+    let coins = 0;
+    for (let i = 0; i < n; i++) {
+      const k = items[i];
+      if (k.dead || k.kind !== "coin") continue;
+      coins++;
+      if (k.state !== 0 || k.z > 0) continue;
+      const dx = k.x - p.x;
+      const dy = k.y - p.y;
+      this.sortKey[i] = dx * dx + dy * dy;
+      idx.push(i);
+    }
+    const excess = coins - CFG.coinMergeKeep;
+    if (excess < 1 || idx.length < 2) return;
+    idx.sort(this.byFarthest);
+    const m = Math.min(excess + 1, idx.length);
+    // fold the m farthest into the nearest of them (index m - 1)
+    const keep = items[idx[m - 1]];
+    for (let j = 0; j < m - 1; j++) {
+      const k = items[idx[j]];
+      keep.value += k.value;
+      k.dead = true;
+    }
+  }
+
   private collectPickup(k: Pickup): void {
     k.dead = true;
     const p = this.player;
@@ -1478,6 +1586,7 @@ export class World {
         break;
       case "bomb":
         this.emit("bomb", { x: p.x, y: p.y });
+        this.clearBullets();
         this.hitAllInView(80 * this.stats.might + this.t * 0.4, 120, 160, "bomb", 0xffe14d);
         break;
       case "clock":
@@ -1520,6 +1629,7 @@ export class World {
       this.xpNext = xpToNext(this.level);
       this.pendingLevels++;
       this.emit("levelUp", { level: this.level, x: this.player.x, y: this.player.y });
+      this.heal(Math.max(3, this.player.maxHp * CFG.levelHeal));
     }
   }
 

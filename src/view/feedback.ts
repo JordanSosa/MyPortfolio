@@ -30,6 +30,8 @@ export interface FeedbackHooks {
   bossBar?(e: Enemy | null, title?: string): void;
   ultReady?(): void;
   cutin?(heroId: string, ultName: string): void;
+  /** The sim started the ultimate (end of the cut-in): drop the overlay now. */
+  cutinEnd?(): void;
   levelUp?(level: number): void;
   chest?(golden: boolean): void;
   died?(): void;
@@ -52,6 +54,24 @@ const HIT_FX_BUDGET = 16;
 const DEATH_FX_BUDGET = 22;
 const NUM_BUDGET = 36;
 const BOOM_BUDGET = 5;
+/**
+ * Enemy damage numbers alive above which only crits / boss hits pop, and above
+ * which nothing pops (player + heal numbers always do). Both shrink with the
+ * peak-chaos load (r.post.load) so numbers never paper over the hero / bullets.
+ */
+const NUM_SOFT = 70;
+const NUM_HARD = 110;
+/**
+ * A plain (non-crit, non-boss) number for the same enemy at most every NUM_REPEAT
+ * real seconds: rapid-tick weapons (prism / rainbow beams tick every 0.07-0.1 s)
+ * would otherwise stack a column of numbers on every enemy they touch.
+ * Tracked in a small uid-hashed table (no per-hit allocation).
+ */
+const NUM_REPEAT = 0.22;
+const NUM_SLOTS = 1024;
+/** Boss hits: one summed damage number every BOSS_NUM_EVERY s, one hit spark every BOSS_SPARK_EVERY s. */
+const BOSS_NUM_EVERY = 0.14;
+const BOSS_SPARK_EVERY = 0.05;
 
 export class Feedback {
   private offs: (() => void)[] = [];
@@ -59,12 +79,36 @@ export class Feedback {
   private deathFx = 0;
   private nums = 0;
   private booms = 0;
+  private bossNumUid = -1;
+  private bossAcc = 0;
+  private bossCrit = false;
+  private bossNumAt = -1;
+  private bossSparkAt = 0;
+  /** Last plain damage number per enemy (uid-hashed, see NUM_REPEAT). */
+  private readonly numUid = new Int32Array(NUM_SLOTS).fill(-1);
+  private readonly numAt = new Float64Array(NUM_SLOTS);
   private hitSfx = 0;
   private gemChain = 0;
   private gemT = 0;
   private now = 0;
   private later: { t: number; fn: () => void }[] = [];
+  /** Reused ambient density target (day -> night), set every frame without allocating. */
+  private readonly amb = { petals: 12, motes: 10, fireflies: 0 };
   private beat = 0;
+  /**
+   * Sim time (world.t) at which the battle theme returns after a non-final boss
+   * died (-1 = none). Sim time, not this.now: the frame clock is clamped on slow
+   * devices (and the death plays in slow-mo), so a frame-time delay drifted.
+   */
+  private musicBackAt = -1;
+  /** this.now of the last level-up (its small heal shows the number only, the fanfare covers the rest). */
+  private levelAt = -1;
+  /** Per-frame budgets after the peak-chaos scaling (see frame()). */
+  private hitBudget = HIT_FX_BUDGET;
+  private deathBudget = DEATH_FX_BUDGET;
+  private numBudget = NUM_BUDGET;
+  private numSoft = NUM_SOFT;
+  private numHard = NUM_HARD;
   numbers = true;
 
   constructor(
@@ -81,6 +125,7 @@ export class Feedback {
   dispose(): void {
     for (const o of this.offs) o();
     this.offs = [];
+    this.opts.hooks?.cutinEnd?.();
     this.later.length = 0;
     this.r.post.damageFloor = 0;
   }
@@ -107,6 +152,15 @@ export class Feedback {
   frame(realDt: number): void {
     this.now += realDt;
     this.hitFx = this.deathFx = this.nums = this.booms = this.hitSfx = 0;
+    // peak chaos (adaptive bloom limiter load): fewer sparks / puffs / numbers, fainter numbers.
+    // A screen full of enemy bullets counts as busy too: the bullets must read, not our numbers.
+    const load = Math.max(this.r.post.load, 0.8 * Math.min(1, this.w.bullets.count / 50));
+    this.hitBudget = Math.round(HIT_FX_BUDGET * (1 - 0.5 * load));
+    this.deathBudget = Math.round(DEATH_FX_BUDGET * (1 - 0.45 * load));
+    this.numBudget = Math.round(NUM_BUDGET * (1 - 0.6 * load));
+    this.numSoft = Math.round(NUM_SOFT * (1 - 0.55 * load));
+    this.numHard = Math.round(NUM_HARD * (1 - 0.5 * load));
+    this.fx.dmg.busy = load;
     if (this.later.length) {
       for (let i = this.later.length - 1; i >= 0; i--) {
         const l = this.later[i];
@@ -120,6 +174,11 @@ export class Feedback {
     if (this.gemT <= 0) this.gemChain = 0;
     const w = this.w;
     const p = w.player;
+    if (this.musicBackAt >= 0 && w.t >= this.musicBackAt) {
+      this.musicBackAt = -1;
+      // (a death / victory in between owns the music; a boss alive or warning keeps its theme)
+      if (this.opts.sound && w.phase === "play" && !w.boss && !w.director.warning) audio.music("battle", 2);
+    }
     // low-HP heartbeat vignette (lub-dub every ~0.8 s)
     const k = p.hp / p.maxHp;
     if (k < 0.3 && w.phase === "play") {
@@ -133,7 +192,11 @@ export class Feedback {
     if (prog < 0.5) this.r.post.blendGrade(GRADES.day, GRADES.dusk, prog * 2);
     else this.r.post.blendGrade(GRADES.dusk, GRADES.night, (prog - 0.5) * 2);
     const night = clamp((prog - 0.55) * 2.5, 0, 1);
-    this.fx.ambient.set({ petals: Math.round(12 * (1 - night)), motes: 10 + Math.round(6 * night), fireflies: Math.round(22 * night) });
+    const amb = this.amb;
+    amb.petals = Math.round(12 * (1 - night));
+    amb.motes = 10 + Math.round(6 * night);
+    amb.fireflies = Math.round(22 * night);
+    this.fx.ambient.set(amb);
     if (this.opts.sound) audio.setIntensity(clamp(w.enemyCount / 110 + Math.max(0, w.comboRank) * 0.08 + (w.boss ? 0.4 : 0), 0, 1));
   }
 
@@ -144,17 +207,58 @@ export class Feedback {
     const juice = fx.juice;
     const calm = !!this.opts.calm;
     const sub = this.offs;
+    // arsenal weapon visuals (lightning, bursts, candy confetti, bubble pops): src/view/weapon-fx.ts
+    sub.push(...this.view.weaponFx.bind(w, (id, vol, pitch, x) => this.sfx(id, vol, pitch, x), calm));
+    // bestiary cues, boss phases / enrage, death throes and the VICTORY dawn sequence: src/view/bestiary-fx.ts
+    sub.push(
+      ...this.view.bestiary.bind(w, {
+        sfx: (id, vol, pitch, x) => this.sfx(id, vol, pitch, x),
+        haptic: (ms) => this.haptic(ms),
+        sound: this.opts.sound,
+        calm,
+        hooks: this.opts.hooks,
+      }),
+    );
 
     sub.push(
       bus.on("enemyHit", (e) => {
         const boss = !!e.enemy.def.boss;
-        if (this.hitFx < HIT_FX_BUDGET) {
+        // (a boss soaks every weapon at once: its sparks are rate-limited so they don't bury it in white)
+        if (this.hitFx < this.hitBudget && (!boss || this.now >= this.bossSparkAt)) {
           this.hitFx++;
+          if (boss) this.bossSparkAt = this.now + BOSS_SPARK_EVERY;
           fxHit(fx, e.x, e.y, e.crit ? C.yellow : e.color, e.angle);
         }
-        if (this.numbers && this.nums < NUM_BUDGET) {
-          this.nums++;
-          fx.dmg.spawn(e.x + (Math.random() - 0.5) * 4, e.y - 8, e.dmg, e.crit ? "crit" : "normal");
+        if (boss) {
+          // boss damage is summed into one number every BOSS_NUM_EVERY s (not a pile of numbers on its face)
+          const uid = e.enemy.uid;
+          if (uid !== this.bossNumUid) {
+            this.bossNumUid = uid;
+            this.bossAcc = 0;
+            this.bossCrit = false;
+            this.bossNumAt = -1;
+          }
+          this.bossAcc += e.dmg;
+          if (e.crit) this.bossCrit = true;
+          if (this.numbers && this.now - this.bossNumAt >= BOSS_NUM_EVERY && this.nums < this.numBudget && fx.dmg.alive < this.numHard) {
+            this.nums++;
+            fx.dmg.spawn(e.x + (Math.random() - 0.5) * 10, e.y - 8, Math.round(this.bossAcc), this.bossCrit ? "crit" : "normal");
+            this.bossAcc = 0;
+            this.bossCrit = false;
+            this.bossNumAt = this.now;
+          }
+        } else if (this.numbers && this.nums < this.numBudget) {
+          const alive = fx.dmg.alive;
+          const special = e.crit;
+          const uid = e.enemy.uid;
+          const slot = uid & (NUM_SLOTS - 1);
+          const repeat = !special && this.numUid[slot] === uid && this.now - this.numAt[slot] < NUM_REPEAT;
+          if (!repeat && (alive < this.numSoft || (alive < this.numHard && special))) {
+            this.numUid[slot] = uid;
+            this.numAt[slot] = this.now;
+            this.nums++;
+            fx.dmg.spawn(e.x + (Math.random() - 0.5) * 4, e.y - 8, e.dmg, e.crit ? "crit" : "normal");
+          }
         }
         if (this.hitSfx < 2) {
           this.hitSfx++;
@@ -177,7 +281,7 @@ export class Feedback {
           this.haptic(25);
           return;
         }
-        if (this.deathFx < DEATH_FX_BUDGET) {
+        if (this.deathFx < this.deathBudget) {
           this.deathFx++;
           // pop: a white silhouette at 1.3x that fades in a blink, then the confetti burst
           const a = this.view.anims.fps(en.def.sprite, en.def.fps ?? 0);
@@ -200,6 +304,11 @@ export class Feedback {
         }
         this.booms++;
         fxExplosion(fx, e.x, e.y, e.r, !calm);
+        // a blast on top of the hero hides it for a moment: force the hero beacon on (WorldView)
+        const dx = e.x - w.player.x;
+        const dy = e.y - (w.player.y - 8);
+        const rr = e.r + 10;
+        if (dx * dx + dy * dy < rr * rr) this.view.coverHero(0.55);
         this.sfx(e.big ? "explosionBig" : "explosion", e.big ? 0.8 : 1, (Math.random() * 3 - 1.5) | 0, e.x);
       }),
       bus.on("shockwave", (e) => {
@@ -235,6 +344,11 @@ export class Feedback {
       }),
       bus.on("playerHeal", (e) => {
         fx.dmg.spawn(e.x, e.y - 24, e.amount, "heal");
+        // the level-up heal (CFG.levelHeal) rides on the level-up fanfare: number + a few hearts only
+        if (this.now - this.levelAt < 0.05) {
+          fx.ps.emit(P.hearts, e.x, e.y - 12, 3);
+          return;
+        }
         fx.ps.emit(P.hearts, e.x, e.y - 12, 6);
         fx.ps.emit(P.ring, e.x, e.y - 10, 1, NaN, C.lime, 1.2);
         this.sfx("heal");
@@ -268,6 +382,7 @@ export class Feedback {
         this.sfx("dash");
       }),
       bus.on("levelUp", (e) => {
+        this.levelAt = this.now;
         if (!calm) {
           fxLevelUp(fx, e.x, e.y);
           // short: the level-up modal (with its own big title) opens ~0.4 s later
@@ -352,6 +467,10 @@ export class Feedback {
         if (e.count >= 10) this.sfx("comboBreak");
         this.opts.hooks?.comboBreak?.(e.count);
       }),
+      bus.on("comboDrop", () => {
+        // a softer, higher crack than the full break (the HUD drops the rank letter)
+        this.sfx("comboBreak", 0.45, 5);
+      }),
       bus.on("ultReady", () => {
         this.sfx("ultReady");
         this.opts.hooks?.ultReady?.();
@@ -367,6 +486,7 @@ export class Feedback {
         this.haptic(30);
       }),
       bus.on("ultStart", (e) => {
+        this.opts.hooks?.cutinEnd?.();
         juice.flash(C.white, 0.7, 0.45);
         juice.shake(0.85);
         juice.bloomSurge(1.3, 1.4);
@@ -404,11 +524,12 @@ export class Feedback {
         this.after(0.15, () => this.sfx("meow", 0.8, 3));
       }),
       bus.on("ultEnd", () => {
+        this.opts.hooks?.cutinEnd?.();
         this.r.camera.zoomTo(w.boss ? 0.86 : 1, 3);
       }),
       bus.on("waveIncoming", (e) => {
         this.sfx("waveIncoming");
-        const t = e.kind === "swarm" ? "SWARM!" : e.kind === "encircle" ? "SURROUNDED!" : "STAMPEDE!";
+        const t = e.kind === "swarm" ? "SWARM!" : e.kind === "encircle" ? "SURROUNDED!" : e.kind === "storm" ? "BAT STORM!" : e.kind === "wisps" ? "WISP RUSH!" : "STAMPEDE!";
         this.opts.hooks?.banner?.("incoming", t);
       }),
       bus.on("eliteSpawned", () => {
@@ -428,6 +549,7 @@ export class Feedback {
         juice.shockwave(e.enemy.x, e.enemy.y, 1.4, 140);
         this.opts.hooks?.banner?.("boss", e.title, e.subtitle);
         this.opts.hooks?.bossBar?.(e.enemy, e.title);
+        this.musicBackAt = -1;
         if (this.opts.sound) audio.music(e.enemy.def.boss?.music ?? "boss", 1.2);
         this.sfx("bossRoar");
       }),
@@ -446,19 +568,11 @@ export class Feedback {
         this.opts.hooks?.bossBar?.(null);
         this.sfx("bossDie");
         this.haptic(150);
-        if (this.opts.sound && !e.final) this.after(2, () => audio.music("battle", 2));
+        // back to the battle theme 2 s of game time after the death (see musicBackAt)
+        if (!e.final) this.musicBackAt = w.t + 2;
       }),
-      bus.on("victory", () => {
-        const p = w.player;
-        for (let i = 0; i < 14; i++) this.after(i * 0.22, () => fxFirework(fx, p.x + (Math.random() - 0.5) * 160, p.y - 30 - Math.random() * 90));
-        this.view.texts.add("DAWN BREAKS!", 0, -50, { anchor: 1, scale: 3, rainbow: true, life: 3 });
-        juice.flash(C.paleYellow, 0.6, 1);
-        this.r.setGrade(GRADES.day, 2);
-        this.sfx("victory");
-        // the victory track (fanfare intro) starts with the sunrise, not on the results screen
-        if (this.opts.sound) audio.music("victory", 1.2);
-        this.opts.hooks?.victory?.();
-      }),
+      // "victory": the extended dawn celebration (slow-mo explosions, white flash, DAWN BREAKS!,
+      // sunrise grade sweep, fireworks, victory music) lives in src/view/bestiary-fx.ts
     );
   }
 }

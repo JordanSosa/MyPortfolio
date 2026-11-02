@@ -1,7 +1,7 @@
 /**
- * Yarn Orbit (Mochi): yarn balls circle the player (3 s on / 1.5 s off),
- * each enemy can be bonked every 0.4 s.
- * Evolution: Cosmic Yarn (+ Magnet Star) - 6 permanent planets that also pull gems.
+ * Yarn Orbit (Mochi): yarn balls circle the player (3 s on / 1.3 s off),
+ * each enemy can be bonked every 0.4 s (0.34 s from Lv3, 0.28 s at Lv5).
+ * Evolution: Cosmic Yarn (+ Magnet Star) - 6 permanent planets (bonk every 0.26 s) that also pull gems.
  */
 import { C } from "../../art/palette";
 import { TAU } from "../../core/math";
@@ -50,13 +50,13 @@ export const yarnOrbit: WeaponDef = {
   hitSfx: "orbitHit",
   desc: "Yarn balls orbit you, bonking anything they touch.",
   levels: [
-    { dmg: 10, cd: 1.3, amount: 3, area: 1, duration: 3, speed: 3.4, knock: 45 },
-    { dmg: 10, cd: 1.3, amount: 4, area: 1, duration: 3, speed: 3.4, knock: 45 },
-    { dmg: 13, cd: 1.3, amount: 4, area: 1.15, duration: 3, speed: 3.4, knock: 50 },
-    { dmg: 13, cd: 1.2, amount: 5, area: 1.15, duration: 3.5, speed: 3.6, knock: 50 },
-    { dmg: 16, cd: 1.1, amount: 5, area: 1.2, duration: 3.5, speed: 4.2, knock: 55 },
+    { dmg: 10, cd: 1.3, amount: 3, area: 1, duration: 3, speed: 3.4, knock: 45, every: 0.4 },
+    { dmg: 10, cd: 1.3, amount: 4, area: 1, duration: 3, speed: 3.4, knock: 45, every: 0.4 },
+    { dmg: 13, cd: 1.3, amount: 4, area: 1.15, duration: 3, speed: 3.4, knock: 50, every: 0.34 },
+    { dmg: 13, cd: 1.2, amount: 5, area: 1.15, duration: 3.5, speed: 3.6, knock: 50, every: 0.34 },
+    { dmg: 16, cd: 1.1, amount: 5, area: 1.2, duration: 3.5, speed: 4.2, knock: 55, every: 0.28 },
   ],
-  upgrades: ["+1 yarn ball", "Damage +3, area +15%", "+1 yarn ball, lasts longer", "Damage +3, spins faster"],
+  upgrades: ["+1 yarn ball", "Damage +3, area +15%, bonks faster", "+1 yarn ball, lasts longer", "Damage +3, spins and bonks faster"],
   evolution: { into: "cosmic_yarn", with: "magnet_star" },
   init(_w, inst) {
     inst.data.off = 0.2;
@@ -74,7 +74,7 @@ export const yarnOrbit: WeaponDef = {
     if (d.off > 0) return;
     d.off = S.cd;
     const n = Math.min(10, S.amount);
-    for (let i = 0; i < n; i++) spawnBall(w, inst, S, S.duration, "w_yarn", 5, 0.4);
+    for (let i = 0; i < n; i++) spawnBall(w, inst, S, S.duration, "w_yarn", 5, S.L.every ?? 0.4);
     placeRing(w, inst, 28 * S.area, d.ang, 0.85);
     fired(w, inst, w.player.x, w.player.y);
   },
@@ -91,7 +91,7 @@ export const cosmicYarn: WeaponDef = {
   hitSfx: "orbitHit",
   evolved: true,
   desc: "EVOLUTION! 6 permanent orbiting planets that also pull in gems.",
-  levels: [{ dmg: 15, cd: 0, amount: 6, area: 1, speed: 2.6, knock: 65 }],
+  levels: [{ dmg: 19, cd: 0, amount: 6, area: 1, speed: 2.6, knock: 65, every: 0.26 }],
   upgrades: [],
   update(w, inst, dt) {
     const S = wstats(w, inst);
@@ -100,7 +100,7 @@ export const cosmicYarn: WeaponDef = {
     let live = prune(inst);
     if (live !== want) {
       killOwned(inst);
-      for (let i = 0; i < want; i++) spawnBall(w, inst, S, Infinity, "w_planet", 7, 0.35);
+      for (let i = 0; i < want; i++) spawnBall(w, inst, S, Infinity, "w_planet", 7, S.L.every ?? 0.35);
       live = want;
       fired(w, inst, w.player.x, w.player.y);
     }

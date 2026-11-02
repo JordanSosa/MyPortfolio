@@ -66,7 +66,14 @@ export function killOwned(inst: WeaponInstance): void {
   inst.uids.length = 0;
 }
 
-/** Emit the fire event for sfx. */
+const fireEv = { id: "", sfx: "", x: 0, y: 0 };
+
+/** Emit the fire event for sfx (one reused payload: firing never allocates). */
 export function fired(w: World, inst: WeaponInstance, x: number, y: number): void {
-  if (inst.def.sfx) w.emit("weaponFire", { id: inst.def.id, sfx: inst.def.sfx, x, y });
+  if (!inst.def.sfx || w.muted) return;
+  fireEv.id = inst.def.id;
+  fireEv.sfx = inst.def.sfx;
+  fireEv.x = x;
+  fireEv.y = y;
+  w.emit("weaponFire", fireEv);
 }

@@ -26,9 +26,12 @@ src/
     meta.ts            Dream Shop upgrades + costs
     upgrades.ts        level-up card generation / application, chest rewards
     registry.ts        auto-registry (import.meta.glob) of weapons / enemies / bosses / ultimates
-    weapons/*.ts       one file per weapon (+ its evolution); `_shared.ts` helpers
-    enemies/*.ts       one file per enemy behaviour (props too); `_steer.ts` helpers
-    bosses/*.ts        one file per boss
+    weapons/*.ts       one file per weapon (+ its evolution); `_shared.ts` helpers, `_fx.ts` (weaponFx kinds,
+                       reused-payload emit helpers, random on-screen targets)
+    enemies/*.ts       one file per enemy behaviour (props too); `_steer.ts` helpers, `_bullets.ts` (fair
+                       shoot / ring / fan helpers: never spawn on the player), `_fx.ts` (enemyFx kinds + emit helper)
+    bosses/*.ts        one file per boss (king-puff, nightmare-teddy, lady-lunatic); `_luna.ts` (Lady Lunatic
+                       state + moon-ring geometry, import-cycle free for the bot / view)
     ultimates/*.ts     one file per hero ultimate
     director/
       timeline.ts      spawn phases + timed events AS DATA
@@ -42,6 +45,13 @@ src/
     texts.ts           in-world bitmap texts ("LEVEL UP!", "FREEZE!")
     anims.ts           sprite handle cache
     feedback.ts        EVENT -> juice/particles/numbers/audio/haptics/HUD hooks bridge
+    weapon-fx.ts       arsenal visuals: bubble field / ocean dome, prism + rainbow beams, candy landing markers,
+                       love-tornado swirl (per frame) + `weaponFx` events (lightning, blasts, dome bursts, heals)
+                       + arsenal trail looks (merged into TRAILS)
+    bestiary-fx.ts     bestiary visuals: per-enemy `decorate` hook (eye charge, pumpkin shiver, wisp fuse ring,
+                       boss eyes / claws / halo, Lady Lunatic's moon ring), `enemyFx` cues, boss phase / enrage
+                       juice, boss death throes, the VICTORY dawn sequence and the grade overrides (LUNATIC MOON
+                       dim, enrage red, sunrise sweep)
 
   ui/                  DOM: app state machine, HUD, screens, modals, save
     app.ts             App: loop, screens, modals, level-up / chest / game-over flow, settings
@@ -55,13 +65,19 @@ src/
     screens/*.ts       splash, title, select, levelup, chest, pause, settings, over, results, shop
 
   debug/
-    bot.ts             autoplay bot + `simulate()` headless runner (PURE; used by tests, ?autoplay, ?skip, attract)
+    bot.ts             autoplay bot + `simulate()` headless runner (PURE; used by tests, ?autoplay, ?skip, attract,
+                       the balance probe; `noDash` / `randomPicks` make the "lazy" weak-player proxy)
     params.ts          URL params (?autoplay ?seed ?hero ?skip ?god ?mute ?quality ?screen ?fps ?speed)
-    hooks.ts           window.__kk (skipTo, spawn, giveXp, levelUp, chest, ult, pause, endRun, stats ...)
+    hooks.ts           window.__kk (skipTo, spawn, giveXp, levelUp, chest, ult, give, clearWeapons, pause, endRun, stats ...)
     fps.ts             FPS meter
 
-tests/                 vitest: core math, xp/cards/chests/meta, headless 3-minute bot runs, boss, ults
+tests/                 vitest: core math, xp/cards/chests/meta, headless 3-minute bot runs, boss, ults,
+                       bestiary.test.ts (late enemies, both bosses through every pattern/phase, victory, enrage,
+                       bullet hygiene), integrity.test.ts (final boss + death on one step, coin merge, a full
+                       unmuted run with a listener on every event: bounded lists, victory)
+tools/balance.probe.ts `npm run balance`: full headless runs, every hero x seed, good + lazy bot, pacing report (section 6)
 scripts/e2e.mjs        Playwright e2e: desktop / mobile portrait / mobile landscape, screenshots, fails on errors
+scripts/peak.mjs       peak-chaos readability shots (adaptive bloom limiter on / off)
 scripts/icons.mjs      regenerates public/icon-192.png + icon-512.png from the atlas
 public/                PWA manifest + icons
 ```
@@ -89,7 +105,10 @@ touch controls, mark held fingers stale, remove the onboarding hint and muffle
 the music (except the game-over / victory modal, whose jingle stays clear). The
 ultimate cut-in is handled *inside* the sim (`world.ult.phase === "cutin"`
 pauses the world for `CFG.cutinTime` while particles keep running); the view
-darkens the frame through `r.post.dim` meanwhile.
+darkens the frame through `r.post.dim` meanwhile. The DOM cut-in overlay
+(`ui/cutin.ts`) plays its 0.92 s intro and then *holds* until the sim emits
+`ultStart` (feedback hook `cutinEnd`), so it can't vanish early on a slow device
+whose sim runs on clamped frame time.
 
 ### Music per state
 
@@ -99,10 +118,11 @@ darkens the frame through `r.post.dim` meanwhile.
 | title / select / settings | `title` | `App.goTitle / goSelect` |
 | Dream Shop | `shop` | `App.goShop` |
 | run | `battle` + `setIntensity(enemies, combo rank, boss)` | `App.startRun`, `Feedback.frame` |
-| boss alive | `def.boss.music` (`boss` / `final`) | `feedback.ts bossSpawn`; back to `battle` 2 s after a non-final boss dies; `App.revived` restores the right one |
+| boss alive | `def.boss.music` (`boss` / `final`) | `feedback.ts bossSpawn`; back to `battle` 2 s of **game time** (`world.t`) after a non-final boss dies (frame time is clamped on slow devices, so it is not used); `App.revived` restores the right one |
 | level-up / chest / pause | (muffled) | `App.openModal` |
 | death | duck, then `gameover` with the DREAM OVER modal | `feedback.ts playerDied`, `App.gameFrame` |
-| victory | `victory` starts with the "DAWN BREAKS!" event | `feedback.ts victory` |
+| boss phase change | duck 1.9 s | `bestiary-fx.ts bossPhase` |
+| victory | `victory` starts at the dawn flash, 1.7 s after the final blow ("DAWN BREAKS!") | `bestiary-fx.ts victory` |
 | results | keeps `victory` / `gameover` | `App.endRun` |
 
 Hitstop / slow-mo are global `time` effects triggered by the feedback bridge.
@@ -138,12 +158,13 @@ Hitstop / slow-mo are global `time` effects triggered by the feedback bridge.
 
 | Group | Events |
 | --- | --- |
-| combat | `enemyHit`, `enemyKilled`, `propBroken`, `eliteSpawned`, `explosion`, `weaponFire`, `enemyShoot`, `telegraph`, `shockwave` |
+| combat | `enemyHit`, `enemyKilled`, `propBroken`, `eliteSpawned`, `explosion`, `weaponFire`, `weaponFx`, `enemyShoot`, `telegraph`, `shockwave` |
 | player | `playerHurt`, `playerHeal`, `playerDied`, `playerRevived`, `dash`, `dashReady` |
 | progression | `levelUp`, `upgradeApplied`, `evolution` |
 | pickups | `gem`, `coin`, `pickup`, `chestDropped`, `chestCollected`, `chestOpened`, `magnet`, `bomb`, `freeze` |
-| combo / ult | `comboRank`, `comboBreak`, `ultReady`, `ultCutin`, `ultStart`, `ultEnd`, `ultSlash`, `ultBurst`, `ultMeow` |
-| director | `waveIncoming`, `bossWarning`, `bossSpawn`, `bossKilled`, `bossEnrage` |
+| combo / ult | `comboRank`, `comboDrop` (fell one rank), `comboBreak`, `ultReady`, `ultCutin`, `ultStart`, `ultEnd`, `ultSlash`, `ultBurst`, `ultMeow` |
+| director | `waveIncoming`, `bossWarning`, `bossSpawn`, `bossKilled`, `bossEnrage`, `bossPhase` |
+| bestiary | `enemyFx` (EFX_* cue + position / direction / power, reused payload), `bulletsCleared` (fired before the bullet list is emptied) |
 | run | `victory` |
 
 Feedback for each lives in `src/view/feedback.ts` (one `bus.on` per event).
@@ -191,6 +212,17 @@ It is automatically offered as a NEW card, levels up, shows in the HUD/pause/
 results, and evolves via the card/chest system. New trail looks: add a key to
 `src/view/trails.ts`. Hit sound override: `hitSfx`.
 
+Looks the projectile list can't express (lightning, area blasts, heals, auras,
+beams) follow the arsenal pattern: the weapon emits `weaponFx` events through
+`wfx(w, WFX_*, ...)` from `weapons/_fx.ts` (one reused payload, muted-safe) and
+`src/view/weapon-fx.ts` turns them into juice; persistent visuals (aura radius
+in `inst.data`, owned beam / bomb projectiles in `inst.projs`) are read there
+each frame by weapon id. Reference files: `heart-boomerang.ts` (custom flight
+hook, per-leg hit lists), `thunder-bell.ts` (marker projectile + chain via
+`grid.nearest`), `candy-bomb.ts` (parabolic PK_FALL + AoE), `bubble-aura.ts`
+(no projectiles, per-enemy tick cooldown on the slot channel + slow),
+`prism-beam.ts` (owned beams with an exact segment hit test).
+
 ### Enemy (`src/game/enemies/<name>.ts`)
 
 ```ts
@@ -208,8 +240,23 @@ The director picks it up as soon as its id appears in a `timeline.ts` phase
 mix (the 2:00+ phases already list `eyepuff`, `pumpkin`, `teddy`, `wisp`).
 Elite variants, hit flash, squash, knockback, separation, death confetti
 (`colors`), gems and HP scaling are all automatic. Telegraphs:
-`w.telegraphCircle(...)` / `w.telegraphLine(...)`. Bullets: `w.spawnBullet(...)`.
-Scratch state: `e.state, e.timer, e.a, e.b, e.c, e.d`.
+`w.telegraphCircle(...)` / `w.telegraphLine(...)`. Bullets: `shoot / ring / fan`
+from `enemies/_bullets.ts` (they refuse to spawn within `SAFE_SPAWN` of the
+player and use the small fair hitboxes); raw `w.spawnBullet(...)` only for
+off-screen spawns (starfall). Cosmetic cues: `efx(w, EFX_*, x, y, dx, dy, power, e)`
+from `enemies/_fx.ts` (and `shock(w, x, y, r, power)` for slam / flourish shockwaves; both reuse one payload); looks the generic drawer can't express go in
+`view/bestiary-fx.ts decorate()` (keyed by def id, return true when it drew the
+sprite itself). Scratch state: `e.state, e.timer, e.a, e.b, e.c, e.d`
+(`frame()` should return a frame for every state so the art's special frames
+never show up in the default loop). Reference files: `eyepuff.ts` (keep-away
+shooter with a charge tell), `pumpkin.ts` (aimed-once dash with a lane
+telegraph), `teddy.ts` (gait-synced stomps), `wisp.ts` (fuse + blast, chain
+reactions through `w.explode`, contact damage disabled).
+
+Bullet hygiene lives in `World`: `CFG.maxBullets` (400, extra shots are
+dropped), culling `CFG.bulletCullMargin` px beyond the view, and
+`w.clearBullets()` (bomb pickup, ultimate start, revive, boss phase changes)
+which emits `bulletsCleared` first so the view can pop every bullet.
 
 ### Boss (`src/game/bosses/<name>.ts`)
 
@@ -220,13 +267,34 @@ An `EnemyDef` with `boss: { title, subtitle, music?, final? }`, exported as
 gives the 3 s WARNING, entrance from the top, name card, boss bar, music,
 reduced spawns, slow-mo death sequence and golden chest. `final: true` makes
 its death the victory (until a final boss is registered, surviving 10:00 wins).
+Its death sets `w.finalBossDown`; if the player died earlier in that same step
+the death plays out first and the director wins the run right after a revive
+(a run can never continue without its final boss).
 `w.director.enraged` turns true at 10:30 while the final boss lives.
+
+Boss conventions (see `nightmare-teddy.ts`, `lady-lunatic.ts`): per-boss
+scratch state in a module `WeakMap<Enemy, State>` reset in `init()` (exported
+getter for the view / tests), `e.state` / `e.timer` as the pattern step, a
+pattern cycle array, patterns only start while the boss is on screen, phase
+changes set `e.inv` (hits are ignored while > 0), call `w.clearBullets()` and
+emit `bossPhase { title, subtitle }` (banner, shockwave, duck in the view).
+If an earlier boss is still alive when the next one arrives it flees
+(`Director.spawnBoss`). A final boss's `onDeath` dissolves the remaining
+enemies (`EFX_DAWN_POP`) before `World.win()`.
+
+Import rule for content modules: never import a *value* from `world.ts`
+(types only - use `CFG.playerCy` instead of `PLAYER_CY`). A runtime edge
+content -> world -> registry -> content crashes whichever module is loaded
+first ("Cannot access 'bosses' before initialization"); helpers the bot or the
+view need (e.g. the moon ring) live in import-free `_*.ts` files.
 
 ### Director event (`src/game/director/`)
 
 Data goes in `timeline.ts` (`EVENTS`), behaviour in `events.ts`:
 `EVENT_HANDLERS.myEvent = (w, d, ev) => { ... }`. Use `d.addTask((dt) => stillRunning)`
-for events that unfold over time (see `flood`). Emit `waveIncoming` for the HUD banner.
+for events that unfold over time (see `flood`, `batStorm`, `wispRush`). Emit
+`waveIncoming` once for the HUD banner (kinds `swarm`, `encircle`, `storm`,
+`wisps`, else "STAMPEDE!").
 
 ### Passive (`src/game/passives.ts`)
 
@@ -254,40 +322,172 @@ start weapon and ultimate. The select screen lists `HEROES` automatically.
 | Event | Where |
 | --- | --- |
 | Enemy hit flash / squash / knockback | `World.hitEnemy` (flash, sqV, kx/ky) + `WorldView.drawEnemies` |
-| Damage numbers, hit sparks, hit sfx (rate-limited, ±2 st) | `feedback.ts enemyHit` (per-frame budgets) |
+| Damage numbers, hit sparks, hit sfx (rate-limited, ±2 st) | `feedback.ts enemyHit` (per-frame budgets; a plain number per enemy at most every 0.22 s so 0.07 s beam ticks don't stack columns; boss damage summed into one number every 0.14 s and boss sparks every 0.05 s, so a boss soaking six weapons is never buried under its own numbers) |
 | Death confetti in enemy colours, puff, ring, gem hop | `feedback.ts enemyKilled` -> `fxEnemyDeath(def.colors)`, `World.dropGem` arc |
 | Elite death (shockwave, 30 particles, coins, hitstop 60) | `fxEliteDeath` |
 | Player hurt package + low-HP heartbeat | `feedback.ts playerHurt`, `Feedback.frame` (damageFloor pulse), HUD `.danger` |
 | Gem streaks + climbing pitch + XP shimmer | `WorldView.drawGems` (fx_streak), `feedback.ts gem` (chain pitch), HUD `xpPulse` |
 | Level up (hitstop, rays, pillar, rings, flash, text, slow-mo 0.2x, modal) | `fxLevelUp` + `App.gameFrame` intro + `screens/levelup.ts` |
 | Evolution (rainbow flash, hue cycle, banner, cast pose, fireworks) | `feedback.ts evolution` |
-| Explosions, lightning-ready | `fxExplosion` via `explosion` events |
+| Explosions (+ candy confetti for candy bombs) | `fxExplosion` via `explosion` events, `weapon-fx.ts` |
+| Lightning (bell bolts, chains, Raijin blasts + drum flash), dome bursts, Sugar Nuke shockwave | `weapon-fx.ts` via `weaponFx` events |
 | Dash (afterimages, dust, speed lines, zoom punch) | `WorldView.drawPlayer` (TrailEmitter), `feedback.ts dash` |
 | Ultimate cut-in (dark, speed lines, portrait band, title, voice blips, blast) | `feedback.ts ultCutin/ultStart`, `ui/cutin.ts`, view darkening |
-| Boss warning / name card / bar / death | `feedback.ts boss*`, HUD banners + bar |
-| Combo counter, rank stamps, SSS border, milestone blip every 25 (`comboUp`) | `hud.ts`, `feedback.ts enemyKilled` |
-| Enemy bullets (`enemyShoot` sfx, rate-limited) | `World.spawnBullet` emits `enemyShoot` (one reused payload) |
+| Boss warning / name card / bar / death | `feedback.ts boss*`, HUD banners + bar; death throes (flashing, shaking silhouette) in `bestiary-fx.ts` |
+| Telegraphs: eye charge glow, pumpkin shiver + red flash + dash lane (chevrons), wisp fuse blink + blast ring, claw-sweep circle | `bestiary-fx.ts decorate`, `WorldView.drawTelegraphs` |
+| Stomps, skids, dust walls, roars, summons, teleports | `bestiary-fx.ts` via `enemyFx` events |
+| Boss phase change (banner, flash, shockwave, speed lines, duck), enrage (WARNING banner, red grade + vignette) | `bestiary-fx.ts bossPhase / bossEnrage / applyGrade` |
+| VICTORY: slow-mo chained explosions up the final boss, dawn flash at 1.7 s, enemies dissolve into light, "DAWN BREAKS!", sunrise grade sweep + sun + god rays, fireworks, victory music, results modal at 7.2 s | `bestiary-fx.ts finalDeath / victory / drawDawn`, `App.gameFrame` |
+| Bullet clears pop every bullet into a sparkle | `bestiary-fx.ts bulletsCleared` |
+| Combo counter, rank stamps, SSS border, milestone blip every 25 (`comboUp`); the timer bar drains faster at high ranks (gold-pink from S), a rank drop replays the letter falling in + a red flinch on the counter + a soft high `comboBreak` | `hud.ts`, `feedback.ts enemyKilled / comboDrop` |
+| Peak-chaos readability: adaptive bloom limiter (`r.post.load` from the glow-instance count), fewer sparks / puffs / numbers, fainter + smaller enemy numbers (a screen with 40+ enemy bullets counts as busy too), hero beacon (faint silhouette + ring above player fx, under bullets; also forced on for ~0.5 s when an explosion / Raijin blast lands on the hero, `WorldView.coverHero`), small player shots fade within 16 px of the hero's body (Galaxy Barrage streams spawn there); the beacon redraws the hero's current frame translucent (its plum outline reads over white blasts and pink star clouds), and the live boss gets the same treatment (boss beacon) so it never vanishes under six evolutions | `render/post.ts feedGlow`, `feedback.ts frame()`, `fx/damage.ts busy`, `WorldView.drawHeroBeacon / drawBossBeacon / drawProjectiles` |
+| HUD banners while a boss is alive drop below the hero and shrink (`.banner.low`): Lady Lunatic fights from the upper half, so ENRAGED! / ELITE! / EVOLUTION! never cover her or her bullets | `hud.ts banner()`, `styles.css` |
+| Enemy bullets (`enemyShoot` sfx, rate-limited; pop-in flash, end-of-life fade, moons rotate along velocity) | `World.spawnBullet` emits `enemyShoot` (one reused payload), `WorldView.drawBullets` |
 | Elite / boss aura | `WorldView.drawEnemies`: 4 one-pixel offset tinted silhouettes (no `Glow` flag) + soft halo |
 | Hero behind a tree | `Ground.draw(time, px, py)` fades that canopy |
 | Ambient petals / motes / fireflies, day -> dusk -> night grade | `Feedback.frame` |
 
 ---
 
-## 6. Balance (tuned in the integration pass)
+## 6. Balance (full-run pacing pass)
 
-`npm run balance` (`tools/balance.probe.ts`, env `HEROES`, `SEEDS`, `T`) runs the
-bot headless for every hero x seed and prints the level / kill / damage / boss
-timeline. The numbers below come from it (6-10 seeds per hero, 5 min):
+### The probe
 
-- XP curve `xpToNext(L) = 5 + (L-1)*10 + max(0,L-6)*8 + max(0,L-15)*12 + max(0,L-25)*16`
-  (`config.ts`). First level-up 2-7 s, about level 6-8 at 1:00, 12-16 at 3:00,
-  then roughly one level-up every 9-12 s (a good build keeps the x2 SSS combo
-  multiplier alive for minutes, so the curve has to be steep).
-- Enemy HP `enemyHpScale(t) = 1 + m*0.22 + m²*0.035` (m = minutes; `config.ts`).
-- Yarn Orbit Lv1-5 damage/uptime raised (Mochi used to die around 2:30 in 2 of 6 seeds).
-- Only 3 weapons and 4 enemy types exist so far, so runs are still easy (the bot
-  takes ~20-150 damage in 5 minutes). Re-tune `timeline.ts` rates/caps and the
-  curve once the remaining weapons, enemies and bosses land.
+`npm run balance` (`tools/balance.probe.ts`) plays full headless runs (default
+12:00, so a slow final-boss kill after the 10:30 enrage still resolves) for every
+hero x seed with two bot profiles and prints one line per run plus a summary per
+hero / profile (medians and [min-max]):
+
+- **good** = the autoplay bot, the *average-player proxy*: steers away from
+  pressure (big hitters weigh more), reads telegraphs (jump circles, dash lanes,
+  claw sweeps) and dodges bullets with a 0.18 s reaction time, dashes out of
+  crowds, breaks lanterns for food, chases a boss into its weapon range while
+  above 45 % HP, picks weapons / damage passives / evolutions first.
+- **lazy** = the *weak-player proxy*: the same movement, but random level-up
+  picks and it never dashes (`Bot.randomPicks`, `Bot.noDash`).
+
+Env: `HEROES=rin`, `SEEDS=1,2,3`, `T=600`, `BOT=good|lazy|both`, `META=mid|max`
+(Dream Shop ranks), `MAXE=150|250|350` (device enemy cap), `VIEW=phone|land|desktop`,
+`DT=0.0167` (the live game sub-steps at 1/60; the probe defaults to 1/30, which
+gives the same results within noise), `VERBOSE=1` (30 s timeline, build, alive %
+of cap, damage taken by source per run). The summary reports: win rate + death
+times + final blows, first level-up, level at 1/3/6/9 min (runs still alive),
+XP earned and the share of gem XP actually collected, the level-up interval
+between 2:00 and 8:00, first evolution, boss kill times, damage taken (total,
+last 4 minutes, per minute, min HP after 6:00), kills/s and damage dealt/s per
+minute, adaptive toughness per minute, alive % of the cap, time at SSS / S+
+per minute, combo breaks, Overdrive count / interval, and damage taken by source.
+
+With 16 seeds a per-hero win rate still has a standard error of ~11 points:
+judge changes on all heroes together (48 runs) and re-run before trusting a
+small shift. Every change re-rolls the seeds' RNG streams.
+
+### Results (16 seeds x 3 heroes x 2 bots, 12:00, no Dream Shop)
+
+| Target | Good bot (Hoshi / Rin / Mochi) | Lazy bot |
+| --- | --- | --- |
+| first level-up 3-8 s | 3.0 / 4.3 / 3.4 s | same |
+| level ~12-16 at 3:00 | 18 / 16 / 16 | 16 / 16 / 15 |
+| level ~28-36 at 6:00 | 38 / 31 / 35 | 28 / 30 / 31 |
+| level ~45-55 at 9:00 | 48 / 48 / 52 | 46 / 43 / 49 |
+| level-up every ~8-14 s (2:00-8:00, median gap) | 11.9 / 9.3 / 9.9 s | 13.7 / 10.9 / 12.4 s |
+| an evolution by ~5:00 | first at 2:39 / 2:26 / 3:15 (median), 4-5 per run | first at 3:27-4:09, 0-2 per run |
+| King Puff 20-45 s | 13 / 27 / 38 s | 43 / 36 / 52 s |
+| Nightmare Teddy 40-80 s | 35 / 49 / 58 s | 29 / 73 / 107 s |
+| Lady Lunatic 70-140 s | 89 / 49 / 109 s | 58 / 100 / 131 s |
+| good bot wins 60-90 % | **81 / 81 / 75 % (79 %)** | 25 / 44 / 25 % (31 %) |
+| lazy bot usually dies 5:00-9:30 | - | 33 of 48 die, median 6:03, 85 % of the deaths between 4:30 and 9:00 |
+| meaningful damage in the last 4 min | 76 / 47 / 49 HP median (up to 310-420), min HP after 6:00 ~75-85 % | 148 / 204 / 177 HP |
+| SSS not permanent from minute 1 | SSS 0 % in min 1-2, 0-29 % in min 3, 3-67 % in min 4, 70-100 % late | SSS rare before 7:00 |
+| Overdrive every 45-70 s | every 53-55 s (10-11 per run, the first ~1:00) | every 53-56 s |
+| enemy count at the cap after ~5:00 | 50-63 % of the cap at 6:30-9:00 (90 % reached in waves) | 55-73 % |
+
+Variants (8 seeds, good / lazy win rate): **mid Dream Shop** (every rank at
+half) 79 % / 42 %; **maxed shop** 96 % / 58 % (the good bot then takes only
+5-25 damage in the last 4 minutes): the shop is a real crutch for a weaker
+player without making a run free. **Low-tier device** (cap 150; those fewer
+enemies get x1.3 HP late) 88 % good, 62-79 % of the cap late. **Desktop view**
+(533x300) 75 % good. **1/60 steps** (the live sub-step) 78 % good (6 seeds), same
+levels and boss times as 1/30. Sim cost: 0.7-3.8 s per 12-minute run.
+
+The deliberate deviations: Hoshi (ranged, homing stars focus bosses) kills King
+Puff / Nightmare Teddy faster than the window and levels a little faster; Rin
+melts Lady faster than the others; the median build keeps the screen at
+50-60 % of the cap rather than at it (the adaptive toughness converts a too-fast
+clear into tougher, not more, enemies - more spawns made the median build lose).
+
+### How the pacing works (numbers in `config.ts`, `director/*`, content files)
+
+- **XP**: `xpToNext(L) = 5 + 10(L-1) + 28(L-6)+ - 26(L-12)+ + 60(L-22)+ + 60(L-38)+`
+  (cost per level +10 to Lv 6, +38 to Lv 12, +12 to Lv 22, +72, then +132 from Lv 38).
+  Gem XP x `(1 + 0.15 max(0, m - 3))` (m = minutes). Above 160 gems the farthest
+  merge into a rainbow gem_4 that drifts to the player (28 px/s): uncollected XP
+  is recovered, which mostly helps struggling builds (the bot collects 70-80 % of
+  the gem XP, a lazy bot 40-75 %). Every level-up heals 3 % max HP.
+- **Combo**: per-rank window `[2.5, 2.5, 2.3, 2.0, 1.7, 1.45, 1.2]` s and refill
+  per kill `[2.5, 2.5, 2.3, 0.3, 0.15, 0.08, 0.04]` s (none, C ... SSS): holding
+  A / S / SS / SSS needs ~3 / 7 / 13 / 25 kills/s. Running dry at B+ drops one
+  rank (`comboDrop`), below B it breaks; a hit drops one rank.
+- **Overdrive**: starts at 25; +0.3 per kill but at most 1.25/s from ordinary
+  kills (a budget refilled per second), +8 elite, +30 boss, +0.55/s passive.
+  Before: +1 per kill made it every 9-15 s (a near-permanent invulnerable
+  screen clear that hid every other balance problem).
+- **Enemies**: HP x `(1 + 0.1m + 0.01m² + 0.014m³)` (x1.7 at 3:00, x4.6 at
+  6:00, x12 at 9:00), contact / shot damage x `(1 + 0.06 max(0, m - 4))`.
+  Lowered contact damage: Puff 5, Boo 6, Shroomie 8, Teddy 11, Pumpkin 10. Hurt
+  i-frames 0.5 s, lanterns every ~16 s.
+- **Director**: spawn rates / caps per phase in `timeline.ts` (1.3 -> 2.7/s cap
+  55 in minute 1, up to 20 -> 30/s cap 260 from 6:30). Below 80 % of the cap
+  (`MIN_ALIVE`) the rate is boosted up to x4. **Adaptive toughness**
+  (`Director.adapt`, from 3:30): while fewer than 55 % of the cap are alive, new
+  spawns gain HP (+3 %/s at an empty screen, max +150 %), relaxing at 2 %/s once
+  the screen is busy; `Director.hpMul` also gives a device capped below the phase
+  max x sqrt(max / cap) HP (<= x1.4). Boss spawn multipliers: King Puff x0.55,
+  Nightmare Teddy x0.4, Lady Lunatic x0.4.
+- **Bosses**: HP x `clamp(1 + 0.035 (level - ref), 0.5, 1.8)` at spawn
+  (`BossInfo.level`): King Puff 2600 @ Lv 17, Nightmare Teddy 17500 @ Lv 33, Lady
+  Lunatic 34000 @ Lv 52. Lady's bullets deal 15, Teddy's stars 13.
+- **Weapons** (`GAUGE=1 npm run balance`: dps alone vs a dense crowd of 120
+  respawning 60-HP puffs, a ring of 300-HP enemies and a pinned boss): Star Shot fires 2+ stars
+  that pierce 2-4 (L5 ~600 dps; it is the single-target / boss weapon), Thunder
+  Bell L1-4 got a spark blast and more chains (L1 61 -> 356 dps), Galaxy Barrage
+  553 -> 1.4k dense (3 arms, pierce 3), Yarn Orbit bonks faster from Lv3 (0.34 / 0.28 s)
+  and Cosmic Yarn hits for 19 every 0.26 s (Mochi's boss fights were 2x longer
+  than anyone's), Sakura Tempest's petal blades fan toward the nearest enemy (a
+  boss first) and curve in. Other base weapons sit at L1 ~370-980, L5 ~2-4k,
+  evolutions ~3.1-5.8k dense (Galaxy Barrage 1.4k dense but ~450 on a boss,
+  3-10x anyone else).
+- **Heroes**: Mochi gained 1 armor (melee, 100 HP: the lazy Mochi used to die
+  before 4:00). **Dream Shop**: Might +4 %/rank, Vitality +8 HP/rank.
+
+### Before / after (bot, same probe)
+
+| | Before (content merged, no tuning) | After |
+| --- | --- | --- |
+| good bot wins | 50-88 % per hero, damage taken over a whole run 4-250 (median 60-90) | 75-81 %, 76 / 47 / 49 in the last 4 min alone |
+| lazy bot | wins 50-63 %, deaths 2:33-6:52 rare | wins 31 %, dies ~6:00 (4:30-9:00) |
+| Overdrive | every 9-15 s (37-62 per run) | every 53-55 s (10-11) |
+| SSS | 100 % of the time from 2:00 on, one combo per run | earned: 0 % before 2:00, flickers mid-game, drops on hits |
+| levels at 3:00 / 6:00 / 9:00 | 16-19 / 29-33 / 43-47 | 16-18 / 31-38 / 48-52 |
+| King Puff / Teddy / Lady | 10-16 s / 26-50 s / 47-91 s | 13-38 s / 35-58 s / 49-109 s |
+| alive % of cap after 5:00 | 7-21 % | 50-63 % |
+
+Verification-pass re-check (after the content wave's integration fixes: coin merge, Nightmare Teddy
+standing off from the hero by body centre, Lady Lunatic favouring the left in landscape, candy bombs
+avoiding the hero's feet), 8 seeds x 3 heroes: good bot 83 % (Hoshi 100 / Rin 88 / Mochi 63), lazy
+bot 38 %, levels 18 / 36 / 50 at 3:00 / 6:00 / 9:00, King Puff 23 s, Nightmare Teddy 29 s (34 s
+with the old walk on the same 10 seeds), Lady Lunatic 72 s: inside the noise of the table above.
+
+### Readability at peak chaos (view)
+
+`r.post.load` (adaptive bloom limiter, see ENGINE.md) measures the glow load;
+at load 1 bloom drops to 40 %, the feedback bridge halves its hit-spark / death
+puff budgets, cuts the damage-number budget by 60 % and its soft / hard caps
+(70 / 110 alive -> ~32 / 55; past the soft cap only crits and boss hits pop),
+enemy numbers fade 40 % and crits shrink and stop blooming, and the hero gets a
+faint silhouette + ring drawn above the player's own weapon fx (under enemy
+bullets). `scripts/peak.mjs` shoots a 6-evolution crowd and late autoplay
+runs with the limiter on and off (`node scripts/peak.mjs`, shots in `shots/peak/`).
 
 ## 7. Ownership boundaries
 
@@ -312,10 +512,11 @@ Parallel content work: one agent per new file in `weapons/`, `enemies/`,
 
 ```
 npm run typecheck
-npm test                       # unit + headless 3-minute bot runs (all heroes), boss, ults, determinism
+npm test                       # unit + headless bot runs (all heroes), bosses, ults, determinism, run integrity
+                               # (--testTimeout=60000: the full-run sims take 5-9 s on a loaded / CI machine)
 node scripts/e2e.mjs           # desktop + mobile portrait + mobile landscape, screenshots in shots/e2e/
 node scripts/shot.mjs --path "/?autoplay=1&hero=rin&skip=150" --mobile --wait 5000 --out shots/x.png
-npm run balance                # headless bot balance probe (level / kills / damage / boss timeline)
+npm run balance                # headless full-run balance probe: 3 heroes x 10 seeds x good + lazy bot (section 6)
 npm run build && npm run build:single   # dist/ (Pages) and dist-single/index.html (standalone, works from file://)
 ```
 
@@ -326,4 +527,9 @@ Wait on game state (`__kk.*`) rather than fixed sleeps in scripts.
 
 Handy URLs: `/?screen=title`, `/?screen=select`, `/?autoplay=1&skip=185&god=1`
 (boss), `/?fps=1`, `/?seed=42&hero=mochi`. Console: `__kk.levelUp()`,
-`__kk.chest(true)`, `__kk.ult()`, `__kk.spawn("shroomie!", 3)`, `__kk.skipTo(170)`.
+`__kk.chest(true)`, `__kk.ult()`, `__kk.spawn("shroomie!", 3)`, `__kk.skipTo(170)`,
+`__kk.clearWeapons(); __kk.give("rainbow_cannon")` (isolate a weapon), `__kk.give("twin_charm", 3)`,
+`__kk.time.paused = true` (freeze sim + fx for a mid-action screenshot),
+`__kk.boss("lady_lunatic")` (boss now; `true` = with the WARNING), `__kk.bossHp(0.2)` (jump to a phase),
+`__kk.enrage()`. Boss screenshots: `/?screen=game&hero=rin&god=1&skip=355` (no autoplay: the hero stands
+still, the boss comes to it), then `__kk.clearWeapons()` and `__kk.world.director.spawnMul = 0`.

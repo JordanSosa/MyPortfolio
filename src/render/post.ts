@@ -84,6 +84,19 @@ export class PostFx {
   /** Multipliers applied by settings ("reduce flashing"). */
   flashScale = 1;
   aberrationScale = 1;
+  /**
+   * Adaptive bloom limiter (readable peak chaos). `load` (0..1) follows how many
+   * glowing instances fill the view - the renderer feeds it every frame through
+   * feedGlow(): fast attack, slow release. The composite scales bloom, the glow
+   * core and bloom surges by (1 - bloomLimit x load), so a late-game screen full
+   * of evolved weapons never whites out the hero or the enemy bullets. Gameplay
+   * code can read `load` too (the feedback bridge thins damage numbers / sparks).
+   */
+  load = 0;
+  bloomLimit = 0.6;
+  /** Glow instances per phone-sized view (80k art px²) where the limiter starts / is fully on. */
+  loadFrom = 220;
+  loadTo = 800;
 
   readonly waves: Wave[] = [];
   flashColor: RGB = [1, 1, 1];
@@ -142,6 +155,19 @@ export class PostFx {
   /** Red damage vignette pulse 0..1. */
   damageVignette(amount: number): void {
     this.damageAmount = Math.max(this.damageAmount, clamp(amount, 0, 1));
+  }
+
+  /** Feed this frame's glow-instance count over a scene of `area` art px² (Renderer.endFrame does it). */
+  feedGlow(count: number, area: number, dt: number): void {
+    const n = count * (80000 / Math.max(20000, area));
+    const t = clamp((n - this.loadFrom) / (this.loadTo - this.loadFrom), 0, 1);
+    const k = t > this.load ? 1 - Math.exp(-dt * 8) : 1 - Math.exp(-dt * 1.2);
+    this.load += (t - this.load) * k;
+  }
+
+  /** Bloom multiplier from the adaptive limiter (1 = untouched). */
+  get bloomLimiter(): number {
+    return 1 - this.bloomLimit * this.load;
   }
 
   /** Temporary bloom boost (added to bloomStrength), decays over `seconds`. */
@@ -214,6 +240,7 @@ export class PostFx {
     this.hueDur = 0;
     this.damageFloor = 0;
     this.dim = 0;
+    this.load = 0;
   }
 }
 
@@ -525,8 +552,11 @@ export class PostPipeline {
     gl.uniform2f(u.u_bloomK, b.w / b.capW / sc.w, b.h / b.capH / sc.h);
     gl.uniform2f(u.u_bloomMax, (b.w - 0.5) / b.capW, (b.h - 0.5) / b.capH);
     const levels = Math.max(1, this.chain.length);
-    gl.uniform1f(u.u_bloomStr, bloomOn ? ((fx.bloomStrength + fx.surge) * 1.6) / levels : 0);
-    gl.uniform1f(u.u_glowCore, bloomOn ? fx.glowCore * (1 + fx.surge * 0.5) : 0);
+    // adaptive limiter: a crowded glow buffer gets less bloom (and smaller surges) instead of a white-out
+    const lim = fx.bloomLimiter;
+    const surge = fx.surge * lim;
+    gl.uniform1f(u.u_bloomStr, bloomOn ? ((fx.bloomStrength + surge) * 1.6 * lim) / levels : 0);
+    gl.uniform1f(u.u_glowCore, bloomOn ? fx.glowCore * (1 + surge * 0.5) * (0.5 + 0.5 * lim) : 0);
 
     // waves
     let n = 0;

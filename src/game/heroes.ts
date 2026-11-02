@@ -46,12 +46,13 @@ export const HEROES: HeroDef[] = [
     portrait: "portrait_mochi",
     weapon: "yarn_orbit",
     ult: "nyan_stampede",
-    trait: "+15% move speed, +20% pickup range",
+    trait: "+15% move speed, +20% pickup range, 1 armor",
     color: C.violet,
     colors: [C.lavender, C.violet, C.paleYellow, C.pinkLight],
     apply: (s) => {
       s.moveSpeed += 0.15;
       s.pickup += 0.2;
+      s.armor += 1;
     },
   },
 ];

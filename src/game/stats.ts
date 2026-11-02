@@ -99,6 +99,7 @@ export function describeStats(s: Stats): [string, string][] {
   return [
     ["Max HP", `${s.maxHp}`],
     ["Regen", `${s.regen.toFixed(1)}/s`],
+    ["Armor", `${s.armor}`],
     ["Might", pct(s.might)],
     ["Cooldown", `${Math.round((s.cooldown - 1) * 100)}%`],
     ["Area", pct(s.area)],

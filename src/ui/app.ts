@@ -19,7 +19,7 @@ import { createFx, type Fx } from "../fx";
 import { CFG } from "../game/config";
 import { heroDef } from "../game/heroes";
 import { AutoQuality, guessTier, QUALITY, Renderer, type QualityTier } from "../render";
-import { showCutin } from "./cutin";
+import { showCutin, type CutinHandle } from "./cutin";
 import { prewarmSprites, setAtlas } from "./dom";
 import { MANIFEST } from "../art/manifest";
 import { Hud } from "./hud";
@@ -77,6 +77,8 @@ export class App {
   private endT = 0;
   private ended = false;
   private lastSummary: RunSummary | null = null;
+  /** The ultimate cut-in overlay on screen (removed when the sim starts the ult). */
+  private cutin: CutinHandle | null = null;
   private unlocked = false;
 
   constructor(readonly params: DebugParams) {
@@ -283,7 +285,14 @@ export class App {
       comboBreak: (n: number) => hud.comboBreak(n),
       banner: hud.banner.bind(hud),
       bossBar: hud.bossBar.bind(hud),
-      cutin: (heroId: string, name: string) => showCutin(document.body, heroId, heroDef(heroId).portrait, name),
+      cutin: (heroId: string, name: string) => {
+        this.cutin?.end();
+        this.cutin = showCutin(document.body, heroId, heroDef(heroId).portrait, name);
+      },
+      cutinEnd: () => {
+        this.cutin?.end();
+        this.cutin = null;
+      },
     };
   }
 
@@ -463,7 +472,8 @@ export class App {
         this.ended = true;
         this.openModal("over", openGameOver(this, w, false));
         this.music("gameover", 0.8);
-      } else if (w.phase === "victory" && this.endT > 3.2 && !this.modal) {
+      } else if (w.phase === "victory" && this.endT > 7.2 && !this.modal) {
+        // after the dawn celebration (view/bestiary-fx.ts: explosions -> flash at 1.7 s -> sunrise + fireworks)
         this.ended = true;
         this.openModal("over", openGameOver(this, w, true));
       }

@@ -126,9 +126,11 @@ export const sakuraTempest: WeaponDef = {
     p.scale = (r * 2) / 44;
     p.pop = true;
     p.alpha = 0.92;
-    // petal blades
+    // petal blades: the fan is centred on the nearest enemy (a boss in range wins) and the blades curve in
     const n = Math.min(14, S.amount + 2);
-    const a0 = w.rng.angle();
+    const b = w.boss;
+    const tgt = b && !b.dead && Math.abs(b.x - pl.x) < 150 && Math.abs(b.y - b.cy - pl.y) < 150 ? b : w.nearestEnemy(pl.x, pl.y - 8, 150);
+    const a0 = tgt ? Math.atan2(tgt.y - tgt.cy - (pl.y - 8), tgt.x - pl.x) : w.rng.angle();
     const pdmg = (S.L.petalDmg ?? 14) * w.stats.might;
     for (let k = 0; k < n; k++) {
       const a = a0 + (k / n) * TAU;
@@ -140,6 +142,8 @@ export const sakuraTempest: WeaponDef = {
       q.vx = Math.cos(a) * q.speed;
       q.vy = Math.sin(a) * q.speed;
       q.r = 4;
+      q.homing = 3.2;
+      q.target = k === 0 ? tgt : null;
       q.dmg = pdmg;
       q.pierce = 3;
       q.knock = 30;

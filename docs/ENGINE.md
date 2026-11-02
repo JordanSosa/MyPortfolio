@@ -162,6 +162,8 @@ r.post.bloomSurge(1, 0.8);          // temporary bloom boost (ult)
 r.post.hueCycle(0.6);               // hue-cycling grade (evolution)
 r.post.dim = 0.55;                  // darken scene AND bloom (owner sets it every frame; 0 = off)
 r.bloom = 0.95;                     // base bloom strength;  r.post.glowCore = tight halo weight
+r.post.bloomLimit = 0.6;            // adaptive limiter: how much bloom a crowded glow buffer may cut (0 = off)
+r.post.load;                        // 0..1 peak-chaos load (read-only; fed by endFrame from the glow count)
 r.post.vignette = 0.32;             // base vignette amount
 r.setGrade(GRADES.night, 3);        // ease the colour grade over 3 s (GRADES: day, dusk, night, dim, neutral)
 r.post.blendGrade(GRADES.day, GRADES.night, runProgress);  // drive day -> night directly
@@ -175,6 +177,17 @@ dim glowing things - use `r.post.dim` for that (the ultimate cut-in does).
 Likewise the glow buffer never sees what is drawn on top of a glowing sprite: a
 `Glow` silhouette *behind* a sprite (outline tricks) blooms through the sprite
 and washes it out, so draw such helpers without `Glow`.
+
+**Adaptive bloom limiter.** Every `endFrame` feeds the frame's glow-instance
+count (normalised to a phone-sized 80k art px² view) into `r.post.feedGlow()`:
+`r.post.load` ramps from 0 at `loadFrom` (220) to 1 at `loadTo` (800) glow
+instances, with a fast attack (~0.12 s) and a slow release (~0.8 s). The
+composite multiplies the bloom strength, bloom surges and (half as much) the
+glow core by `r.post.bloomLimiter = 1 - bloomLimit x load`, so a late-game screen
+full of evolved weapons stays readable instead of whiting out. Game code reads
+`r.post.load` to thin its own juice (the feedback bridge scales its spark /
+puff / damage-number budgets and sets `fx.dmg.busy`, the view draws a faint
+hero beacon above player fx).
 
 ---
 
@@ -224,6 +237,8 @@ fx.dmg.spawn(px, py - 20, 7, "player");   // red
 fx.dmg.spawn(px, py - 20, 20, "heal");    // green "+20"
 fx.dmg.text(x, y, "MISS", C.lavender);
 fx.dmg.enabled = settings.damageNumbers;  // hides normal/crit only; fx.dmg.scale = global size
+fx.dmg.busy = r.post.load;                // 0..1: enemy numbers fade (-40%), lose the spawn flash, crits shrink + stop blooming
+fx.dmg.alive;                             // live numbers (kept incrementally, cheap to read per hit)
 ```
 
 At most 150 are alive (a ring buffer recycles the oldest). Spawning does not

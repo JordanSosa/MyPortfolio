@@ -6,6 +6,12 @@
  *   __kk.giveXp(n) / __kk.levelUp()   trigger level-ups (opens the modal)
  *   __kk.chest(golden?)        drop a chest on the player
  *   __kk.ult()                 fill the overdrive meter
+ *   __kk.give(id, level = 5)   add / level a weapon or passive ("rainbow_cannon", "twin_charm"); an evolved
+ *                              id replaces its base weapon (or takes a free slot)
+ *   __kk.clearWeapons()        drop every weapon (isolate one for screenshots)
+ *   __kk.boss(id, warn = false) bring a boss in now ("nightmare_teddy", "lady_lunatic"; warn = with the WARNING)
+ *   __kk.bossHp(frac)          set the live boss's HP to a fraction (jump to a phase: 0.55 / 0.2)
+ *   __kk.enrage()              enrage the final boss now (10:30 rule)
  *   __kk.setSpeed(x)           sim speed multiplier
  *   __kk.god(on = true)        toggle invulnerability
  *   __kk.pause() / __kk.endRun() / __kk.start(hero) / __kk.screen
@@ -13,6 +19,8 @@
 import { time } from "../core/time";
 import type { App } from "../ui/app";
 import { simulate, Bot } from "./bot";
+import { PASSIVE_BY_ID } from "../game/passives";
+import { BOSSES, WEAPONS } from "../game/registry";
 
 export function installHooks(app: App): void {
   const world = () => app.game?.world ?? app.attract?.world ?? null;
@@ -65,6 +73,59 @@ export function installHooks(app: App): void {
         k.t = 0.35; // collectible on the next step (lands on the hero)
       }
     },
+    give(id: string, level = 5) {
+      const w = world();
+      if (!w) return false;
+      if (PASSIVE_BY_ID.has(id)) {
+        if (w.passiveLevel(id) > 0) w.setPassiveLevel(id, level);
+        else w.addPassive(id, level);
+        return true;
+      }
+      const def = WEAPONS.get(id);
+      if (!def) return false;
+      const have = w.hasWeapon(id);
+      if (have) {
+        w.setWeaponLevel(have, level);
+        return true;
+      }
+      if (def.evolved) {
+        // evolve the base weapon if owned, else add the evolution directly
+        for (const inst of w.weapons) if (inst.def.evolution?.into === id) return !!w.evolveWeapon(inst);
+        return !!w.addWeapon(id, 1);
+      }
+      return !!w.addWeapon(id, level);
+    },
+    clearWeapons() {
+      const w = world();
+      if (!w) return;
+      for (const inst of w.weapons) {
+        inst.def.dispose?.(w, inst);
+        for (const p of inst.projs) p.dead = true;
+      }
+      w.weapons.length = 0;
+      w.buildVersion++;
+    },
+    boss(id: string, warn = false) {
+      const w = world();
+      const def = BOSSES.get(id);
+      if (!w || !def) return false;
+      w.director.warnBoss(def, 0.4);
+      if (!warn && w.director.warning) w.director.warning.t = 0;
+      return true;
+    },
+    bossHp(frac: number) {
+      const b = world()?.boss;
+      if (!b) return false;
+      b.hp = Math.max(1, b.maxHp * frac);
+      return true;
+    },
+    enrage() {
+      const w = world();
+      if (!w || w.director.enraged) return false;
+      w.director.enraged = true;
+      w.emit("bossEnrage", {});
+      return true;
+    },
     ult() {
       world()?.addUlt(100);
     },
@@ -94,6 +155,8 @@ export function installHooks(app: App): void {
         kills: w?.kills ?? 0,
         enemies: w?.enemyCount ?? 0,
         projectiles: w?.projectiles.count ?? 0,
+        bullets: w?.bullets.count ?? 0,
+        boss: w?.boss ? `${w.boss.def.id}:${Math.round(w.boss.hp)}/${w.boss.maxHp}:s${w.boss.state}` : "",
         gems: w?.gems.count ?? 0,
         particles: app.fx.ps.count,
         hp: w?.player.hp ?? 0,

@@ -5,7 +5,7 @@
  * danger border and the SSS rainbow screen border. Pause button top-right.
  * Updates are diffed so the DOM is only touched when something changed.
  */
-import { CFG, RANKS } from "../game/config";
+import { RANKS } from "../game/config";
 import type { Enemy } from "../game/types";
 import type { World } from "../game/world";
 import type { FeedbackHooks } from "../view/feedback";
@@ -38,7 +38,7 @@ export class Hud implements FeedbackHooks {
   private warnT = 0;
   private bossEnemy: Enemy | null = null;
   // diff cache
-  private c = { lvl: -1, sec: -1, kills: -1, coins: -1, build: "", bv: -1, combo: -1, rank: -2, xpk: -1, full: false };
+  private c = { lvl: -1, sec: -1, kills: -1, coins: -1, build: "", bv: -1, combo: -1, rank: -2, xpk: -1, full: false, barQ: -1, hot: false };
   private bannerT = 0;
 
   constructor(parent: HTMLElement, onPause: () => void) {
@@ -100,7 +100,7 @@ export class Hud implements FeedbackHooks {
   }
 
   reset(): void {
-    this.c = { lvl: -1, sec: -1, kills: -1, coins: -1, build: "", bv: -1, combo: -1, rank: -2, xpk: -1, full: false };
+    this.c = { lvl: -1, sec: -1, kills: -1, coins: -1, build: "", bv: -1, combo: -1, rank: -2, xpk: -1, full: false, barQ: -1, hot: false };
     this.bossEnemy = null;
     this.boss.classList.remove("on");
     this.combo.classList.remove("on", "shatter");
@@ -191,16 +191,30 @@ export class Hud implements FeedbackHooks {
         this.comboN.textContent = String(cb);
         replay(this.comboN, "bump");
       }
-      this.comboBar.style.transform = `scaleX(${Math.max(0, w.comboTimer / CFG.comboTime).toFixed(3)})`;
+      // the window shrinks at high ranks: the bar visibly drains unless kills keep feeding it
+      // (quantised to 1/200 and written only on change: no per-frame string / style churn)
+      const q = Math.round(Math.min(1, Math.max(0, w.comboTimer / w.comboWindow)) * 200);
+      if (q !== c.barQ) {
+        c.barQ = q;
+        this.comboBar.style.transform = `scaleX(${q / 200})`;
+      }
+      const hot = w.comboRank >= 3;
+      if (hot !== c.hot) {
+        c.hot = hot;
+        this.comboBar.classList.toggle("hot", hot);
+      }
     }
     c.combo = cb;
     if (w.comboRank !== c.rank) {
+      // a lower rank that is still a rank = the combo fell one step (timer ran dry / got hit)
+      const fell = w.comboRank >= 0 && w.comboRank < c.rank;
       c.rank = w.comboRank;
       if (w.comboRank >= 0) {
         const rk = RANKS[w.comboRank];
         this.comboRankEl.textContent = rk.id;
         this.comboRankEl.className = `rank r${w.comboRank}`;
-        replay(this.comboRankEl, "stamp");
+        replay(this.comboRankEl, fell ? "fall" : "stamp");
+        if (fell) replay(this.comboN, "drop");
         this.comboMult.textContent = `XP x${rk.mult.toFixed(2)}`;
       } else {
         this.comboRankEl.textContent = "";
@@ -227,7 +241,11 @@ export class Hud implements FeedbackHooks {
     }
     if (this.bannerT > 0) {
       this.bannerT -= realDt;
-      if (this.bannerT <= 0) this.bannerEl.className = "banner";
+      if (this.bannerT <= 0) {
+        // (clear the text too: without the animation class it would sit on screen, unanimated)
+        this.bannerEl.className = "banner";
+        this.bannerEl.innerHTML = "";
+      }
     }
   }
 
@@ -279,7 +297,10 @@ export class Hud implements FeedbackHooks {
       el.innerHTML = `<div class="bt">${title}</div>${sub ? `<div class="bs">${sub}</div>` : ""}`;
       this.bannerT = 2;
     }
-    el.className = `banner b-${kind}`;
+    // a boss fights from the upper half of the screen (Lady Lunatic hovers above the hero): while one is
+    // alive, banners drop below the hero and shrink so they never hide it or its bullets (boss cards already sit low)
+    const low = !!this.bossEnemy && kind !== "boss";
+    el.className = `banner b-${kind}${low ? " low" : ""}`;
     replay(el, "show");
   }
   bossBar(e: Enemy | null, title = ""): void {

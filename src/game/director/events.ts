@@ -17,35 +17,95 @@ function def(id: string | undefined, d: Director): EnemyDef | undefined {
   return (id && ENEMIES.get(id)) || d.randomMixDef();
 }
 
+/** One straight line of `count` enemies flying along angle `a` across the player's area (`kind` "" = no banner). */
+function straightLine(w: World, e: EnemyDef, count: number, speed: number, a: number, kind: string): void {
+  const p = w.player;
+  const dx = Math.cos(a);
+  const dy = Math.sin(a);
+  const dist = Math.max(w.viewW, w.viewH) * 0.5 + 30;
+  // perpendicular offset so the line sweeps across the player
+  const off = (w.rng.next() - 0.5) * 40;
+  const cx = p.x - dx * dist - dy * off;
+  const cy = p.y - dy * dist + dx * off;
+  for (let i = 0; i < count; i++) {
+    const s = (i - (count - 1) / 2) * 11;
+    const en = w.spawnEnemy(e, cx - dy * s + w.rng.spread(2), cy + dx * s + w.rng.spread(2));
+    if (!en) continue;
+    en.mode = MODE_STRAIGHT;
+    en.vx = dx * speed;
+    en.vy = dy * speed;
+    en.face = dx >= 0 ? 1 : -1;
+  }
+  if (kind) w.emit("waveIncoming", { kind, x: cx, y: cy });
+}
+
 export const EVENT_HANDLERS: Record<string, EventHandler> = {
   /** A line (or several) of enemies flying straight across the screen through the player's area. */
   swarmLine(w, d, ev) {
     const e = def(ev.enemy, d);
     if (!e) return;
-    const p = w.player;
     const lines = ev.lines ?? 1;
     const count = ev.count ?? 12;
     const speed = ev.speed ?? 75;
-    for (let L = 0; L < lines; L++) {
-      const a = w.rng.angle();
-      const dx = Math.cos(a);
-      const dy = Math.sin(a);
-      const dist = Math.max(w.viewW, w.viewH) * 0.5 + 30;
-      // perpendicular offset so the line sweeps across the player
-      const off = (w.rng.next() - 0.5) * 40;
-      const cx = p.x - dx * dist - dy * off;
-      const cy = p.y - dy * dist + dx * off;
-      for (let i = 0; i < count; i++) {
-        const s = (i - (count - 1) / 2) * 11;
-        const en = w.spawnEnemy(e, cx - dy * s + w.rng.spread(2), cy + dx * s + w.rng.spread(2));
-        if (!en) continue;
-        en.mode = MODE_STRAIGHT;
-        en.vx = dx * speed;
-        en.vy = dy * speed;
-        en.face = dx >= 0 ? 1 : -1;
+    for (let L = 0; L < lines; L++) straightLine(w, e, count, speed, w.rng.angle(), "swarm");
+  },
+
+  /**
+   * Bat storm (7:30): `lines` straight swarm lines over `duration` seconds,
+   * each from a new direction (rotating ~110 deg) so the player keeps weaving.
+   */
+  batStorm(w, d, ev) {
+    const e = def(ev.enemy ?? "batbun", d);
+    if (!e) return;
+    const lines = ev.lines ?? 6;
+    const dur = ev.duration ?? 6;
+    const count = ev.count ?? 12;
+    const speed = ev.speed ?? 88;
+    let a = w.rng.angle();
+    let t = 0;
+    let done = 0;
+    straightLine(w, e, count, speed, a, "storm");
+    done++;
+    d.addTask((dt) => {
+      t += dt;
+      while (done < lines && t >= (done * dur) / lines) {
+        a += 1.9 + w.rng.spread(0.35);
+        straightLine(w, e, count, speed, a, "");
+        done++;
       }
-      w.emit("waveIncoming", { kind: "swarm", x: cx, y: cy });
-    }
+      return done < lines;
+    });
+  },
+
+  /**
+   * Wisp rush (8:15): `count` Candle Wisps in `waves` rings closing in from
+   * every side at once (each ring rotated so the gaps move). Kill one near the
+   * others and they chain-react.
+   */
+  wispRush(w, d, ev) {
+    const e = def(ev.enemy ?? "wisp", d);
+    if (!e) return;
+    const waves = ev.lines ?? 3;
+    const total = ev.count ?? 36;
+    const dur = ev.duration ?? 5;
+    const per = Math.max(1, Math.round(total / waves));
+    let t = 0;
+    let done = 0;
+    const a0 = w.rng.angle();
+    const ring = (k: number): void => {
+      const p = w.player;
+      const R = Math.max(w.viewW, w.viewH) * 0.5 + 16;
+      for (let i = 0; i < per; i++) {
+        const a = a0 + (i / per) * Math.PI * 2 + (k * Math.PI) / per;
+        w.spawnEnemy(e, p.x + Math.cos(a) * R, p.y + Math.sin(a) * R * 0.85);
+      }
+      if (k === 0) w.emit("waveIncoming", { kind: "wisps", x: p.x, y: p.y });
+    };
+    d.addTask((dt) => {
+      t += dt;
+      while (done < waves && t >= (done * dur) / waves) ring(done++);
+      return done < waves;
+    });
   },
 
   /** A ring of enemies closing in around the player. */

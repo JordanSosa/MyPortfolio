@@ -13,7 +13,7 @@ export const boo: EnemyDef = {
   fps: 6,
   hp: 14,
   speed: 38,
-  dmg: 7,
+  dmg: 6,
   radius: 6,
   height: 14,
   xp: 2,

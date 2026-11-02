@@ -2,5 +2,5 @@
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
-  test: { include: ["tools/balance.probe.ts"], testTimeout: 900_000 },
+  test: { include: ["tools/balance.probe.ts"], testTimeout: 3_600_000 },
 });

@@ -39,7 +39,7 @@ export const shroomie: EnemyDef = {
   fps: 7,
   hp: 30,
   speed: 22,
-  dmg: 9,
+  dmg: 8,
   radius: 7,
   height: 13,
   xp: 3,

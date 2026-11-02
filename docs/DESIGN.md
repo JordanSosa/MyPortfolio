@@ -37,24 +37,32 @@ Coordinates are **art pixels** (1 unit = 1 sprite pixel). Time in seconds.
 | Run length | Final boss appears 9:00; killing it = victory ("DAWN BREAKS!"). If alive at 10:30 it enrages. |
 | Player HP | 100 (Rin 120) |
 | Player speed | 72 px/s (Mochi +15%) |
-| Hurt i-frames | 0.4 s (player blinks) |
+| Hurt i-frames | 0.5 s (player blinks) |
 | Dash | 0.16 s at 300 px/s (~48 px), invulnerable during dash + 0.1 s, cooldown 1.2 s |
 | Pickup radius | 24 px; gems inside accelerate to the player (start 60 px/s, +600 px/s²) |
 | Crit | base 5 %, ×2 damage |
-| XP to next level | `5 + (L-1)*10 + max(0,L-6)*8 + max(0,L-15)*12 + max(0,L-25)*16` (level 1→2 needs 5; tuned in the integration pass so the mid-game settles at a level-up every ~10-15 s) |
-| Gems | gem_1 = 1 xp, gem_2 = 5, gem_3 = 25, gem_4 = merged (sum). If > 250 gems exist, merge the farthest into one gem_4 |
+| XP to next level | `5 + 10(L-1) + 28·max(0,L-6) − 26·max(0,L-12) + 60·max(0,L-22) + 60·max(0,L-38)` (level 1→2 needs 5; ~7 at 1:00, ~15 at 3:00, ~32 at 6:00, ~50 at 9:00, a level-up every ~8-14 s mid-run; balance pass, ARCHITECTURE §6) |
+| Level-up heal | every level-up heals 3 % of max HP (min 3) |
+| Gems | gem_1 = 1 xp, gem_2 = 5, gem_3 = 25, gem_4 = merged (sum). Gem XP × (1 + 0.15 × max(0, m − 3)) (m = run minutes). If > 160 gems exist, merge the farthest into one gem_4 (keeping 120); a gem_4 drifts to the player at 28 px/s, so XP left behind is never lost |
 | Weapon slots | 6 weapons, 6 passives; each item has 5 levels |
 | Reroll | 2 per run (+ meta) |
 
 ### 2.1 Combo & rank
-Every kill extends a 2.5 s combo timer. Ranks by combo count:
-`C 10 · B 30 · A 60 · S 100 · SS 200 · SSS 400`. XP multiplier
-`1.1 / 1.2 / 1.3 / 1.5 / 1.75 / 2.0`. Rank-up = stamp animation + `rankUp`
-sfx. Combo break (timer expires) = `comboBreak` sfx, counter shatters.
+Ranks by combo count: `C 10 · B 30 · A 60 · S 100 · SS 200 · SSS 400`. XP
+multiplier `1.1 / 1.2 / 1.3 / 1.5 / 1.75 / 2.0`. Ranks must be *earned and
+kept*: the combo window shrinks with the rank (2.5 s up to B, 2.0 / 1.7 / 1.45 /
+1.2 s for A / S / SS / SSS) and a kill only puts part of it back (full refill up
+to B, then 0.3 / 0.15 / 0.08 / 0.04 s), so holding A needs ~3 kills/s, S ~7,
+SS ~13 and SSS ~25. When the timer runs dry at B or better the combo **drops
+one rank** (count falls to that rank's threshold; the letter falls in, a softer
+crack plays); below B it breaks (`comboBreak` sfx, counter shatters). Getting
+hurt also drops one rank. Rank-up = stamp animation + `rankUp` sfx.
 
 ### 2.2 Overdrive (ultimate)
-Meter 0-100: +1 per kill, +8 elite, +30 boss, +0.5/s passive. When full the
-ULT button pulses rainbow (`ultReady`). Cast = 1.1 s anime cut-in (sim paused,
+Meter 0-100, starting at 25: +0.3 per kill (ordinary kills add at most 1.25/s,
+so a horde can't spam it), +8 elite, +30 boss, +0.55/s passive - one Overdrive
+every ~50-60 s (the first one around 1:00). When full the ULT button pulses
+rainbow (`ultReady`). Cast = 1.1 s anime cut-in (sim paused,
 FX keep animating) then the hero's ultimate (3-4 s, player invulnerable).
 
 ### 2.3 Level-up flow
@@ -82,18 +90,18 @@ prioritise evolutions when eligible.
 | --- | --- | --- | --- | --- |
 | **Hoshi** (star magician) | pink twin-tails, star clips, cyan eyes, white/pink magical-girl dress, star wand | Star Shot | +10 % projectile speed, −5 % cooldown | **Supernova Shower** — 30 meteors rain across the view over 3 s, each exploding (radius 32) |
 | **Rin** (shrine swordswoman) | black ponytail with red ribbon, red eyes, white haori + red hakama, katana | Petal Slash | +20 HP, +10 % damage | **Thousand Blossom Cut** — world freezes, 12 slash lines carve the screen, then every on-screen enemy is hit for massive damage in a petal explosion |
-| **Mochi** (neko-girl) | cream bob + cat ears, golden cat eyes, oversized lavender paw hoodie, tail | Yarn Orbit | +15 % move speed, +20 % pickup radius | **Nyan Stampede** — 40 cats gallop across the screen in waves, trampling (damage + big knockback) |
+| **Mochi** (neko-girl) | cream bob + cat ears, golden cat eyes, oversized lavender paw hoodie, tail | Yarn Orbit | +15 % move speed, +20 % pickup radius, 1 armor | **Nyan Stampede** — 40 cats gallop across the screen in waves, trampling (damage + big knockback) |
 
 ### 3.2 Weapons (5 levels each) and evolutions
 Base stats are multiplied by passives (Might, Area, Cooldown, Amount...).
 
 | Weapon | Behaviour | Base | Evolution (needs Lv5 + passive) |
 | --- | --- | --- | --- |
-| **Star Shot** | Homing stars at nearest enemies | dmg 10, cd 0.9, amt 1, spd 160, pierce 1 | **Galaxy Barrage** (+Wish Charm): rotating spiral stream of homing stars, cd 0.12 |
-| **Petal Slash** | Arc slash in facing dir (Lv2 also behind) | dmg 16, cd 1.1, area 48×32 | **Sakura Tempest** (+Big Ribbon): 360° whirlwind every 0.8 s + petal projectiles |
-| **Yarn Orbit** | Balls orbit the player (r 28), 3 s on / 1.5 s off | dmg 8, per-enemy hit cd 0.4 | **Cosmic Yarn** (+Magnet Star): 6 planets, permanent, also pull gems |
+| **Star Shot** | Homing stars at nearest enemies | dmg 10, cd 0.85, amt 2, spd 160, pierce 2 | **Galaxy Barrage** (+Wish Charm): rotating spiral stream of homing stars, cd 0.1, 3 arms, pierce 3 |
+| **Petal Slash** | Arc slash in facing dir (Lv2 also behind) | dmg 16, cd 1.1, area 48×32 | **Sakura Tempest** (+Big Ribbon): 360° whirlwind every 0.8 s + petal blades fanned at the nearest enemy (a boss first) that curve in |
+| **Yarn Orbit** | Balls orbit the player (r 28), 3 s on / 1.3 s off | dmg 10, per-enemy hit cd 0.4 (0.34 from Lv3, 0.28 at Lv5) | **Cosmic Yarn** (+Magnet Star): 6 planets (dmg 19, hit cd 0.26), permanent, also pull gems |
 | **Heart Boomerang** | Thrown at nearest, flies 90 px and returns, pierces | dmg 12, cd 1.4 | **Love Tornado** (+Twin Charm): hearts spiral outward in a tornado |
-| **Thunder Bell** | Lightning strikes random on-screen enemies, chains (60 %) | dmg 20, cd 1.6, strikes 2, chain 2 | **Raijin Drum** (+Power Bow): 8 huge bolts with AoE blasts + screen flash |
+| **Thunder Bell** | Lightning strikes random on-screen enemies, chains (60 %), small spark blast | dmg 24, cd 1.4, strikes 2, chain 3 | **Raijin Drum** (+Power Bow): 8 huge bolts with AoE blasts + screen flash |
 | **Candy Bomb** | Lobs bombs (0.6 s arc) at enemies, AoE r 28 | dmg 25, cd 2.0 | **Sugar Nuke** (+Lucky Clover): giant bomb r 80 + 6 cluster bomblets |
 | **Bubble Aura** | Damaging aura r 30, ticks 0.5 s, slows 30 % | dmg 5 | **Ocean Dome** (+Heart Locket): huge dome, heals 1 HP per 10 kills inside, bubbles burst outward |
 | **Prism Beam** | 0.5 s piercing beam (len 140) toward nearest, ticks 0.1 s | dmg 6/tick, cd 2.2 | **Rainbow Cannon** (+Swift Shoes): 3 beams sweeping 360° |
@@ -105,57 +113,69 @@ Magnet Star +30 % pickup radius · Lucky Clover +4 % crit, +10 % luck ·
 Heart Locket +20 max HP, +0.2 HP/s regen.
 
 ### 3.4 Enemies
-HP scales `× (1 + m × 0.22 + m² × 0.035)` (m = run minutes; accelerating so late builds stay challenged). All have a shadow, a hit flash and a
+HP scales `× (1 + 0.1m + 0.01m² + 0.014m³)` (m = run minutes: ×1.7 at 3:00,
+×4.6 at 6:00, ×12 at 9:00 - gentle while the build forms, then it chases the
+evolutions), contact / shot damage `× (1 + 0.06 × max(0, m − 4))`. **Adaptive
+toughness**: from 3:30, while fewer than 55 % of the cap are alive (the build
+clears faster than the director refills), new spawns get up to +150 % HP; it
+relaxes once the screen is busy again. A device whose enemy cap is below the
+phase max gets ×√(max / cap) HP (≤ ×1.4). All have a shadow, a hit flash and a
 death burst in their own colours.
 
 | Enemy | HP | Speed | Dmg | Behaviour |
 | --- | --- | --- | --- | --- |
-| Puff (slime) | 8 | 32 | 6 | Hop-chase (speed pulses with the hop frames) |
+| Puff (slime) | 8 | 32 | 5 | Hop-chase (speed pulses with the hop frames) |
 | Batbun | 5 | 55 | 4 | Weaving chase; swarm events fly straight lines |
-| Boo (ghost) | 14 | 38 | 7 | Sine-wave approach, alpha flickers |
-| Shroomie | 30 | 22 | 9 | Waddle; splits into 2 Spores (hp 4, spd 50) on death |
-| Teddy Brute | 90 | 24 | 14 | Tank, knockback resist 70 % |
-| Eyepuff | 20 | 30 | 8 | Keeps ~90 px away, telegraphs 0.4 s then shoots an `eb_orb` (70 px/s) |
-| Pumpkin Dasher | 40 | 30 | 12 | Every 3 s: 0.5 s telegraph (shake, red flash, aim line) then 180 px/s dash for 0.5 s |
-| Candle Wisp | 6 | 70 | 10 | Kamikaze; explodes (r 16) on contact or death |
+| Boo (ghost) | 14 | 38 | 6 | Sine-wave approach, alpha flickers |
+| Shroomie | 30 | 22 | 8 | Waddle; splits into 2 Spores (hp 4, spd 50) on death |
+| Teddy Brute | 90 | 24 | 11 | Tank, knockback resist 70 % |
+| Eyepuff | 20 | 30 | 8 | Keeps ~90 px away, telegraphs 0.4 s (eye glows) then shoots an `eb_orb` (70 px/s); from 6:00 sometimes a 3-shot fan (elites: 5) |
+| Pumpkin Dasher | 40 | 30 | 10 | Every ~3 s: 0.5 s telegraph (shake, red flash, aim lane) then 180 px/s dash for 0.5 s, aimed once; skids to a stop |
+| Candle Wisp | 6 | 70 | 10 | Kamikaze; ignites within ~30 px (0.32 s blinking pre-flash + blast ring), explodes (r 16) on contact or at the end of the fuse. Only ignited wisps hurt the player; every blast damages nearby enemies (chain reactions) |
 | **Elite** (any) | ×10 | ×0.9 | ×1.5 | ×1.5 scale, pulsing rainbow outline glow; drops chest + coin shower |
 
 ### 3.5 Bosses
 Intro: 3 s red WARNING banner + siren → boss enters with name card ("KING
 PUFF — Ruler of the Squish Kingdom"), slight zoom-out, boss music. Boss HP bar
 at the top. Death: 1.2 s slow-mo at 0.25×, chained explosions, white flash,
-golden chest with a light beam.
+golden chest with a light beam. Boss HP follows the player's level around the
+level the fight is tuned for: `HP × clamp(1 + 0.035 × (level − ref), 0.5, 1.8)`
+(genre convention), so a snowballed build and a struggling one both get a
+fight of about the same length.
 
 | Boss | Time | HP | Patterns |
 | --- | --- | --- | --- |
-| **King Puff** | 3:00 | 1500 | Hop ×3 toward player → big jump (landing circle telegraph 1 s) → slam: ring of 16 `eb_orb` + shockwave; summons 6 Puffs |
-| **Nightmare Teddy** | 6:00 | 5000 | Telegraphed charge ×3 (aim line), spinning claw sweep, `eb_star` spiral rings, summons Teddies |
-| **Lady Lunatic** | 9:00 | 14000 | P1 moon spirals (`eb_moon`) + teleport · P2 (<60 %) orbiting moons + fan shots · P3 (<25 %) screen dims, huge radial patterns |
+| **King Puff** | 3:00 | 2600 (ref Lv 17) | Hop ×3 toward player → big jump (landing circle telegraph 1 s) → slam: ring of 16 `eb_orb` + shockwave; summons 6 Puffs |
+| **Nightmare Teddy** | 6:00 | 17500 (ref Lv 33) | Telegraphed charge ×3 (aim lane, wall of dust, shake on stop), spinning claw sweep (danger circle), `eb_star` spiral rings, roar summoning Teddies + Puffs; rage below 50 % (faster, denser, star ring after sweeps) |
+| **Lady Lunatic** | 9:00 | 34000 (ref Lv 52) | P1 moon spirals (`eb_moon`) + aimed fans + teleports · P2 (<60 %) breathing orbiting moon ring + fans, starfall rows, summons bats · P3 (<25 %) "LUNATIC MOON": screen dims, radial bullet flowers, faster teleports. Phase changes: invulnerable flourish, bullets cleared, banner, shockwave, music duck. Enrages at 10:30 (faster, denser, red). Bullets 56-90 px/s (15 dmg; Nightmare Teddy's stars 13), never spawned near the player |
 
 ### 3.6 Director timeline
 Enemies spawn just outside the view. Max-alive cap is also limited by the
-device quality tier (low 150 / mid 250 / high 350).
+device quality tier (low 150 / mid 250 / high 350). Below 80 % of the cap the
+spawn rate is boosted (up to ×4 on an empty screen).
 
 | Time | Mix | Spawn/s | Max | Events |
 | --- | --- | --- | --- | --- |
-| 0:00-1:00 | Puff, Batbun | 1.5 → 3 | 60 | |
+| 0:00-1:00 | Puff, Batbun | 1.3 → 2.7 | 55 | |
 | 1:00-2:00 | + Boo | 3 → 4 | 100 | 1:45 bat swarm line |
-| 2:00-3:00 | + Shroomie, Eyepuff | 4 → 5 | 140 | 2:30 elite |
-| 3:00 | **King Puff** (spawns ×0.4 while alive) | | | |
-| 3:30-5:00 | + Pumpkin, Teddy | 5 → 6 | 180 | 4:00 encircle ring, 4:30 elite |
-| 5:00-6:00 | + Wisp | 6 → 7 | 220 | 5:30 Puff flood stream |
-| 6:00 | **Nightmare Teddy** | | | |
-| 6:30-9:00 | everything | 8 → 10 | 300 | elites every 45 s, 7:00 ring, 7:30 bat storm, 8:15 wisp rush |
-| 9:00 | **Lady Lunatic** (spawns ×0.5) | | | |
+| 2:00-3:00 | + Shroomie, Eyepuff | 4 → 5.5 | 140 | 2:30 elite |
+| 3:00 | **King Puff** (spawns ×0.55 while alive) | 4.5 | 140 | |
+| 3:30-5:00 | + Pumpkin, Teddy (light) | 6 → 9.5 | 175 | 4:00 encircle ring, 4:30 elite |
+| 5:00-6:00 | + Wisp | 12 → 16 | 220 | 5:30 Puff flood stream |
+| 6:00 | **Nightmare Teddy** (spawns ×0.4) | 16 → 17 | 240 | |
+| 6:30-9:00 | everything | 20 → 30 | 260 | elites every 45 s, 7:00 ring, 7:30 bat storm, 8:15 wisp rush |
+| 9:00 | **Lady Lunatic** (spawns ×0.4) | 30 | 260 | |
 
 ### 3.7 Pickups & props
-Destructible lanterns/gift boxes spawn near (off-screen) every ~20 s and drop
+Destructible lanterns/gift boxes spawn near (off-screen) every ~16 s and drop
 food (onigiri +20 HP, cake +50 HP), coins, and rarely magnet (pulls all
 gems), bomb (damages everything on screen) or clock (freezes enemies 5 s).
-Enemies drop coins 2 % of the time; elites drop a coin shower.
+Enemies drop coins 2 % of the time; elites drop a coin shower. Coins left
+behind never pile up: above 110 resting coins the farthest fold into one
+bigger coin worth their sum (keeping 80), so nothing is lost or gained.
 
 ### 3.8 Meta progression (Dream Shop, persisted)
-Coins buy permanent ranks: Might (+5 % dmg), Vitality (+10 HP), Swiftness
+Coins buy permanent ranks: Might (+4 % dmg), Vitality (+8 HP), Swiftness
 (+4 % speed), Magnetism (+10 % radius), Greed (+10 % coins), Luck (+5 %),
 Reroll (+1), Revive (1 max, revive at 50 % HP with a screen-clearing burst).
 Cost grows ~1.6× per rank.

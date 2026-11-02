@@ -18,8 +18,9 @@ export interface MetaDef {
 export type MetaRanks = Record<string, number>;
 
 export const META: MetaDef[] = [
-  { id: "might", name: "Might", icon: "icon_power_bow", maxRank: 5, baseCost: 60, desc: "+5% damage per rank", apply: (s, r) => void (s.might += 0.05 * r) },
-  { id: "vitality", name: "Vitality", icon: "icon_heart", maxRank: 5, baseCost: 50, desc: "+10 max HP per rank", apply: (s, r) => void (s.maxHp += 10 * r) },
+  // (balance pass: a maxed shop helps a lot - the bot wins every run - but no longer makes the late game free)
+  { id: "might", name: "Might", icon: "icon_power_bow", maxRank: 5, baseCost: 60, desc: "+4% damage per rank", apply: (s, r) => void (s.might += 0.04 * r) },
+  { id: "vitality", name: "Vitality", icon: "icon_heart", maxRank: 5, baseCost: 50, desc: "+8 max HP per rank", apply: (s, r) => void (s.maxHp += 8 * r) },
   { id: "swiftness", name: "Swiftness", icon: "icon_swift_shoes", maxRank: 5, baseCost: 50, desc: "+4% move speed per rank", apply: (s, r) => void (s.moveSpeed += 0.04 * r) },
   { id: "magnetism", name: "Magnetism", icon: "icon_magnet_star", maxRank: 5, baseCost: 40, desc: "+10% pickup range per rank", apply: (s, r) => void (s.pickup += 0.1 * r) },
   { id: "greed", name: "Greed", icon: "icon_gold_up", maxRank: 5, baseCost: 70, desc: "+10% coins per rank", apply: (s, r) => void (s.greed += 0.1 * r) },

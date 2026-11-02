@@ -50,13 +50,13 @@ export const starShot: WeaponDef = {
   sfx: "starShot",
   desc: "Fires homing stars at the nearest enemies.",
   levels: [
-    { dmg: 10, cd: 0.9, amount: 1, speed: 160, pierce: 1, knock: 26 },
-    { dmg: 10, cd: 0.9, amount: 2, speed: 160, pierce: 1, knock: 26 },
-    { dmg: 14, cd: 0.8, amount: 2, speed: 175, pierce: 1, knock: 28 },
-    { dmg: 14, cd: 0.8, amount: 3, speed: 175, pierce: 1, knock: 28 },
-    { dmg: 18, cd: 0.72, amount: 3, speed: 190, pierce: 2, knock: 32 },
+    { dmg: 10, cd: 0.85, amount: 2, speed: 160, pierce: 2, knock: 26 },
+    { dmg: 10, cd: 0.85, amount: 3, speed: 160, pierce: 2, knock: 26 },
+    { dmg: 14, cd: 0.75, amount: 3, speed: 175, pierce: 3, knock: 28 },
+    { dmg: 14, cd: 0.75, amount: 4, speed: 175, pierce: 3, knock: 28 },
+    { dmg: 18, cd: 0.65, amount: 5, speed: 190, pierce: 4, knock: 32 },
   ],
-  upgrades: ["+1 star", "Damage +4, cooldown -11%", "+1 star", "Damage +4, pierces 1 more enemy"],
+  upgrades: ["+1 star", "Damage +4, cooldown -12%, pierces 1 more", "+1 star", "Damage +4, +1 star, pierces 1 more"],
   evolution: { into: "galaxy_barrage", with: "wish_charm" },
   update(w, inst, dt) {
     const S = wstats(w, inst);
@@ -98,7 +98,7 @@ export const galaxyBarrage: WeaponDef = {
   sfx: "starShot",
   evolved: true,
   desc: "EVOLUTION! A rotating spiral stream of homing galaxy stars.",
-  levels: [{ dmg: 15, cd: 0.12, amount: 2, speed: 175, pierce: 2, knock: 30 }],
+  levels: [{ dmg: 14, cd: 0.1, amount: 3, speed: 180, pierce: 3, knock: 30 }],
   upgrades: [],
   update(w, inst, dt) {
     const S = wstats(w, inst);

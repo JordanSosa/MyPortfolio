@@ -13,6 +13,7 @@ import { C } from "../../art/palette";
 import { TAU } from "../../core/math";
 import type { Enemy, EnemyDef } from "../types";
 import type { World } from "../world";
+import { shock } from "../enemies/_fx";
 
 export const KP_HOP = 0;
 export const KP_JUMP = 1;
@@ -27,7 +28,7 @@ function slam(e: Enemy, w: World, angry: boolean): void {
     const a = (i / n) * TAU;
     w.spawnBullet(e.x + Math.cos(a) * 10, e.y - 10 + Math.sin(a) * 10, Math.cos(a) * 70, Math.sin(a) * 70, 10, "eb_orb", 3, 5);
   }
-  w.emit("shockwave", { x: e.x, y: e.y, r: 60, power: 1 });
+  shock(w, e.x, e.y, 60, 1);
   const dx = p.x - e.x;
   const dy = p.y - e.y;
   if (dx * dx + dy * dy < 36 * 36) w.hurtPlayer(e.dmg * 1.4, e.x, e.y);
@@ -42,7 +43,7 @@ export const kingPuff: EnemyDef = {
   name: "King Puff",
   sprite: "boss_kingpuff",
   fps: 6,
-  hp: 1500,
+  hp: 2600,
   speed: 46,
   dmg: 15,
   radius: 17,
@@ -51,7 +52,7 @@ export const kingPuff: EnemyDef = {
   shadow: 40,
   knockResist: 0.95,
   colors: [C.mint, C.lime, C.yellow, C.white],
-  boss: { title: "KING PUFF", subtitle: "Ruler of the Squish Kingdom", music: "boss" },
+  boss: { title: "KING PUFF", subtitle: "Ruler of the Squish Kingdom", music: "boss", level: 17 },
   // art: f0 idle, f1 squish, f2 stretched (airborne), f3 flat (landing)
   frame(e) {
     if (e.state === KP_REST) return 3;
@@ -81,7 +82,7 @@ export const kingPuff: EnemyDef = {
       if (e.timer >= hopT + 0.12) {
         e.timer = 0;
         e.b++;
-        w.emit("shockwave", { x: e.x, y: e.y, r: 18, power: 0.15 });
+        shock(w, e.x, e.y, 18, 0.15);
         if (e.b >= 3) {
           // big jump onto the player's current spot (dodge it!)
           e.b = 0;

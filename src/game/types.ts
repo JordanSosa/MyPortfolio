@@ -18,6 +18,12 @@ export interface BossInfo {
   music?: "boss" | "final";
   /** Killing it ends the run in victory. */
   final?: boolean;
+  /**
+   * Player level the fight is tuned for: HP x clamp(1 + (level - this) x CFG.bossHpPerLevel,
+   * CFG.bossHpMin, CFG.bossHpMax) at spawn, so a snowballed build and a struggling one both get
+   * a fight of about the same length (genre convention: boss HP scales with the player's level).
+   */
+  level?: number;
 }
 
 export interface EnemyDef {
@@ -114,6 +120,8 @@ export interface Enemy {
   alpha: number;
   /** Height above ground for drawing (hops), px. */
   z: number;
+  /** Invulnerable while > 0 (seconds, counts down): hits are ignored (boss phase flourishes, entrances). */
+  inv: number;
 }
 
 // ---------------------------------------------------------------- projectiles

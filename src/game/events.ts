@@ -38,6 +38,39 @@ export interface GemEvent {
   tier: number;
 }
 
+/**
+ * One-shot weapon visual (lightning, bursts, heals...) the projectile list can't
+ * express. `kind` is a WFX_* constant from game/weapons/_fx.ts; the payload is
+ * reused (copy what you need). Drawn by src/view/weapon-fx.ts.
+ */
+export interface WeaponFxEvent {
+  kind: number;
+  x: number;
+  y: number;
+  x2: number;
+  y2: number;
+  r: number;
+  /** Kind-specific variant (chain index, level...). */
+  n: number;
+}
+
+/**
+ * Enemy / boss cosmetic cue. `kind` is an EFX_* constant from
+ * game/enemies/_fx.ts; the payload is reused (copy what you need, keep no
+ * reference to `enemy` beyond the handler).
+ */
+export interface EnemyFxEvent {
+  kind: number;
+  x: number;
+  y: number;
+  /** Direction (unit vector) or a second point, kind-specific. */
+  dx: number;
+  dy: number;
+  /** Strength / radius / count, kind-specific. */
+  power: number;
+  enemy: Enemy | null;
+}
+
 export interface GameEvents {
   // combat
   enemyHit: HitEvent;
@@ -47,6 +80,7 @@ export interface GameEvents {
   eliteSpawned: { enemy: Enemy };
   explosion: { x: number; y: number; r: number; source: string; big: boolean };
   weaponFire: { id: string; sfx: string; x: number; y: number };
+  weaponFx: WeaponFxEvent;
   enemyShoot: { x: number; y: number };
   /** A danger zone appeared (see World.telegraphs). */
   telegraph: { x: number; y: number; r: number };
@@ -76,6 +110,8 @@ export interface GameEvents {
   // combo / overdrive
   comboRank: { rank: number; id: string; count: number };
   comboBreak: { count: number };
+  /** The combo fell one rank (timer ran out at B+, or the player got hurt); `count` is the new (threshold) count. */
+  comboDrop: { rank: number; id: string; count: number };
   ultReady: Record<string, never>;
   ultCutin: { hero: string; ult: string; name: string };
   ultStart: { ult: string; x: number; y: number };
@@ -91,6 +127,13 @@ export interface GameEvents {
   bossSpawn: { enemy: Enemy; title: string; subtitle: string };
   bossKilled: { x: number; y: number; title: string; final: boolean };
   bossEnrage: Record<string, never>;
+  /** A boss changed phase (invulnerable flourish: shockwave, banner, music duck). */
+  bossPhase: { id: string; phase: number; x: number; y: number; title: string; subtitle: string };
+  // bestiary
+  /** Enemy / boss cosmetic cue (stomps, skids, roars, teleports...). Drawn by src/view/bestiary-fx.ts. */
+  enemyFx: EnemyFxEvent;
+  /** Enemy bullets are about to be cleared (bomb, ult, revive, boss phase): `world.bullets` still holds them. */
+  bulletsCleared: { n: number };
   // run
   victory: { time: number };
 }

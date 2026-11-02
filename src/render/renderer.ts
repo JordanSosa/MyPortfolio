@@ -88,6 +88,8 @@ export class Renderer {
   contextLost = false;
   /** Glow pass brightness multiplier. */
   glowGain = 1;
+  /** realDt of the current frame (feeds the adaptive bloom limiter). */
+  private frameDt = 1 / 60;
   /** Called after the canvas size / pixel scale changes. */
   onResize: ((r: Renderer) => void) | null = null;
   /** Called after a lost context was restored and resources rebuilt. */
@@ -257,6 +259,7 @@ export class Renderer {
       this.measure();
       if (prevW !== this.cssW || prevH !== this.cssH || prevS !== this.camera.baseScale) this.onResize?.(this);
     }
+    this.frameDt = realDt;
     this.camera.update(realDt);
     this.post.update(realDt);
     this.batch.reset();
@@ -280,6 +283,7 @@ export class Renderer {
     const oy = Math.floor(v.y) - 1;
 
     this.batch.upload();
+    this.post.feedGlow(this.batch.glowCount, sw * sh, this.frameDt);
 
     // scene pass
     const p = this.pipeline;

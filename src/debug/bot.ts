@@ -15,8 +15,24 @@ import { Rng } from "../core/rng";
 import { CFG } from "../game/config";
 import type { UpgradeCard } from "../game/types";
 import type { SimInput, World } from "../game/world";
+import { LUNA_RING_N, lunaRing } from "../game/bosses/_luna";
+
+const ringPt = { x: 0, y: 0 };
 
 const PREF: Record<string, number> = { hoshi: 70, rin: 26, mochi: 24 };
+/** Distance a player keeps from a boss while healthy: melee heroes walk up to it, Hoshi stays in range. */
+const BOSS_ENGAGE: Record<string, number> = { hoshi: 80, rin: 24, mochi: 26 };
+/** How much an average player values each passive (damage first; utility last unless it evolves something). */
+const PASSIVE_VALUE: Record<string, number> = {
+  power_bow: 8,
+  wish_charm: 7,
+  big_ribbon: 6,
+  twin_charm: 6,
+  heart_locket: 5,
+  swift_shoes: 3,
+  magnet_star: 1,
+  lucky_clover: 0,
+};
 
 export class Bot {
   private rng: Rng;
@@ -27,6 +43,12 @@ export class Bot {
   private stuck = 0;
   /** 0..1: how sloppy the bot is (attract mode looks more natural with a bit). */
   sloppiness = 0.15;
+  /** Weak-player proxy (balance probe): never dashes. */
+  noDash = false;
+  /** Weak-player proxy (balance probe): picks level-up cards at random. */
+  randomPicks = false;
+  /** Human reaction time: bullets younger than this (s) are not dodged yet. */
+  reaction = 0.18;
 
   constructor(seed = 1234) {
     this.rng = new Rng(seed);
@@ -59,7 +81,9 @@ export class Bot {
       const d2 = dx * dx + dy * dy;
       if (d2 > 110 * 110) continue;
       const d = Math.sqrt(d2) || 1;
-      const k = (e.def.boss ? 4 : e.elite ? 2 : 1) / Math.max(36, d2);
+      // big hitters (teddies, pumpkins, elites, bosses) are given a wider berth than puffs
+      const hit = Math.min(2.5, Math.max(0.6, e.dmg / 7)) * (e.r > 8 ? 1.3 : 1);
+      const k = ((e.def.boss ? 4 : e.elite ? 2 : 1) * hit) / Math.max(36, d2 - e.r * e.r);
       fx += (dx / d) * k * 400;
       fy += (dy / d) * k * 400;
       if (d < 26) crowd++;
@@ -72,6 +96,7 @@ export class Bot {
     }
     for (let i = 0; i < w.bullets.count; i++) {
       const b = w.bullets.items[i];
+      if (b.age < this.reaction) continue;
       const dx = px - b.x;
       const dy = py - b.y;
       const d2 = dx * dx + dy * dy;
@@ -80,9 +105,73 @@ export class Bot {
       fx += (dx / d) * (1600 / Math.max(25, d2));
       fy += (dy / d) * (1600 / Math.max(25, d2));
     }
+    // telegraphs (jump circles, dash lanes, claw sweeps): step out like a human reading the warning
+    for (let i = 0; i < w.telegraphs.count; i++) {
+      const t = w.telegraphs.items[i];
+      if (t.dead) continue;
+      const fx0 = p.x;
+      const fy0 = p.y;
+      let ox: number;
+      let oy: number;
+      let dist: number;
+      if (t.shape === 0) {
+        ox = fx0 - t.x;
+        oy = fy0 - t.y;
+        dist = Math.sqrt(ox * ox + oy * oy);
+      } else {
+        // closest point on the lane segment
+        const sx = t.x2 - t.x;
+        const sy = t.y2 - t.y;
+        const L2 = sx * sx + sy * sy || 1;
+        const u = Math.min(1, Math.max(0, ((fx0 - t.x) * sx + (fy0 - t.y) * sy) / L2));
+        ox = fx0 - (t.x + sx * u);
+        oy = fy0 - (t.y + sy * u);
+        dist = Math.sqrt(ox * ox + oy * oy);
+        if (dist < 0.5) {
+          // dead centre: sidestep perpendicular to the lane
+          const l = Math.sqrt(L2);
+          ox = -sy / l;
+          oy = sx / l;
+          dist = 0.5;
+        }
+      }
+      const edge = t.r + 10;
+      if (dist < edge) {
+        const k = 3 * (1 - dist / edge) + 1;
+        const l = dist || 1;
+        fx += (ox / l) * k;
+        fy += (oy / l) * k;
+      }
+    }
+    // Lady Lunatic's orbiting moon ring is a hazard too (not in the bullet list)
+    const boss = w.boss;
+    if (boss && boss.def.id === "lady_lunatic") {
+      for (let i = 0; i < LUNA_RING_N; i++) {
+        if (!lunaRing(boss, i, ringPt)) break;
+        const dx = px - ringPt.x;
+        const dy = py - ringPt.y;
+        const d2 = dx * dx + dy * dy;
+        if (d2 > 50 * 50) continue;
+        const d = Math.sqrt(d2) || 1;
+        fx += (dx / d) * (1600 / Math.max(25, d2));
+        fy += (dy / d) * (1600 / Math.max(25, d2));
+      }
+    }
     // keep the preferred distance to the nearest enemy (melee heroes close in)
     const pref = PREF[w.hero.id] ?? 50;
     const hpK = p.hp / p.maxHp;
+    // chase the boss into weapon range while healthy (it floats away / hovers out of melee reach otherwise)
+    if (boss && !boss.dead && hpK > 0.45) {
+      const bx = boss.x - px;
+      const by = boss.y - boss.cy - py;
+      const bd = Math.sqrt(bx * bx + by * by) || 1;
+      const want = (BOSS_ENGAGE[w.hero.id] ?? 60) + boss.r;
+      if (bd > want) {
+        const k = Math.min(1.2, (bd - want) / 40);
+        fx += (bx / bd) * k;
+        fy += (by / bd) * k;
+      }
+    }
     if (nearest < 1e8) {
       const want = hpK < 0.35 ? pref * 1.8 : pref;
       if (nearest > want + 18 && crowd === 0) {
@@ -110,6 +199,19 @@ export class Bot {
         else if ((k.kind === "onigiri" || k.kind === "cake") && hpK > 0.85) continue;
         else d2 *= 0.4;
         if (d2 < best && d2 < 260 * 260) {
+          best = d2;
+          gx = dx;
+          gy = dy;
+        }
+      }
+      // lanterns / gift boxes: a human walks over to break them (food, magnets, bombs)
+      for (let i = 0; i < w.enemies.count; i++) {
+        const e = w.enemies.items[i];
+        if (e.dead || !e.def.prop) continue;
+        const dx = e.x - px;
+        const dy = e.y - e.cy - py;
+        const d2 = (dx * dx + dy * dy) * (hpK < 0.7 ? 0.2 : 0.5);
+        if (d2 < best && d2 < 200 * 200) {
           best = d2;
           gx = dx;
           gy = dy;
@@ -156,13 +258,15 @@ export class Bot {
     out.my = ol > 0.05 ? this.dy / Math.max(1, ol) : 0;
 
     // dash out of crowds
-    if (p.dashCd <= 0 && (crowd >= 4 || (crowd >= 1 && hpK < 0.35))) out.dash = true;
-    // stuck detection: if barely moving while pressured, dash
-    const sp = Math.abs(p.vx) + Math.abs(p.vy);
-    this.stuck = sp < 10 && near > 6 ? this.stuck + dt : 0;
-    if (this.stuck > 0.6 && p.dashCd <= 0) {
-      out.dash = true;
-      this.stuck = 0;
+    if (!this.noDash) {
+      if (p.dashCd <= 0 && (crowd >= 4 || (crowd >= 1 && hpK < 0.35))) out.dash = true;
+      // stuck detection: if barely moving while pressured, dash
+      const sp = Math.abs(p.vx) + Math.abs(p.vy);
+      this.stuck = sp < 10 && near > 6 ? this.stuck + dt : 0;
+      if (this.stuck > 0.6 && p.dashCd <= 0) {
+        out.dash = true;
+        this.stuck = 0;
+      }
     }
     // overdrive when it matters
     if (w.ultReady && (near >= 10 || w.enemyCount >= 40 || w.boss || hpK < 0.4)) out.ult = true;
@@ -170,6 +274,7 @@ export class Bot {
 
   /** Pick a level-up card. */
   pick(w: World, cards: UpgradeCard[]): UpgradeCard {
+    if (this.randomPicks) return cards[this.rng.int(0, cards.length - 1)];
     let best = cards[0];
     let bs = -1e9;
     const hpK = w.player.hp / w.player.maxHp;
@@ -183,7 +288,7 @@ export class Bot {
           s = c.from > 0 ? 40 + c.to * 2 : w.weapons.length < 4 ? 34 : 8;
           break;
         case "passive": {
-          s = c.from > 0 ? 22 : 18;
+          s = (c.from > 0 ? 22 : 16) + (PASSIVE_VALUE[c.id] ?? 3);
           for (const inst of w.weapons) if (inst.def.evolution?.with === c.id) s += 26;
           if (c.id === "heart_locket" && hpK < 0.5) s += 10;
           break;

@@ -9,16 +9,37 @@ import { BOSSES, ENEMIES } from "../registry";
 import type { Enemy, EnemyDef } from "../types";
 import type { World } from "../world";
 import { EVENT_HANDLERS } from "./events";
+import { EFX_SUMMON, efx } from "../enemies/_fx";
 import { EVENTS, phaseAt, type SpawnPhase, type TimelineEvent } from "./timeline";
 
 type Task = (dt: number) => boolean;
 
 /** Fraction of the phase cap kept alive at minimum (spawn rate boosts below it). */
-const MIN_ALIVE = 0.45;
+export const MIN_ALIVE = 0.8;
+/**
+ * Adaptive toughness: while the screen stays below ADAPT_FLOOR x the cap (the
+ * build kills faster than the director can refill), newly spawned enemies get
+ * tougher (HP x (1 + adapt)), up to ADAPT_MAX; it relaxes once the screen is
+ * busy again. Strong builds keep a busy, dangerous screen; weak builds (who
+ * already fight a full screen) never see it. Off before ADAPT_FROM s.
+ */
+export const ADAPT_FROM = 210;
+export const ADAPT_FLOOR = 0.55;
+export const ADAPT_MAX = 1.5;
+const ADAPT_UP = 0.03;
+const ADAPT_DOWN = 0.02;
 
 export class Director {
   /** Spawn-rate multiplier (bosses reduce it while alive). */
   spawnMul = 1;
+  /** Extra HP fraction for new spawns (adaptive toughness, see ADAPT_MAX). */
+  adapt = 0;
+  /**
+   * HP multiplier for new (non-boss) spawns: adaptive toughness x a low-tier
+   * compensation (a device capped below the phase max fights fewer, tougher
+   * enemies: x sqrt(phaseMax / deviceCap), at most x1.4).
+   */
+  hpMul = 1;
   enraged = false;
   /** Boss currently in its WARNING countdown. */
   warning: { def: EnemyDef; t: number; mul: number } | null = null;
@@ -74,7 +95,14 @@ export class Director {
     let rate = lerp(ph.rate[0], ph.rate[1], Math.min(1, Math.max(0, k))) * this.spawnMul;
     // pressure floor: a strong build shouldn't empty the screen - refill faster when sparse
     const floor = cap * MIN_ALIVE * this.spawnMul;
-    if (w.enemyCount < floor) rate *= 1 + 2.5 * (1 - w.enemyCount / floor);
+    const deficit = w.enemyCount < floor ? 1 - w.enemyCount / floor : 0;
+    if (deficit > 0) rate *= 1 + 3 * deficit;
+    if (w.t >= ADAPT_FROM) {
+      const af = cap * ADAPT_FLOOR * this.spawnMul;
+      if (w.enemyCount < af) this.adapt = Math.min(ADAPT_MAX, this.adapt + ADAPT_UP * (1 - w.enemyCount / af) * dt);
+      else this.adapt = Math.max(0, this.adapt - ADAPT_DOWN * dt);
+    }
+    this.hpMul = (1 + this.adapt) * (cap < ph.max ? Math.min(1.4, Math.sqrt(ph.max / cap)) : 1);
     this.acc += rate * dt;
     while (this.acc >= 1) {
       this.acc -= 1;
@@ -95,8 +123,8 @@ export class Director {
       this.spawnProp();
     }
 
-    // end of run
-    if (!this.hasFinalBoss && w.t >= CFG.fallbackVictoryAt) w.win();
+    // end of run (finalBossDown: the final boss fell on the step the player died, then a revive)
+    if (w.finalBossDown || (!this.hasFinalBoss && w.t >= CFG.fallbackVictoryAt)) w.win();
     if (!this.enraged && w.t >= CFG.enrageAt && w.boss?.def.boss?.final) {
       this.enraged = true;
       w.emit("bossEnrage", {});
@@ -180,6 +208,13 @@ export class Director {
   private spawnBoss(def: EnemyDef, mul: number): void {
     const w = this.w;
     const p = w.player;
+    // a previous boss that is somehow still alive flees into the dark (keeps one boss bar / one theme)
+    const old = w.boss;
+    if (old && !old.dead) {
+      efx(w, EFX_SUMMON, old.x, old.y, 0, 0, 3);
+      w.despawn(old);
+      w.boss = null;
+    }
     const e = w.spawnEnemy(def, p.x, p.y - w.viewH * 0.5 - 30);
     if (!e || !def.boss) return;
     w.boss = e;
@@ -188,6 +223,6 @@ export class Director {
   }
 
   onBossDied(_e: Enemy): void {
-    this.spawnMul = 1;
+    if (!this.w.boss) this.spawnMul = 1;
   }
 }
