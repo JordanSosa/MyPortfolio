@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <title>Kira Kira Overdrive - Audio Bench</title>
+    <style>
+      :root {
+        --bg: #241838;
+        --panel: #31244d;
+        --line: #4b3470;
+        --text: #f2ebff;
+        --dim: #b7a6d9;
+        --pink: #ff8fc8;
+        --cyan: #7ee8ff;
+        --gold: #ffe27a;
+      }
+      * { box-sizing: border-box; }
+      body { margin: 0; background: var(--bg); color: var(--text); font: 13px/1.35 system-ui, sans-serif; padding: 12px; padding-bottom: 40px; }
+      h1 { font-size: 18px; margin: 0 0 6px; color: var(--gold); letter-spacing: 0.5px; }
+      h2 { font-size: 13px; margin: 14px 0 6px; color: var(--cyan); text-transform: uppercase; letter-spacing: 1px; }
+      .hint { color: var(--dim); margin-bottom: 8px; }
+      .row { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+      .panel { background: var(--panel); border: 1px solid var(--line); border-radius: 8px; padding: 10px; margin-bottom: 10px; }
+      button { background: #48336e; color: var(--text); border: 1px solid #6a4f9a; border-radius: 6px; padding: 7px 10px; font: inherit; cursor: pointer; touch-action: manipulation; }
+      button:hover { background: #5a4286; }
+      button:active { transform: translateY(1px); }
+      button.on { background: var(--pink); color: #2a1440; border-color: #ffc2e2; font-weight: 600; }
+      button.track { min-width: 82px; }
+      label { display: inline-flex; gap: 6px; align-items: center; color: var(--dim); }
+      input[type="range"] { width: 140px; accent-color: var(--pink); }
+      .val { color: var(--gold); min-width: 36px; display: inline-block; font-variant-numeric: tabular-nums; }
+      #status { font-family: ui-monospace, monospace; color: var(--dim); white-space: pre; }
+      canvas { width: 100%; height: 90px; display: block; background: #1a1129; border-radius: 6px; }
+      #unlock { font-size: 16px; padding: 12px 18px; background: var(--gold); color: #2a1440; border: 0; font-weight: 700; }
+      .grp { margin-bottom: 6px; }
+      .grp b { display: inline-block; width: 74px; color: var(--dim); font-weight: 500; }
+    </style>
+  </head>
+  <body>
+    <h1>Kira Kira Overdrive · Audio Bench</h1>
+    <div class="hint">Every sound is synthesised live by <code>src/audio</code>. Tap once to unlock audio (required on mobile).</div>
+    <div class="panel row">
+      <button id="unlock">Tap to unlock audio</button>
+      <span id="status"></span>
+    </div>
+    <div class="panel">
+      <canvas id="scope" width="900" height="90"></canvas>
+    </div>
+    <div class="panel">
+      <h2 style="margin-top: 0">Music</h2>
+      <div class="row" id="tracks"></div>
+      <div class="row" style="margin-top: 8px">
+        <label>fade <input type="range" id="fade" min="0" max="3" step="0.1" value="1" /><span class="val" id="fadeV">1.0</span></label>
+        <label>intensity <input type="range" id="inten" min="0" max="1" step="0.01" value="0.3" /><span class="val" id="intenV">0.30</span></label>
+        <button id="muffle">muffle</button>
+        <button id="duck">duck 0.65 / 1.3 s</button>
+        <button id="susp">suspend</button>
+      </div>
+    </div>
+    <div class="panel">
+      <h2 style="margin-top: 0">Mix</h2>
+      <div class="row">
+        <label>master <input type="range" id="vm" min="0" max="1" step="0.01" value="0.8" /><span class="val" id="vmV">0.80</span></label>
+        <label>music <input type="range" id="vmu" min="0" max="1" step="0.01" value="0.7" /><span class="val" id="vmuV">0.70</span></label>
+        <label>sfx <input type="range" id="vs" min="0" max="1" step="0.01" value="0.85" /><span class="val" id="vsV">0.85</span></label>
+      </div>
+    </div>
+    <div class="panel">
+      <h2 style="margin-top: 0">SFX</h2>
+      <div class="row" style="margin-bottom: 8px">
+        <label>pitch <input type="range" id="pitch" min="-12" max="14" step="1" value="0" /><span class="val" id="pitchV">0</span></label>
+        <label>pan <input type="range" id="pan" min="-1" max="1" step="0.1" value="0" /><span class="val" id="panV">0.0</span></label>
+        <label>vol <input type="range" id="vol" min="0" max="1" step="0.05" value="1" /><span class="val" id="volV">1.00</span></label>
+        <button id="spam">spam hit ×20 (rate-limit test)</button>
+        <button id="chain">gem chain ×12</button>
+        <button id="chaos">combat chaos 4 s</button>
+      </div>
+      <div id="sfx"></div>
+    </div>
+    <script type="module" src="./audio.ts"></script>
+  </body>
+</html>

@@ -1,19 +1,227 @@
 /**
- * PLACEHOLDER no-op implementation of the audio contract.
- * Owner: audio agent replaces the internals (keep the `audio` export + AudioAPI shape).
+ * Realtime implementation of the audio contract (src/audio/api.ts).
+ *
+ * - The AudioContext is created lazily inside unlock() (a user gesture). On iOS
+ *   Safari the context is resumed inside the gesture and a 1-sample silent buffer
+ *   is played; if the context is still (or again) suspended / "interrupted"
+ *   (phone call, Siri, tab switch), the next tap/click/key re-unlocks it.
+ * - Every call is safe before unlock (sfx = no-op, music/volumes are remembered)
+ *   and when WebAudio is missing entirely (silent fallback). Nothing here throws.
  */
-import type { AudioAPI } from "./api";
+import type { AudioAPI, MusicTrack, SfxId, SfxOpts } from "./api";
+import { Engine } from "./engine";
+
 export type { AudioAPI, MusicTrack, SfxId, SfxOpts } from "./api";
 
-export const audio: AudioAPI = {
-  unlocked: false,
-  unlock() {},
-  sfx() {},
-  music() {},
-  setIntensity() {},
-  setMuffled() {},
-  duck() {},
-  setVolumes() {},
-  suspend() {},
-  resume() {},
-};
+const TICK_MS = 25;
+const GESTURES = ["pointerup", "touchend", "click", "keydown", "mousedown"] as const;
+
+type Ctor = new (opts?: AudioContextOptions) => AudioContext;
+
+class RealtimeAudio implements AudioAPI {
+  private ctx: AudioContext | null = null;
+  private engine: Engine | null = null;
+  private timer: ReturnType<typeof setInterval> | null = null;
+  private failed = false;
+  private hooked = false;
+  private wantSuspended = false;
+  private everRunning = false;
+  private vols: { master?: number; music?: number; sfx?: number } = {};
+  private track: MusicTrack = "none";
+  private intensity = 0;
+  private muffled = false;
+
+  get unlocked(): boolean {
+    return this.everRunning;
+  }
+
+  /** for the test bench / debug overlay */
+  get internals(): { ctx: AudioContext | null; engine: Engine | null } {
+    return { ctx: this.ctx, engine: this.engine };
+  }
+
+  unlock(): void {
+    if (this.failed) return;
+    try {
+      if (!this.ctx) this.create();
+      if (!this.ctx) return;
+      this.kick();
+      this.hookGestures();
+    } catch (e) {
+      console.warn("[audio] unlock failed", e);
+    }
+  }
+
+  private create(): void {
+    if (typeof window === "undefined") {
+      this.failed = true; // Node / tests: silent
+      return;
+    }
+    const w = window as unknown as { AudioContext?: Ctor; webkitAudioContext?: Ctor };
+    const C = w.AudioContext ?? w.webkitAudioContext;
+    if (!C) {
+      this.failed = true;
+      return;
+    }
+    let ctx: AudioContext;
+    try {
+      ctx = new C({ latencyHint: "interactive" });
+    } catch {
+      ctx = new C();
+    }
+    this.ctx = ctx;
+    try {
+      this.engine = new Engine(ctx);
+    } catch (e) {
+      console.warn("[audio] engine init failed", e);
+      this.failed = true;
+      this.engine = null;
+      try {
+        void ctx.close();
+      } catch {
+        /* ignore */
+      }
+      this.ctx = null;
+      return;
+    }
+    const eng = this.engine;
+    eng.setVolumes({ master: this.vols.master ?? 1, music: this.vols.music ?? 1, sfx: this.vols.sfx ?? 1 });
+    eng.setIntensity(this.intensity);
+    eng.setMuffled(this.muffled);
+    if (this.track !== "none") eng.music(this.track, 0.3);
+    const onState = () => {
+      if (ctx.state === "running") this.everRunning = true;
+    };
+    ctx.addEventListener?.("statechange", onState);
+    onState();
+    this.timer = setInterval(() => this.tick(), TICK_MS);
+  }
+
+  private tick(): void {
+    const ctx = this.ctx;
+    if (!ctx || !this.engine || ctx.state !== "running") return;
+    try {
+      this.engine.tick(ctx.currentTime);
+    } catch (e) {
+      console.warn("[audio] tick failed", e);
+    }
+  }
+
+  /** resume() + the iOS silent-buffer trick; must run inside a gesture to be effective */
+  private kick(): void {
+    const ctx = this.ctx;
+    if (!ctx || this.wantSuspended) return;
+    if (ctx.state !== "running") {
+      try {
+        const p = ctx.resume();
+        p?.then(() => {
+          if (ctx.state === "running") this.everRunning = true;
+        }).catch(() => {});
+      } catch {
+        /* ignore */
+      }
+    }
+    try {
+      const b = ctx.createBuffer(1, 1, ctx.sampleRate);
+      const s = ctx.createBufferSource();
+      s.buffer = b;
+      s.connect(ctx.destination);
+      s.start(0);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  private hookGestures(): void {
+    if (this.hooked) return;
+    this.hooked = true;
+    const retry = () => {
+      const ctx = this.ctx;
+      if (ctx && !this.wantSuspended && ctx.state !== "running") this.kick();
+    };
+    for (const ev of GESTURES) window.addEventListener(ev, retry, { capture: true, passive: true });
+  }
+
+  private get live(): Engine | null {
+    const ctx = this.ctx;
+    return ctx && this.engine && ctx.state === "running" ? this.engine : null;
+  }
+
+  sfx(id: SfxId, opts?: SfxOpts): void {
+    const e = this.live;
+    if (!e) return;
+    try {
+      e.sfx(id, opts);
+    } catch (err) {
+      console.warn("[audio] sfx failed", id, err);
+    }
+  }
+
+  music(track: MusicTrack, fade = 1): void {
+    if (track === this.track) return;
+    this.track = track;
+    try {
+      this.engine?.music(track, fade);
+    } catch (e) {
+      console.warn("[audio] music failed", track, e);
+    }
+  }
+
+  setIntensity(x: number): void {
+    this.intensity = x;
+    this.engine?.setIntensity(x);
+  }
+
+  setMuffled(on: boolean): void {
+    this.muffled = on;
+    try {
+      this.engine?.setMuffled(on);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  duck(amount: number, seconds: number): void {
+    const e = this.live;
+    if (!e) return;
+    try {
+      e.duck(amount, seconds);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  setVolumes(v: { master?: number; music?: number; sfx?: number }): void {
+    this.vols = { ...this.vols, ...v };
+    try {
+      this.engine?.setVolumes(v);
+    } catch {
+      /* ignore */
+    }
+  }
+
+  suspend(): void {
+    this.wantSuspended = true;
+    const ctx = this.ctx;
+    if (!ctx || ctx.state === "closed") return;
+    try {
+      ctx.suspend().catch(() => {});
+    } catch {
+      /* ignore */
+    }
+  }
+
+  resume(): void {
+    this.wantSuspended = false;
+    this.kick();
+  }
+}
+
+const impl = new RealtimeAudio();
+
+export const audio: AudioAPI = impl;
+
+/** Debug access (test bench). Not part of the game contract. */
+export function audioInternals(): { ctx: AudioContext | null; engine: Engine | null } {
+  return impl.internals;
+}

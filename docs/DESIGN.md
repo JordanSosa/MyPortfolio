@@ -41,7 +41,7 @@ Coordinates are **art pixels** (1 unit = 1 sprite pixel). Time in seconds.
 | Dash | 0.16 s at 300 px/s (~48 px), invulnerable during dash + 0.1 s, cooldown 1.2 s |
 | Pickup radius | 24 px; gems inside accelerate to the player (start 60 px/s, +600 px/s²) |
 | Crit | base 5 %, ×2 damage |
-| XP to next level | `5 + (L-1)*8 + max(0, L-20)*6` (level 1→2 needs 5) |
+| XP to next level | `5 + (L-1)*10 + max(0,L-6)*8 + max(0,L-15)*12 + max(0,L-25)*16` (level 1→2 needs 5; tuned in the integration pass so the mid-game settles at a level-up every ~10-15 s) |
 | Gems | gem_1 = 1 xp, gem_2 = 5, gem_3 = 25, gem_4 = merged (sum). If > 250 gems exist, merge the farthest into one gem_4 |
 | Weapon slots | 6 weapons, 6 passives; each item has 5 levels |
 | Reroll | 2 per run (+ meta) |
@@ -105,7 +105,7 @@ Magnet Star +30 % pickup radius · Lucky Clover +4 % crit, +10 % luck ·
 Heart Locket +20 max HP, +0.2 HP/s regen.
 
 ### 3.4 Enemies
-HP scales `× (1 + minutes × 0.18)`. All have a shadow, a hit flash and a
+HP scales `× (1 + m × 0.22 + m² × 0.035)` (m = run minutes; accelerating so late builds stay challenged). All have a shadow, a hit flash and a
 death burst in their own colours.
 
 | Enemy | HP | Speed | Dmg | Behaviour |
