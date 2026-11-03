@@ -40,7 +40,7 @@ export interface TalentNode {
   name: string;
   /** 0, 1 or 2 (the tree's three branches). */
   branch: number;
-  /** 1..5 (tier 5 = capstone). Higher tiers need points spent in the branch (meta rule). */
+  /** 1..5 (tier 5 = capstone). Higher tiers need points spent in the branch (meta rule: TALENT_TIER_POINTS). */
   tier: number;
   maxRank: number;
   icon?: string;
@@ -51,6 +51,13 @@ export interface TalentNode {
   mods?(s: Stats, rank: number): void;
   install?(w: World, rank: number): void;
 }
+
+/**
+ * Points that must already be spent in a branch before a node of tier T can
+ * take a rank: TALENT_TIER_POINTS[T - 1] (the meta layer enforces it; the sim
+ * only applies the ranks it is given).
+ */
+export const TALENT_TIER_POINTS: readonly number[] = [0, 2, 5, 9, 14];
 
 export interface TalentTree {
   /** Hero id. */
@@ -66,12 +73,16 @@ export interface TwistDef {
   name: string;
   icon?: string;
   maxRank: number;
-  /** Heat added at each rank (index 0 = rank 1). */
+  /** Heat added at each rank (index 0 = rank 1): the total at rank r is the sum of the first r entries (registry twistHeat). */
   heat: number[];
   /** Effect text at `rank`. */
   desc(rank: number): string;
   /** Applied once at run start. */
   install(w: World, rank: number): void;
+  /** Parody "network note" subtitle on the twist card. */
+  note?: string;
+  /** Stage whose first clear unlocks this twist (docs/content/stages.md §6). */
+  unlockedBy?: string;
 }
 
 /** Lightweight stage metadata the account layer needs (full StageDef lives in src/game/stages). */
@@ -88,4 +99,28 @@ export interface StageInfo {
   bosses: string[];
   /** Coin/gem reward multiplier. */
   rewardMul: number;
+  // ---- optional (added by the sim agent)
+  /** Final boss id (also the last entry of `bosses`); clearing = killing it. */
+  finalBoss?: string;
+  /** Enemy ids that spawn in the stage (codex / stage card), boss ids excluded. */
+  enemies?: string[];
+  /** Whether the "Filler Arc" endless continuation is available after a clear. */
+  endless?: boolean;
+  /** Short mood line for the stage card ("sugar rush"). */
+  blurb?: string;
+  /** Stage id that must be cleared to unlock this one (undefined = available from the start). */
+  requires?: string;
+}
+
+/**
+ * One hero constellation star (C1..C6, gacha dupes of the hero). Stored on the
+ * hero def (`HeroDef.constellations`, index 0 = C1); a hero at C3 gets entries
+ * 0..2. Stat parts go in `mods`, behaviour in `install` (see RelicDef).
+ */
+export interface ConstellationDef {
+  /** Satire title, e.g. "Recolour Edition". */
+  name: string;
+  desc: string;
+  mods?(s: Stats): void;
+  install?(w: World): void;
 }

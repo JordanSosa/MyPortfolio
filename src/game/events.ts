@@ -71,6 +71,25 @@ export interface EnemyFxEvent {
   enemy: Enemy | null;
 }
 
+/**
+ * Stage-driven presentation directive (the sim tells the view to change the
+ * look: Cancel-sama's "Ratings Drop" grade, "Budget Cuts" render scale...).
+ * Handled by src/view/stage-view.ts. Kinds:
+ *   "grade"       blend toward grade preset / StageDef grade key `id` by `value` (0..1) over `seconds`
+ *   "renderScale" render resolution scale `value` (1 = full, 0.5 = half) over `seconds`
+ *   "animFps"     cap sprite animation to `value` fps (0 = uncapped)
+ *   "speedLines"  speed-line overlay intensity `value` (0 = off)
+ *   "still"       hold the last frame for `seconds` (a "still frame")
+ *   "reset"       back to the stage's own look
+ * Reused payload: copy what you need.
+ */
+export interface StageFxEvent {
+  kind: string;
+  value: number;
+  seconds: number;
+  id: string;
+}
+
 export interface GameEvents {
   // combat
   enemyHit: HitEvent;
@@ -91,6 +110,10 @@ export interface GameEvents {
   playerHeal: { amount: number; x: number; y: number };
   playerDied: { x: number; y: number };
   playerRevived: { x: number; y: number };
+  /** A shield charge absorbed a hit (`left` charges remain). */
+  shieldBlock: { x: number; y: number; left: number };
+  /** A lethal hit was survived at 1 HP (Plot Armor keystone / relic `by`). */
+  plotArmor: { x: number; y: number; by: string };
   dash: { x: number; y: number; dx: number; dy: number };
   dashReady: Record<string, never>;
   // progression
@@ -116,6 +139,8 @@ export interface GameEvents {
   ultCutin: { hero: string; ult: string; name: string };
   ultStart: { ult: string; x: number; y: number };
   ultEnd: { ult: string };
+  /** The ultimate started again without a cut-in (ENCORE! talent capstones). */
+  ultEncore: { ult: string; x: number; y: number };
   /** Rin's ult: one carving slash line (world coords). */
   ultSlash: { x0: number; y0: number; x1: number; y1: number; i: number };
   /** Rin's ult: the final petal explosion. */
@@ -123,7 +148,8 @@ export interface GameEvents {
   /** Mochi's ult: a wave of cats enters at the view edge x (leading edge), running along `dir` (+1 right, -1 left). */
   ultMeow: { x: number; y: number; dir: number; wave: number };
   // director
-  waveIncoming: { kind: string; x: number; y: number };
+  /** `label` (TimelineEvent.label) overrides the kind's banner text. */
+  waveIncoming: { kind: string; x: number; y: number; label?: string };
   bossWarning: { id: string; title: string; subtitle: string };
   bossSpawn: { enemy: Enemy; title: string; subtitle: string };
   bossKilled: { x: number; y: number; title: string; final: boolean };
@@ -137,6 +163,15 @@ export interface GameEvents {
   bulletsCleared: { n: number };
   // run
   victory: { time: number };
+  /** The final boss fell in an endless run: "TO BE CONTINUED... JUST KIDDING - FILLER ARC!" */
+  fillerArc: { t: number; stage: string };
+  /** Filler Arc wave: an elite wave (`n` elites) or a boss rematch (`id`, rematch number `n`). */
+  fillerWave: { kind: "elite" | "boss"; n: number; id: string };
+  /** Every 5:00 of Filler Arc: episode card N ("FILLER EPISODE N: <title>", titles in the view). */
+  fillerEpisode: { n: number };
+  /** A relic / talent / twist effect fired (view flourish + toast; reused payload). `v` = an effect value (e.g. a duration). */
+  relicProc: { id: string; x: number; y: number; v: number };
+  stageFx: StageFxEvent;
 }
 
 export type GameBus = EventBus<GameEvents>;

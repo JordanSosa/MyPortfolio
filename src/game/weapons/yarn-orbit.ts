@@ -2,6 +2,9 @@
  * Yarn Orbit (Mochi): yarn balls circle the player (3 s on / 1.3 s off),
  * each enemy can be bonked every 0.4 s (0.34 s from Lv3, 0.28 s at Lv5).
  * Evolution: Cosmic Yarn (+ Magnet Star) - 6 permanent planets (bonk every 0.26 s) that also pull gems.
+ *
+ * Mochi's Infinite Yarn talent (+2 balls, never off) and C6 (never off, pulls
+ * gems like Cosmic Yarn) read here.
  */
 import { C } from "../../art/palette";
 import { TAU } from "../../core/math";
@@ -28,6 +31,25 @@ function spawnBall(w: World, inst: WeaponInstance, S: WStats, life: number, spri
   p.shadow = 6;
   own(inst, p);
   return p;
+}
+
+/** Gems touching an orbiting ball get pulled to the player (Cosmic Yarn gravity). */
+function pullGems(w: World, inst: WeaponInstance, live: number, r: number): void {
+  const gr2 = r * r;
+  for (let g = 0; g < w.gems.count; g++) {
+    const gem = w.gems.items[g];
+    if (gem.state !== 0 || gem.dead) continue;
+    for (let i = 0; i < live; i++) {
+      const p = inst.projs[i];
+      const dx = gem.x - p.x;
+      const dy = gem.y - p.y;
+      if (dx * dx + dy * dy < gr2) {
+        gem.state = 1;
+        gem.speed = 80;
+        break;
+      }
+    }
+  }
 }
 
 function placeRing(w: World, inst: WeaponInstance, radius: number, ang: number, tilt: number): void {
@@ -58,14 +80,40 @@ export const yarnOrbit: WeaponDef = {
   ],
   upgrades: ["+1 yarn ball", "Damage +3, area +15%, bonks faster", "+1 yarn ball, lasts longer", "Damage +3, spins and bonks faster"],
   evolution: { into: "cosmic_yarn", with: "magnet_star" },
+  // mastery Limit Breaks (docs/content/weapons.md §4): Lv6 at rank 5, Lv7 at rank 10
+  limitBreak: [
+    { amount: 1, dmg: 0.15, text: "LIMIT BREAK — Spare Yarn: +1 ball, +15% damage" },
+    { area: 0.2, dmg: 0.2, text: "MASTERED — Big Ball Energy: +20% area, +20% damage" },
+  ],
   init(_w, inst) {
     inst.data.off = 0.2;
   },
   update(w, inst, dt) {
     const S = wstats(w, inst);
     const d = inst.data;
-    const live = prune(inst);
+    let live = prune(inst);
     d.ang = ((d.ang ?? 0) + (S.L.speed ?? 3.2) * w.stats.projSpeed * dt) % TAU;
+    // Infinite Yarn (talent: +2 balls) / C6: the balls never turn off (C6 also pulls gems)
+    const infinite = w.talentRank("mochi_infinite_yarn") > 0;
+    const c6 = w.cons >= 6 && w.hero.id === "mochi";
+    if (infinite || c6) {
+      const want = Math.min(12, S.amount + (infinite ? 2 : 0));
+      if (live !== want || (live > 0 && inst.projs[0].life !== Infinity)) {
+        killOwned(inst);
+        for (let i = 0; i < want; i++) spawnBall(w, inst, S, Infinity, "w_yarn", 5, S.L.every ?? 0.4);
+        live = want;
+        fired(w, inst, w.player.x, w.player.y);
+      }
+      for (const p of inst.projs) {
+        p.dmg = S.dmg;
+        p.r = 5 * S.area;
+        p.scale = S.area;
+        p.hitEvery = S.L.every ?? 0.4;
+      }
+      placeRing(w, inst, 28 * S.area, d.ang, 0.85);
+      if (c6) pullGems(w, inst, live, 14 * S.area);
+      return;
+    }
     if (live > 0) {
       placeRing(w, inst, 28 * S.area, d.ang, 0.85);
       return;
@@ -113,22 +161,7 @@ export const cosmicYarn: WeaponDef = {
     const R = 40 * S.area;
     placeRing(w, inst, R, d.ang, 0.8);
     // gravity: gems touching a planet get pulled to the player
-    const gr = 16 * S.area;
-    const gr2 = gr * gr;
-    for (let g = 0; g < w.gems.count; g++) {
-      const gem = w.gems.items[g];
-      if (gem.state !== 0 || gem.dead) continue;
-      for (let i = 0; i < live; i++) {
-        const p = inst.projs[i];
-        const dx = gem.x - p.x;
-        const dy = gem.y - p.y;
-        if (dx * dx + dy * dy < gr2) {
-          gem.state = 1;
-          gem.speed = 80;
-          break;
-        }
-      }
-    }
+    pullGems(w, inst, live, 16 * S.area);
   },
   dispose(_w, inst) {
     killOwned(inst);

@@ -15,12 +15,19 @@
  *   __kk.setSpeed(x)           sim speed multiplier
  *   __kk.god(on = true)        toggle invulnerability
  *   __kk.pause() / __kk.endRun() / __kk.start(hero) / __kk.screen
+ * Season 2:
+ *   __kk.relic(id, stars = 0)  equip a relic mid-run (mods + install, as at run start)
+ *   __kk.twist(id, rank = 1)   add a Plot Twist mid-run
+ *   __kk.endless()             start the Filler Arc now (as if the final boss had just died in an endless run)
+ *   __kk.stageFx(kind, value, seconds?, id?)   a sim stageFx directive (grade / renderScale / animFps / speedLines / still / reset)
+ *   __kk.runStats()            the RunStats collected so far
+ *   (run configs from the URL: ?stage= ?endless=1 ?twists= ?relics= ?talents= ?cons= ?flags= ... see params.ts)
  */
 import { time } from "../core/time";
 import type { App } from "../ui/app";
 import { simulate, Bot } from "./bot";
 import { PASSIVE_BY_ID } from "../game/passives";
-import { BOSSES, WEAPONS } from "../game/registry";
+import { BOSSES, RELICS, TWISTS, WEAPONS } from "../game/registry";
 
 export function installHooks(app: App): void {
   const world = () => app.game?.world ?? app.attract?.world ?? null;
@@ -128,6 +135,39 @@ export function installHooks(app: App): void {
     },
     ult() {
       world()?.addUlt(100);
+    },
+    relic(id: string, stars = 0) {
+      const w = world();
+      const def = RELICS.get(id);
+      if (!w || !def || w.run.relics.some((r) => r.id === id)) return false;
+      w.run.relics.push({ id, stars });
+      def.install?.(w, stars);
+      w.recomputeStats();
+      return true;
+    },
+    twist(id: string, rank = 1) {
+      const w = world();
+      const def = TWISTS.get(id);
+      if (!w || !def || w.twistIds.includes(id)) return false;
+      w.twistIds.push(id);
+      w.twistRanks[id] = Math.max(1, Math.min(def.maxRank, rank));
+      def.install(w, w.twistRanks[id]);
+      w.recomputeStats();
+      return true;
+    },
+    endless() {
+      const w = world();
+      if (!w || w.endlessOn || w.phase !== "play") return false;
+      w.stageCleared = true;
+      w.finalBossDown = true;
+      w.startEndless();
+      return true;
+    },
+    stageFx(kind: string, value: number, seconds = 0, id = "") {
+      world()?.emit("stageFx", { kind, value, seconds, id });
+    },
+    runStats() {
+      return world()?.summary().stats ?? null;
     },
     setSpeed(x: number) {
       time.speed = x;

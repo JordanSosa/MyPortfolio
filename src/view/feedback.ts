@@ -12,7 +12,6 @@ import { clamp, smoothstep } from "../core/math";
 import type { Input } from "../core/input";
 import { time } from "../core/time";
 import { CONFETTI_COLORS, fxDash, fxEliteDeath, fxEnemyDeath, fxExplosion, fxFirework, fxHit, fxLevelUp, fxPickup, P, type Fx } from "../fx";
-import { GRADES } from "../render/post";
 import { Layer } from "../render/layers";
 import type { Renderer } from "../render/renderer";
 import { RANKS, rankFor } from "../game/config";
@@ -124,8 +123,6 @@ export class Feedback {
   private evoNextAt = 0;
   /** Real seconds since the hero went down (-1 = alive). */
   private deathT = -1;
-  /** Reused ambient density target (day -> night), set every frame without allocating. */
-  private readonly amb = { petals: 12, motes: 10, fireflies: 0 };
   private beat = 0;
   /**
    * Sim time (world.t) at which the battle theme returns after a non-final boss
@@ -162,6 +159,7 @@ export class Feedback {
     this.evoN = 0;
     this.r.post.damageFloor = 0;
     this.view.deathK = 0;
+    this.view.stage.resetFx();
     this.fx.dmg.focusOn = false;
   }
 
@@ -229,7 +227,7 @@ export class Feedback {
     if (this.musicBackAt >= 0 && w.t >= this.musicBackAt) {
       this.musicBackAt = -1;
       // (a death / victory in between owns the music; a boss alive or warning keeps its theme)
-      if (this.opts.sound && w.phase === "play" && !w.boss && !w.director.warning) audio.music("battle", 2);
+      if (this.opts.sound && w.phase === "play" && !w.boss && !w.director.warning) audio.music(this.view.stage.music("battle"), 2);
     }
     // low-HP heartbeat vignette (lub-dub every ~0.8 s)
     const k = p.hp / p.maxHp;
@@ -245,16 +243,9 @@ export class Feedback {
       this.deathT += realDt;
       this.view.deathK = smoothstep(0, DEATH_FADE, this.deathT);
     } else if (this.view.deathK > 0) this.view.deathK = Math.max(0, this.view.deathK - realDt * 2.2);
-    // day -> dusk -> night over the 9 minutes to the final boss
-    const prog = clamp(w.t / 540, 0, 1);
-    if (prog < 0.5) this.r.post.blendGrade(GRADES.day, GRADES.dusk, prog * 2);
-    else this.r.post.blendGrade(GRADES.dusk, GRADES.night, (prog - 0.5) * 2);
-    const night = clamp((prog - 0.55) * 2.5, 0, 1);
-    const amb = this.amb;
-    amb.petals = Math.round(12 * (1 - night));
-    amb.motes = 10 + Math.round(6 * night);
-    amb.fireflies = Math.round(22 * night);
-    this.fx.ambient.set(amb);
+    // the stage's colour-grade keyframes + ambient densities over the run (Dream Meadow: day -> dusk -> night
+    // over the 9 minutes to the final boss, petals giving way to fireflies), plus sim stageFx directives
+    this.view.stage.frame(realDt);
     if (this.opts.sound) audio.setIntensity(clamp(w.enemyCount / 110 + Math.max(0, w.comboRank) * 0.08 + (w.boss ? 0.4 : 0), 0, 1));
   }
 
@@ -293,6 +284,19 @@ export class Feedback {
         calm,
         hooks: this.opts.hooks,
       }),
+    );
+    // Season 2: relic / talent / twist procs, shields, Plot Armor, encores, the Filler Arc: src/view/relic-fx.ts
+    sub.push(
+      ...this.view.relics.bind(w, {
+        sfx: (id, vol, pitch, x) => this.sfx(id, vol, pitch, x),
+        haptic: (ms) => this.haptic(ms),
+        calm,
+        hooks: this.opts.hooks,
+        battleMusicIn: (delay) => {
+          this.musicBackAt = w.t + delay;
+        },
+      }),
+      bus.on("stageFx", (e) => this.view.stage.directive(e)),
     );
 
     sub.push(
@@ -521,7 +525,11 @@ export class Feedback {
       }),
       bus.on("pickup", (e) => {
         if (e.kind === "onigiri" || e.kind === "cake") this.sfx("food");
-        else this.sfx("powerup");
+        else if (e.kind === "heart") {
+          this.sfx("heal", 0.5, 5);
+          fx.ps.emit(P.hearts, e.x, e.y - 6, 3, NaN, -1, 0.8, 1);
+          return;
+        } else this.sfx("powerup");
         fx.ps.emit(P.sparkle, e.x, e.y - 6, 8, NaN, -1, 1.2, 1.6);
       }),
       bus.on("magnet", () => {
@@ -644,7 +652,7 @@ export class Feedback {
       }),
       bus.on("waveIncoming", (e) => {
         this.sfx("waveIncoming");
-        const t = e.kind === "swarm" ? "SWARM!" : e.kind === "encircle" ? "SURROUNDED!" : e.kind === "storm" ? "BAT STORM!" : e.kind === "wisps" ? "WISP RUSH!" : "STAMPEDE!";
+        const t = e.label || (e.kind === "swarm" ? "SWARM!" : e.kind === "encircle" ? "SURROUNDED!" : e.kind === "storm" ? "BAT STORM!" : e.kind === "wisps" ? "WISP RUSH!" : "STAMPEDE!");
         this.opts.hooks?.banner?.("incoming", t);
       }),
       bus.on("eliteSpawned", () => {
@@ -670,7 +678,7 @@ export class Feedback {
         this.opts.hooks?.banner?.("boss", e.title, e.subtitle);
         this.opts.hooks?.bossBar?.(e.enemy, e.title);
         this.musicBackAt = -1;
-        if (this.opts.sound) audio.music(e.enemy.def.boss?.music ?? "boss", 1.2);
+        if (this.opts.sound) audio.music(this.view.stage.bossMusic(e.enemy), 1.2);
         this.sfx("bossRoar");
       }),
       bus.on("bossKilled", (e) => {

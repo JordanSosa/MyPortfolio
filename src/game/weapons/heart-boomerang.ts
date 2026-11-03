@@ -124,6 +124,11 @@ export const heartBoomerang: WeaponDef = {
   ],
   upgrades: ["+1 heart", "Damage +5, bigger hearts fly farther", "+1 heart, cooldown -14%", "Damage +7, bigger hearts, cooldown -8%"],
   evolution: { into: "love_tornado", with: "twin_charm" },
+  // mastery Limit Breaks (docs/content/weapons.md §4): Lv6 at rank 5, Lv7 at rank 10
+  limitBreak: [
+    { amount: 1, dmg: 0.1, text: "LIMIT BREAK — Second Date: +1 heart, +10% damage" },
+    { dmg: 0.25, area: 0.15, text: "MASTERED — True Love: +25% damage, +15% area" },
+  ],
   update(w, inst, dt) {
     const S = wstats(w, inst);
     const d = inst.data;

@@ -49,7 +49,7 @@ export function showSplash(app: App): UiScreen {
     }
     app.unlockAudio();
     app.sfx("uiConfirm");
-    app.goTitle();
+    app.goHub();
   };
   el.addEventListener("click", () => go(true));
   const onKey = (e: KeyboardEvent) => {

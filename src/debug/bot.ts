@@ -10,6 +10,11 @@
  * hero-specific preferred distance to the nearest enemy + seek gems/pickups
  * when it is safe + a slow wander. Dashes when crowded, casts the ultimate
  * when the screen is busy.
+ *
+ * Level-ups go through `bot.resolve(world)`: with banishes left it banishes a
+ * NEW card it would never take, with skips left it skips an offer that only
+ * holds filler (both are off without RunConfig flags, so a default run picks
+ * exactly as `world.choose(bot.pick(world, world.offer()))`).
  */
 import { Rng } from "../core/rng";
 import { CFG } from "../game/config";
@@ -51,6 +56,9 @@ export class Bot {
   randomPicks = false;
   /** Human reaction time: bullets younger than this (s) are not dodged yet. */
   reaction = 0.18;
+  /** Level-up policy (only matters when the run has banishes / skips, RunConfig.flags). */
+  useBanish = true;
+  useSkip = true;
 
   constructor(seed = 1234) {
     this.rng = new Rng(seed);
@@ -198,7 +206,7 @@ export class Bot {
         const dy = k.y - py;
         let d2 = dx * dx + dy * dy;
         if (k.kind === "chest") d2 *= 0.15;
-        else if ((k.kind === "onigiri" || k.kind === "cake") && hpK > 0.85) continue;
+        else if ((k.kind === "onigiri" || k.kind === "cake" || k.kind === "heart") && hpK > 0.85) continue;
         else d2 *= 0.4;
         if (d2 < best && d2 < 260 * 260) {
           best = d2;
@@ -261,11 +269,12 @@ export class Bot {
 
     // dash out of crowds
     if (!this.noDash) {
-      if (p.dashCd <= 0 && (crowd >= 4 || (crowd >= 1 && hpK < 0.35))) out.dash = true;
+      const ready = p.dashCharges > 0 && p.dashT <= 0;
+      if (ready && (crowd >= 4 || (crowd >= 1 && hpK < 0.35))) out.dash = true;
       // stuck detection: if barely moving while pressured, dash
       const sp = Math.abs(p.vx) + Math.abs(p.vy);
       this.stuck = sp < 10 && near > 6 ? this.stuck + dt : 0;
-      if (this.stuck > 0.6 && p.dashCd <= 0) {
+      if (this.stuck > 0.6 && ready) {
         out.dash = true;
         this.stuck = 0;
       }
@@ -276,42 +285,75 @@ export class Bot {
     if (w.ultReady && (near >= 10 || w.enemyCount >= 40 || w.boss || hpK < 0.4 || (this.ultHeld > 20 && (near >= 4 || w.enemyCount >= 15)))) out.ult = true;
   }
 
+  /** How much an average player wants a card (no randomness). */
+  score(w: World, c: UpgradeCard): number {
+    const hpK = w.player.hp / w.player.maxHp;
+    let s = 0;
+    switch (c.kind) {
+      case "evolution":
+        s = 1000;
+        break;
+      case "weapon":
+        s = c.from > 0 ? 40 + c.to * 2 : w.weapons.length < 4 ? 34 : 8;
+        break;
+      case "passive": {
+        s = (c.from > 0 ? 22 : 16) + (PASSIVE_VALUE[c.id] ?? 3);
+        for (const inst of w.weapons) if (inst.def.evolution?.with === c.id) s += 26;
+        if (c.id === "heart_locket" && hpK < 0.5) s += 10;
+        break;
+      }
+      case "heal":
+        s = hpK < 0.5 ? 60 : 2;
+        break;
+      case "coins":
+        s = 3;
+        break;
+    }
+    if (c.rarity === "epic") s += 6;
+    return s;
+  }
+
   /** Pick a level-up card. */
   pick(w: World, cards: UpgradeCard[]): UpgradeCard {
     if (this.randomPicks) return cards[this.rng.int(0, cards.length - 1)];
     let best = cards[0];
     let bs = -1e9;
-    const hpK = w.player.hp / w.player.maxHp;
     for (const c of cards) {
-      let s = 0;
-      switch (c.kind) {
-        case "evolution":
-          s = 1000;
-          break;
-        case "weapon":
-          s = c.from > 0 ? 40 + c.to * 2 : w.weapons.length < 4 ? 34 : 8;
-          break;
-        case "passive": {
-          s = (c.from > 0 ? 22 : 16) + (PASSIVE_VALUE[c.id] ?? 3);
-          for (const inst of w.weapons) if (inst.def.evolution?.with === c.id) s += 26;
-          if (c.id === "heart_locket" && hpK < 0.5) s += 10;
-          break;
-        }
-        case "heal":
-          s = hpK < 0.5 ? 60 : 2;
-          break;
-        case "coins":
-          s = 3;
-          break;
-      }
-      if (c.rarity === "epic") s += 6;
-      s += this.rng.next() * 6;
+      const s = this.score(w, c) + this.rng.next() * 6;
       if (s > bs) {
         bs = s;
         best = c;
       }
     }
     return best;
+  }
+
+  /**
+   * Resolve one pending level-up like a player: banish a NEW card it would
+   * never take (score < 12, banishes left), skip an all-filler offer (best
+   * score < 6, skips left), else pick.
+   */
+  resolve(w: World): void {
+    let offer = w.offer();
+    if (this.useBanish && w.banishes > 0 && !this.randomPicks) {
+      let worst: UpgradeCard | null = null;
+      let ws = 12;
+      for (const c of offer) {
+        if (c.from !== 0 || !w.canBanish(c)) continue;
+        const s = this.score(w, c);
+        if (s < ws) {
+          ws = s;
+          worst = c;
+        }
+      }
+      if (worst) offer = w.banish(worst) ?? offer;
+    }
+    if (this.useSkip && w.skips > 0 && !this.randomPicks) {
+      let best = -1e9;
+      for (const c of offer) best = Math.max(best, this.score(w, c));
+      if (best < 6 && w.skipLevelUp()) return;
+    }
+    w.choose(this.pick(w, offer));
   }
 }
 
@@ -332,7 +374,7 @@ export function simulate(w: World, seconds: number, dt = 1 / 30, bot = new Bot(w
     bot.think(w, w.input, dt);
     w.step(dt);
     steps++;
-    while (w.pendingLevels > 0) w.choose(bot.pick(w, w.offer()));
+    while (w.pendingLevels > 0) bot.resolve(w);
     while (w.pendingChests.length > 0) w.openChest();
     if (onStep && onStep(w) === false) break;
   }

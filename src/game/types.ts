@@ -5,6 +5,7 @@
  * Content files (weapons/, enemies/, bosses/, ultimates/) export arrays of
  * these defs and are auto-registered (see registry.ts).
  */
+import type { ConstellationDef } from "./defs";
 import type { Stats } from "./stats";
 import type { World } from "./world";
 
@@ -59,6 +60,10 @@ export interface EnemyDef {
   boss?: BossInfo;
   /** Excluded from elite rolls. */
   noElite?: boolean;
+  /** Sprite tint (0xRRGGBB) for re-skinned enemies (the Shounen Rival reuses a hero sprite). */
+  tint?: number;
+  /** Never part of a phase mix / random pick (twist and event-only enemies). */
+  special?: boolean;
   /** Called once after spawn (stats already set). */
   init?(e: Enemy, w: World): void;
   /** Set the desired velocity e.vx / e.vy (px/s) for this step. Knockback and separation are applied after. */
@@ -122,6 +127,8 @@ export interface Enemy {
   z: number;
   /** Invulnerable while > 0 (seconds, counts down): hits are ignored (boss phase flourishes, entrances). */
   inv: number;
+  /** Sprite override for this one enemy ("" = def.sprite): re-skins such as the Rival (Recolour). */
+  skin: string;
 }
 
 // ---------------------------------------------------------------- projectiles
@@ -243,6 +250,8 @@ export interface Bullet {
   turn: number;
   /** Acceleration along velocity (px/s^2). */
   accel: number;
+  /** Enemy id that fired it ("" = unknown: RunStats.killedBy falls back to the sprite). */
+  from: string;
   dead: boolean;
 }
 
@@ -279,7 +288,8 @@ export interface Gem {
   dead: boolean;
 }
 
-export type PickupKind = "coin" | "onigiri" | "cake" | "magnet" | "bomb" | "clock" | "chest";
+/** "heart": a tiny relic heart (heals `value` HP, magnet-pulled like coins). */
+export type PickupKind = "coin" | "onigiri" | "cake" | "magnet" | "bomb" | "clock" | "chest" | "heart";
 
 export interface Pickup {
   kind: PickupKind;
@@ -291,6 +301,8 @@ export interface Pickup {
   vy: number;
   value: number;
   golden: boolean;
+  /** Coins dropped instead of censored food (Censored twist: the view draws a black bar). */
+  censored: boolean;
   state: number;
   speed: number;
   t: number;
@@ -328,6 +340,12 @@ export interface WeaponDef {
   evolution?: { into: string; with: string };
   /** True for evolved weapons (never offered as NEW; appear as EVOLUTION cards). */
   evolved?: boolean;
+  /**
+   * Limit Break levels past the last `levels` entry (weapon mastery, RunConfig.weaponLevelBonus):
+   * entry i applies at level levels.length + 1 + i on top of the last level. Missing entries
+   * use the generic rule (+CFG.limitBreakDmg damage and +1 amount per extra level).
+   */
+  limitBreak?: LimitBreak[];
   /** Fire sfx id (audio SfxId), emitted through the weaponFire event. */
   sfx?: string;
   /** Hit sfx id override (default "hit"). */
@@ -338,6 +356,20 @@ export interface WeaponDef {
   update(w: World, inst: WeaponInstance, dt: number): void;
   /** Called when replaced (evolution) or the run ends: kill owned projectiles. */
   dispose?(w: World, inst: WeaponInstance): void;
+}
+
+/** One Limit Break level (additive on top of the weapon's last regular level). */
+export interface LimitBreak {
+  /** Extra damage as a fraction of the last level's damage (0.2 = +20 %). */
+  dmg?: number;
+  /** Extra amount (projectiles / instances). */
+  amount?: number;
+  /** Extra area (fraction). */
+  area?: number;
+  /** Cooldown multiplier (0.9 = 10 % faster). */
+  cd?: number;
+  /** Card text, e.g. "LIMIT BREAK: +2 stars". */
+  text: string;
 }
 
 export interface WeaponInstance {
@@ -356,6 +388,10 @@ export interface WeaponInstance {
   /** Stats for the results screen. */
   damage: number;
   kills: number;
+  /** Mastery damage multiplier (RunConfig.weaponDamage + talents + Limit Break inheritance), applied by wstats(). Default 1. */
+  dmgMul?: number;
+  /** Evolutions: damage fraction inherited from the base weapon's Limit Break levels (CFG.limitBreakInherit each). */
+  lbInherit?: number;
 }
 
 // ---------------------------------------------------------------- passives
@@ -374,7 +410,8 @@ export interface PassiveInstance {
 }
 
 // ---------------------------------------------------------------- heroes / ultimates
-export type HeroId = "hoshi" | "rin" | "mochi";
+/** Hero id ("hoshi" | "rin" | "mochi" today; Season 2 heroes add more). */
+export type HeroId = "hoshi" | "rin" | "mochi" | (string & {});
 
 export interface HeroDef {
   id: HeroId;
@@ -393,6 +430,10 @@ export interface HeroDef {
   /** Signature colours (afterimages, confetti). */
   colors: readonly number[];
   apply(s: Stats): void;
+  /** Constellations C1..C6 (index 0 = C1), applied up to RunConfig.constellation. */
+  constellations?: readonly ConstellationDef[];
+  /** The shouted subtitle under the ult title in the cut-in. */
+  cutinLine?: string;
 }
 
 export interface UltState {
@@ -434,6 +475,10 @@ export interface UpgradeCard {
   /** For evolutions: the base weapon / passive ids involved. */
   base?: string;
   with?: string;
+  /** Max level of this item in this run (weapon Limit Breaks raise it past its levels). */
+  max?: number;
+  /** The card takes a weapon past its regular max level (mastery Limit Break). */
+  limitBreak?: boolean;
 }
 
 export interface ChestResult {

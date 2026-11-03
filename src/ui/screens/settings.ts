@@ -1,13 +1,19 @@
 /**
- * Settings panel (DESIGN §7): master / music / sfx volume, screen shake
- * 0/50/100 %, reduce flashing, damage numbers, quality auto/low/mid/high,
- * haptics (only where the browser can vibrate), show FPS, and a Fullscreen
- * switch where the Fullscreen API exists (not persisted). Changes apply live;
- * slider drags are saved when the finger lifts. Works with touch, mouse, keys
- * (left/right adjusts the focused slider/segment) and gamepad.
+ * Settings panel ("Behind the Scenes", DESIGN §7) with two tabs:
+ *  - GAME: master / music / sfx volume, screen shake 0/50/100 %, reduce
+ *    flashing, damage numbers, quality auto/low/mid/high, haptics (only where
+ *    the browser can vibrate), show FPS, and a Fullscreen switch where the
+ *    Fullscreen API exists (not persisted). Changes apply live; slider drags
+ *    are saved when the finger lifts.
+ *  - SAVE DATA (docs/EXPANSION.md §14): export the profile as a text string
+ *    (copied with a button, also shown selectable), import one (pasted, with a
+ *    confirm; the replaced profile is kept as a backup), start over.
+ * Works with touch, mouse, keys (left/right adjusts the focused slider /
+ * segment) and gamepad.
  */
 import type { App, UiScreen } from "../app";
-import { h } from "../dom";
+import { esc, fmtInt, h } from "../dom";
+import { confirmDialog } from "../kit/overlay";
 import { save, type Settings } from "../save";
 import { layer, onTap } from "./common";
 
@@ -27,7 +33,8 @@ export function openSettings(app: App, onClose: () => void): UiScreen {
   const canFullscreen = typeof document !== "undefined" && document.fullscreenEnabled === true && typeof document.documentElement.requestFullscreen === "function";
   el.innerHTML = `
     <div class="panel settings-panel">
-      <div class="h1">SETTINGS</div>
+      <div class="set-head"><div class="h1">SETTINGS</div><div class="seg set-tabs" role="tablist"><button class="on" data-nav data-tab="game" role="tab">GAME</button><button data-nav data-tab="save" role="tab">SAVE DATA</button></div></div>
+      <div class="set-game">
       ${slider("master", "Master volume")}
       ${slider("music", "Music")}
       ${slider("sfx", "Sound effects")}
@@ -47,6 +54,17 @@ export function openSettings(app: App, onClose: () => void): UiScreen {
       ${canVibrate ? tog("haptics", "Vibration") : ""}
       ${tog("showFps", "Show FPS")}
       ${canFullscreen ? `<div class="set-row"><span>Fullscreen</span><button class="tog" data-nav data-fs aria-label="Fullscreen"></button></div>` : ""}
+      </div>
+      <div class="set-save" hidden>
+        <p class="ss-note">Copy your save as text. Keep it somewhere safe. Somewhere SAFE.</p>
+        <div class="ss-row"><button class="btn small cyan" data-nav data-act="export">⇪ EXPORT SAVE</button><span class="ss-msg" data-msg="export"></span></div>
+        <textarea class="ss-text" data-ta="export" readonly hidden aria-label="Your save string"></textarea>
+        <p class="ss-note">Paste a save string to load it. Your current profile is kept as a backup.</p>
+        <textarea class="ss-text" data-ta="import" placeholder="KKO2.…" aria-label="Paste a save string"></textarea>
+        <div class="ss-row"><button class="btn small violet" data-nav data-act="import">⇩ IMPORT SAVE</button><span class="ss-msg" data-msg="import"></span></div>
+        <div class="ss-info"></div>
+        <div class="ss-row"><button class="btn small danger" data-nav data-act="reset">✕ START OVER</button></div>
+      </div>
       <div class="btn-row" style="margin-top:.6em"><button class="btn small" data-nav data-nav-default data-act="done">✓ DONE</button></div>
     </div>`;
   app.ui.appendChild(el);
@@ -138,6 +156,80 @@ export function openSettings(app: App, onClose: () => void): UiScreen {
       }
     });
   }
+  // ---- tabs + save data
+  const tabBtns = [...el.querySelectorAll<HTMLElement>("[data-tab]")];
+  const showTab = (t: string) => {
+    for (const b of tabBtns) b.classList.toggle("on", b.dataset.tab === t);
+    (el.querySelector(".set-game") as HTMLElement).hidden = t !== "game";
+    (el.querySelector(".set-save") as HTMLElement).hidden = t !== "save";
+    if (t === "save") info();
+    app.nav.refocus(L, tabBtns.find((b) => b.dataset.tab === t) ?? null);
+  };
+  for (const b of tabBtns)
+    onTap(b, () => {
+      app.sfx("tabSwitch");
+      showTab(b.dataset.tab as string);
+    });
+  const msg = (k: string, text: string, ok = true) => {
+    const m = el.querySelector(`[data-msg="${k}"]`) as HTMLElement;
+    m.textContent = text;
+    m.classList.toggle("bad", !ok);
+  };
+  const info = () => {
+    const p = save.profile;
+    const box = el.querySelector(".ss-info") as HTMLElement;
+    box.innerHTML = `<span>Episodes aired: <b>${fmtInt(p.lifetime.runs)}</b></span><span>Clears: <b>${fmtInt(p.lifetime.clears)}</b></span><span>Started: <b>${p.info.created ? esc(new Date(p.info.created).toLocaleDateString()) : "a while ago"}</b></span>`;
+  };
+  onTap(el.querySelector('[data-act="export"]'), async () => {
+    const text = save.exportString();
+    const ta = el.querySelector('[data-ta="export"]') as HTMLTextAreaElement;
+    ta.hidden = false;
+    ta.value = text;
+    let copied = false;
+    try {
+      await navigator.clipboard?.writeText(text);
+      copied = !!navigator.clipboard;
+    } catch {
+      copied = false;
+    }
+    if (!copied) {
+      ta.focus();
+      ta.select();
+    }
+    app.sfx("uiConfirm");
+    msg("export", copied ? "Copied! Paste it somewhere SAFE." : "Select the text below and copy it.");
+  });
+  onTap(el.querySelector('[data-act="import"]'), async () => {
+    const ta = el.querySelector('[data-ta="import"]') as HTMLTextAreaElement;
+    const text = ta.value.trim();
+    if (!text) {
+      app.sfx("uiDeny");
+      msg("import", "Paste a save string first.", false);
+      return;
+    }
+    const ok = await confirmDialog(app, { title: "Load this save?", body: "Your current profile is replaced (and kept as a backup on this device).", ok: "LOAD IT", danger: true });
+    if (!ok) return;
+    const r = save.importString(text);
+    msg("import", r.message, r.ok);
+    if (r.ok) {
+      app.sfx("unlockFanfare");
+      ta.value = "";
+      app.applySettings();
+      refresh();
+      info();
+    } else app.sfx("uiDeny");
+  });
+  onTap(el.querySelector('[data-act="reset"]'), async () => {
+    const a = await confirmDialog(app, { title: "Start over?", body: "Every coin, gem, hero level, relic and record goes. Settings stay. (A backup of this profile is kept on this device.)", ok: "START OVER", danger: true });
+    if (!a) return;
+    const b = await confirmDialog(app, { title: "Really really?", body: "Episode 1 again. The plushies will be thrilled.", ok: "YES, RESET", cancel: "No, I'm invested", danger: true });
+    if (!b) return;
+    save.reset();
+    app.sfx("reroll");
+    msg("import", "Fresh profile. Welcome to Episode 1!");
+    info();
+  });
+
   const close = () => {
     app.sfx("uiBack");
     onClose();

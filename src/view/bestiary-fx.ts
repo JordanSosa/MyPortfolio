@@ -9,7 +9,9 @@
  *     ring (drawn on the bullet layer). Returns true when it drew the sprite.
  *   - `draw` (called from WorldView.draw): boss death throes, dawn pops, god
  *     rays + sun, and the colour grade overrides (LUNATIC MOON dim, enrage red,
- *     the victory sunrise sweep) applied on top of the day -> night grade.
+ *     the victory sunrise sweep) applied on top of the stage's current grade
+ *     (Dream Meadow: full night by then). The victory texts come from the
+ *     StageDef (`victory`).
  *   - `bind` (called from Feedback.bind): enemyFx cues, bossPhase, bossEnrage,
  *     bulletsCleared, final boss death and the extended VICTORY sequence.
  *
@@ -247,6 +249,8 @@ export class BestiaryFx {
   private kLuna = 0;
   private kEnrage = 0;
   private readonly g = cloneGrade(GRADES.night);
+  /** The stage grade this frame (Feedback set it before the view draws), the base of every override. */
+  private readonly base = cloneGrade(GRADES.night);
   private gradeOwned = false;
 
   constructor(
@@ -560,16 +564,18 @@ export class BestiaryFx {
     this.fx.ambient.set(DAWN_AMBIENT);
   }
 
-  /** Colour grade overrides on top of the day -> night blend (all start from full night). */
+  /** Colour grade overrides on top of the stage's grade this frame (Dream Meadow: full night by then). */
   private applyGrade(realDt: number, time: number): void {
     const w = this.w;
     if (!w) return;
     const post = this.r.post;
+    const base = this.base;
+    lerpGrade(post.grade, post.grade, 0, base);
     if (this.vicT >= DAWN_AT) {
       const t = this.vicT - DAWN_AT;
       const k1 = ease.sineInOut(clamp(t / 1.6, 0, 1));
       const k2 = ease.sineInOut(clamp((t - 1.6) / 2.4, 0, 1));
-      lerpGrade(GRADES.night, G_SUNRISE, k1, this.g);
+      lerpGrade(base, G_SUNRISE, k1, this.g);
       lerpGrade(this.g, G_MORNING, k2, post.grade);
       post.vignette = BASE_VIGNETTE * (1 - 0.4 * k1);
       for (let i = 0; i < 3; i++) post.vignetteColor[i] = BASE_VIG_COLOR[i];
@@ -588,7 +594,7 @@ export class BestiaryFx {
     }
     this.gradeOwned = true;
     const pulse = 0.92 + 0.08 * Math.sin(time * 2.4);
-    lerpGrade(GRADES.night, G_LUNATIC, this.kLuna, this.g);
+    lerpGrade(base, G_LUNATIC, this.kLuna, this.g);
     lerpGrade(this.g, G_ENRAGE, this.kEnrage * pulse, post.grade);
     post.vignette = BASE_VIGNETTE + 0.2 * this.kLuna + 0.26 * this.kEnrage * pulse;
     const c = post.vignetteColor;
@@ -667,7 +673,7 @@ export class BestiaryFx {
         this.throeY = en.y - en.z;
         this.throeSx = en.face * en.scale;
         this.throeSy = en.scale;
-        this.throeFinal = !!def.boss?.final;
+        this.throeFinal = w.isFinalBoss(en);
         this.throeDur = this.throeFinal ? DAWN_AT : 0.95;
         this.throeT = 0;
         if (this.throeFinal) this.finalDeath(en.x, en.y - en.z);
@@ -880,8 +886,9 @@ export class BestiaryFx {
       this.r.camera.zoomTo(1, 2.5);
     });
     this.after(DAWN_AT + 0.35, () => {
-      this.texts.add("DAWN BREAKS!", 0, -46, { anchor: 2, scale: 3, rainbow: true, life: 4.8, wobble: 2, rise: 4 });
-      this.texts.add("the nightmares fade with the sun", 0, -22, { anchor: 2, scale: 1, color: C.paleYellow, life: 4.4, delay: 0.5, rise: 2 });
+      const vt = w.stage.victory;
+      this.texts.add(vt.title, 0, -46, { anchor: 2, scale: 3, rainbow: true, life: 4.8, wobble: 2, rise: 4 });
+      this.texts.add(vt.line, 0, -22, { anchor: 2, scale: 1, color: C.paleYellow, life: 4.4, delay: 0.5, rise: 2 });
       this.pose(4);
       o?.hooks?.victory?.();
     });

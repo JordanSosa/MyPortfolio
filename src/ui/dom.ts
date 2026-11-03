@@ -40,6 +40,14 @@ export function sprite(id: string, frame = 0, _scale = 1): string {
   }
 }
 
+/**
+ * True when the atlas holds real art for `id` (not the generated placeholder):
+ * the hub kit draws a CSS stand-in for Season 2 art that has not landed yet.
+ */
+export function hasArt(id: string): boolean {
+  return !!atlasRef && !!id && atlasRef.has(id);
+}
+
 /** Decoded <img> per warmed sprite URL: keeps the decoded bitmaps in the browser's image cache. */
 const decoded: HTMLImageElement[] = [];
 
@@ -110,6 +118,13 @@ export function fmtNum(n: number): string {
     return `${r.toFixed(d)}${suf}`;
   }
   return String(Math.floor(n));
+}
+
+/** Whole number with thousands separators: 1234567 -> "1,234,567" (currency bars, prices). */
+export function fmtInt(n: number): string {
+  const v = Math.floor(Math.abs(n));
+  const s = String(v).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+  return n < 0 ? `-${s}` : s;
 }
 
 /** Split text into per-letter spans for bouncy title animations. */

@@ -3,10 +3,15 @@
  * through `world.bus` (typed events, see events.ts) or is read from the
  * public fields by the view/UI each frame.
  *
- *   const w = new World({ hero: "hoshi", seed: 42 });
+ *   const w = new World({ hero: "hoshi", seed: 42, run: buildRunConfig(profile) });
  *   w.input.mx = 1;            // analog move, plus edge flags input.dash / input.ult
  *   w.step(1 / 60);            // fixed or variable dt (<= 1/30 recommended)
  *   if (w.pendingLevels) w.choose(w.offer()[0]);
+ *
+ * The RunConfig (run-config.ts) is the account layer's input: stage, endless,
+ * Plot Twists, stat mods, content pools, limit breaks, relics, talents,
+ * constellation, start bonuses, slots and flags. Without one the run is
+ * defaultRunConfig(): Dream Meadow with everything unlocked.
  *
  * Coordinates: art px, y down. Actor positions are FEET; collision centres
  * are (x, y - cy). The player's body centre is (x, y - PLAYER_CY).
@@ -15,15 +20,34 @@ import { Rng } from "../core/rng";
 import { PooledList } from "../core/pool";
 import { SpatialHash } from "../core/spatial";
 import { clamp, damp, TAU } from "../core/math";
-import { CFG, CHANNELS, CH_MISC, CH_ULT, RANKS, bossHpScale, enemyDmgScale, enemyHpScale, gemXpScale, rankFor, xpToNext } from "./config";
+import { EventBus } from "../core/events";
+import {
+  CFG,
+  CHANNELS,
+  CH_MISC,
+  CH_ULT,
+  MAX_PASSIVE_SLOTS,
+  MAX_WEAPON_SLOTS,
+  RANKS,
+  bossHpScale,
+  enemyDmgScale,
+  enemyHpScale,
+  gemXpScale,
+  rankFor,
+  xpToNext,
+} from "./config";
 import { createBus, type GameEvents, type HitEvent, type KillEvent, type GemEvent } from "./events";
 import { heroDef } from "./heroes";
+import type { HitHook, KillHook, LethalHook, SimHooks, Buff, HurtHook, PickupHook, DashHook } from "./hooks";
 import { applyMeta, type MetaRanks } from "./meta";
 import { PASSIVE_BY_ID } from "./passives";
-import { ULTIMATES, WEAPONS, enemyDef } from "./registry";
-import { baseStats, finalizeStats, type Stats } from "./stats";
+import { RELICS, TALENT_TREES, TWISTS, ULTIMATES, WEAPONS, baseWeaponOf, enemyDef, stageDef, twistHeat } from "./registry";
+import { defaultRunConfig, type RunConfig, type RunStatCounter, type RunStats } from "./run-config";
+import { RunStatsCollector } from "./run-stats";
+import type { StageDef } from "./stage";
+import { baseStats, finalizeStats, type StatMod, type Stats } from "./stats";
 import { Director } from "./director/director";
-import { applyCard, canChangeOffer, makeOffer, rollChest } from "./upgrades";
+import { applyCard, banishCard, canChangeOffer, makeOffer, rollChest } from "./upgrades";
 import {
   MODE_AI,
   MODE_STRAIGHT,
@@ -48,6 +72,7 @@ import {
   type Telegraph,
   type UltState,
   type UpgradeCard,
+  type WeaponDef,
   type WeaponInstance,
 } from "./types";
 
@@ -65,6 +90,67 @@ export interface WorldOptions {
   viewH?: number;
   /** Disable the spawn director (tests, sandboxes). */
   director?: boolean;
+  /**
+   * The account layer's loadout (stage, endless, twists, mods, pools, relics,
+   * talents, constellation, start bonuses, slots, flags). Default:
+   * defaultRunConfig() = Dream Meadow with everything unlocked.
+   */
+  run?: RunConfig;
+}
+
+/** Difficulty multipliers (Plot Twists, curse, endless). 1 = the stage as designed. */
+export interface Difficulty {
+  /** Regular enemy HP. */
+  enemyHp: number;
+  /** Boss HP. */
+  bossHp: number;
+  /** Regular enemy move speed. */
+  enemySpeed: number;
+  /** Enemy contact / bullet damage. */
+  enemyDmg: number;
+  /** Director spawn rate. */
+  spawn: number;
+  /** Enemy bullet speed. */
+  bulletSpeed: number;
+  /** Elites per elite event. */
+  elite: number;
+  /** Boss WARNING seconds (0 = Spoilers: bosses arrive unannounced). */
+  bossWarning: number;
+  /** Food (onigiri / cake) and relic hearts can drop. */
+  food: boolean;
+  /** Every level-up heals CFG.levelHeal of max HP. */
+  levelHeal: boolean;
+  /** Rerolls can be used. */
+  rerolls: boolean;
+  /** Phase max-alive cap multiplier (the device cap still applies). */
+  cap: number;
+  /** Elite HP multiplier. */
+  eliteHp: number;
+  /** Boss entrance beat (spawning pauses BOSS_INTRO s while the name card plays). */
+  bossIntro: boolean;
+  /** Bosses get back up once at 40 % HP ("IT'S NOT OVER!"): 0 none, 1 the final boss, 2 every boss. */
+  sequel: number;
+}
+
+/**
+ * Presentation hints the sim sets for the view (Plot Twists): the view reads
+ * them each frame, gameplay never does.
+ */
+export interface LookHints {
+  /** Darken the stage grade by this fraction (gameplay sprites keep their glow). */
+  darken: number;
+  /** Elites show their rainbow outline only once they have been hit (Studio Change). */
+  eliteOutlineOnHit: boolean;
+  /** Food pickups would have dropped: their coins wear a black "CENSORED" bar. */
+  censored: boolean;
+}
+
+interface Timer {
+  every: number;
+  t: number;
+  fn: (w: World) => void;
+  /** One-shot (World.after): removed after it fired. */
+  once: boolean;
 }
 
 export interface SimInput {
@@ -95,6 +181,12 @@ export interface Player {
   dashDX: number;
   dashDY: number;
   dashInv: number;
+  /** Dash charges ready now / max (RunConfig.flags.dashCharges adds charges; each recharges in turn over dashMax). */
+  dashCharges: number;
+  dashChargesMax: number;
+  /** Shield charges (Stats.shield) and the seconds until the next one recharges. */
+  shield: number;
+  shieldT: number;
   moving: boolean;
   dead: boolean;
 }
@@ -109,6 +201,12 @@ export interface RunSummary {
   victory: boolean;
   damageTaken: number;
   weapons: { id: string; name: string; icon: string; damage: number; kills: number; level: number }[];
+  /** Stage id. */
+  stage: string;
+  /** Final boss killed (also true in an endless run that later ended in death). */
+  stageCleared: boolean;
+  /** Everything the account layer needs (achievements, mastery, rewards). */
+  stats: RunStats;
 }
 
 export type Phase = "play" | "dead" | "victory";
@@ -160,6 +258,7 @@ const newEnemy = (): Enemy => ({
   alpha: 1,
   z: 0,
   inv: 0,
+  skin: "",
 });
 
 export function resetProjectile(p: Projectile): void {
@@ -212,10 +311,23 @@ const newProjectile = (): Projectile => {
   resetProjectile(p);
   return p;
 };
-const newBullet = (): Bullet => ({ x: 0, y: 0, vx: 0, vy: 0, r: 3, dmg: 5, life: 4, age: 0, sprite: "eb_orb", turn: 0, accel: 0, dead: false });
+const newBullet = (): Bullet => ({ x: 0, y: 0, vx: 0, vy: 0, r: 3, dmg: 5, life: 4, age: 0, sprite: "eb_orb", turn: 0, accel: 0, from: "", dead: false });
 const newTelegraph = (): Telegraph => ({ shape: 0, x: 0, y: 0, x2: 0, y2: 0, r: 10, age: 0, life: 1, color: 0xff4d6d, dead: false });
 const newGem = (): Gem => ({ x: 0, y: 0, z: 0, vz: 0, vx: 0, vy: 0, value: 1, tier: 1, state: 0, speed: 0, t: 0, dead: false });
-const newPickup = (): Pickup => ({ kind: "coin", x: 0, y: 0, z: 0, vz: 0, vx: 0, vy: 0, value: 1, golden: false, state: 0, speed: 0, t: 0, dead: false });
+const newPickup = (): Pickup => ({ kind: "coin", x: 0, y: 0, z: 0, vz: 0, vx: 0, vy: 0, value: 1, golden: false, censored: false, state: 0, speed: 0, t: 0, dead: false });
+
+/** RunConfig relic stars, clamped to 0..6. */
+function relicStars(s: number): number {
+  return Math.max(0, Math.min(6, Math.floor(s || 0)));
+}
+/** RunConfig talent rank, clamped to 0..maxRank. */
+function talentRank(r: number | undefined, max: number): number {
+  return Math.max(0, Math.min(max, Math.floor(r ?? 0)));
+}
+/** RunConfig constellation, clamped to 0..6. */
+function constellationOf(c: number): number {
+  return Math.max(0, Math.min(6, Math.floor(c || 0)));
+}
 
 const PROP_LOOT: { kind: PickupKind; w: number; luck: boolean }[] = [
   { kind: "coin", w: 34, luck: false },
@@ -228,11 +340,91 @@ const PROP_LOOT: { kind: PickupKind; w: number; luck: boolean }[] = [
 
 // ------------------------------------------------------------------ world
 export class World {
+  /** Presentation events (view / HUD / audio). Silent while `muted`. */
   readonly bus = createBus();
+  /** Gameplay hooks (relics, talents, twists, run stats): never muted. See hooks.ts. */
+  readonly hooks = new EventBus<SimHooks>();
   readonly rng: Rng;
   readonly hero: HeroDef;
   readonly meta: MetaRanks;
   readonly god: boolean;
+  /** The loadout this run was built from (defaultRunConfig() when none was given). */
+  readonly run: RunConfig;
+  readonly stage: StageDef;
+  /** Plot Twist ids active this run (registered ones only) and their ranks. */
+  readonly twistIds: string[] = [];
+  readonly twistRanks: Record<string, number> = {};
+  /** Total Plot Twist heat. */
+  readonly heat: number;
+  /** Difficulty multipliers (twists install into it before the first step). */
+  readonly difficulty: Difficulty = {
+    enemyHp: 1,
+    bossHp: 1,
+    enemySpeed: 1,
+    enemyDmg: 1,
+    spawn: 1,
+    bulletSpeed: 1,
+    elite: 1,
+    bossWarning: CFG.bossWarningTime,
+    food: true,
+    levelHeal: true,
+    rerolls: true,
+    cap: 1,
+    eliteHp: 1,
+    bossIntro: true,
+    sequel: 0,
+  };
+  readonly look: LookHints = { darken: 0, eliteOutlineOnHit: false, censored: false };
+  /** Card names get a long light-novel subtitle (Light Novel Title twist). */
+  novelTitles = false;
+  /**
+   * Forced-crit rules (talents / constellations: "always crits enemies above 80% HP"):
+   * any rule returning true makes the hit a crit. The crit roll is drawn either way.
+   */
+  readonly critRules: ((e: Enemy, source: string) => boolean)[] = [];
+  /** Hero constellation this run (0..6). */
+  readonly cons: number;
+  /** Seconds of invulnerability after a Plot Armor save. */
+  plotArmorIframes: number = CFG.plotArmorIframes;
+  /** Per-weapon extra damage added by talents / relics (addWeaponDamage), on top of RunConfig.weaponDamage. */
+  private readonly weaponBonus: Record<string, number> = {};
+  /** Boss uids that already got back up (Sequel Hook). */
+  private readonly sequelUsed = new Set<number>();
+  /** What dealt the hit that killed the hero (enemy id, bullet sprite, "explosion"...). */
+  killedBy = "";
+  /**
+   * Run modifiers applied after the passives on every stat recompute (relic /
+   * talent / twist effects that read run state, timed Buffs). Set statsDirty
+   * when their inputs change.
+   */
+  readonly statMods: StatMod[] = [];
+  /** Timed buffs (hooks.ts Buff registers itself here). */
+  readonly buffs: Buff[] = [];
+  /** Recompute the stats at the end of the current step. */
+  statsDirty = false;
+  /** Build slot limits for this run (RunConfig, clamped to the channel budget). */
+  readonly weaponSlots: number;
+  readonly passiveSlots: number;
+  /** Weapon / passive ids removed from the card pool for this run (banish). */
+  readonly banished = new Set<string>();
+  banishes = 0;
+  skips = 0;
+  /** Rerolls never run out (Infinite Gacha Credit Card / flag). */
+  freeRerolls = false;
+  /** Lethal hits that will still be survived (Plot Armor) and how many were. */
+  plotArmor = 0;
+  plotArmorSaves = 0;
+  /** Ultimate cast by this run's hero (talent capstones may swap it before the first step). */
+  ultId: string;
+  /** Endless ("Filler Arc") is running: the final boss is down and the run goes on. */
+  endlessOn = false;
+  /** Run time the Filler Arc started. */
+  endlessFrom = 0;
+  /** The stage's final boss died this run (victory or Filler Arc). */
+  stageCleared = false;
+  /** Every weapon / passive id held during the run (RunStats). */
+  readonly weaponsUsed: string[] = [];
+  readonly passivesUsed: string[] = [];
   /** Run clock (scaled seconds of play). */
   t = 0;
   steps = 0;
@@ -312,6 +504,32 @@ export class World {
   private killEv: KillEvent;
   private gemEv: GemEvent;
   private shootEv = { x: 0, y: 0 };
+  // reused hook payloads (hooks.ts: never allocate per event)
+  /**
+   * kill / hit hook payloads, one per nesting depth: a listener may land hits or kills itself (an
+   * ofuda burst on kill, a blast on dash...), and the outer listeners must still read their own
+   * event. Grown once per depth, then reused.
+   */
+  private readonly hKills: KillHook[] = [];
+  private readonly hHits: HitHook[] = [];
+  private killDepth = 0;
+  private hitDepth = 0;
+  private readonly hHurt: HurtHook = { dmg: 0, sx: 0, sy: 0, hp: 0 };
+  private readonly hLethal: LethalHook = { dmg: 0, saved: false, by: "" };
+  private readonly hDash: DashHook = { x: 0, y: 0, dx: 0, dy: 0 };
+  private readonly hPickup: PickupHook = { kind: "coin", x: 0, y: 0, value: 0 };
+  private readonly hBlock = { x: 0, y: 0, left: 0 };
+  private readonly hValue = { value: 0 };
+  private readonly hLevel = { level: 0 };
+  private readonly hAmount = { amount: 0 };
+  private readonly hStep = { dt: 0 };
+  private readonly hEnemy = { enemy: null as unknown as Enemy };
+  private readonly hBossKill = { enemy: null as unknown as Enemy, final: false };
+  private readonly hPos = { x: 0, y: 0 };
+  private readonly timers: Timer[] = [];
+  private readonly collector: RunStatsCollector;
+  /** Enemy id whose behaviour is running (bullet attribution). */
+  private acting = "";
 
   constructor(opts: WorldOptions = {}) {
     this.rng = new Rng(opts.seed ?? ((Math.random() * 0xffffffff) >>> 0));
@@ -322,6 +540,25 @@ export class World {
     this.viewH = opts.viewH ?? CFG.viewH;
     this.maxEnemies = opts.maxEnemies ?? 350;
     this.directorOn = opts.director ?? true;
+    const run = (this.run = opts.run ?? defaultRunConfig());
+    this.stage = stageDef(run.stage);
+    this.ultId = this.hero.ult;
+    this.weaponSlots = Math.max(1, Math.min(MAX_WEAPON_SLOTS, Math.floor(run.weaponSlots || CFG.weaponSlots)));
+    this.passiveSlots = Math.max(0, Math.min(MAX_PASSIVE_SLOTS, Math.floor(run.passiveSlots ?? CFG.passiveSlots)));
+    for (const id of run.twists) {
+      const d = TWISTS.get(id);
+      if (!d || this.twistIds.includes(id)) continue;
+      this.twistIds.push(id);
+      this.twistRanks[id] = Math.max(1, Math.min(d.maxRank, Math.floor(run.twistRanks?.[id] ?? 1)));
+    }
+    this.heat = twistHeat(this.twistIds, this.twistRanks);
+    this.cons = constellationOf(run.constellation);
+    const fl = run.flags;
+    this.banishes = Math.max(0, Math.floor(fl.banish ?? 0));
+    this.skips = Math.max(0, Math.floor(fl.skip ?? 0));
+    this.freeRerolls = (fl.freeRerolls ?? 0) > 0;
+    this.plotArmor = Math.max(0, Math.floor(fl.plotArmor ?? 0));
+    const charges = Math.max(1, Math.min(5, 1 + Math.floor(fl.dashCharges ?? 0)));
     this.player = {
       x: 0,
       y: 0,
@@ -340,19 +577,102 @@ export class World {
       dashDX: 1,
       dashDY: 0,
       dashInv: 0,
+      dashCharges: charges,
+      dashChargesMax: charges,
+      shield: 0,
+      shieldT: 0,
       moving: false,
       dead: false,
     };
+    // weapon mastery damage (per weapon instance, see weaponDamageMul)
+    this.startWeapon = this.hero.weapon;
+    // power of friendship keystone: +x damage per different weapon held
+    const friend = fl.friendship ?? 0;
+    if (friend > 0) this.statMods.push((s) => void (s.might += friend * this.weapons.length));
     this.recomputeStats();
-    this.player.hp = this.player.maxHp = this.stats.maxHp;
-    this.rerolls = this.stats.rerolls;
-    this.revivesLeft = this.stats.revives;
     this.director = new Director(this);
     const dummy = null as unknown as Enemy;
     this.hitEv = { x: 0, y: 0, dmg: 0, crit: false, color: 0xffffff, angle: 0, enemy: dummy, source: "" };
     this.killEv = { x: 0, y: 0, enemy: dummy, elite: false, boss: false, kills: 0 };
     this.gemEv = { x: 0, y: 0, value: 0, tier: 1 };
-    this.addWeapon(this.hero.weapon);
+    // behaviour: twists, relics, talents, constellation, then the stage (each may add hooks, statMods,
+    // difficulty, or swap the start weapon / ultimate before the run starts)
+    for (const id of this.twistIds) TWISTS.get(id)?.install(this, this.twistRanks[id]);
+    for (const r of run.relics) {
+      const d = RELICS.get(r.id);
+      if (d?.install) d.install(this, relicStars(r.stars));
+    }
+    const tree = TALENT_TREES.get(this.hero.id);
+    if (tree) for (const n of tree.nodes) {
+      const rank = talentRank(run.talents[n.id], n.maxRank);
+      if (rank > 0) n.install?.(this, rank);
+    }
+    const cons = this.hero.constellations;
+    if (cons) for (let i = 0; i < Math.min(cons.length, this.cons); i++) cons[i].install?.(this);
+    this.stage.onStart?.(this);
+    this.collector = new RunStatsCollector(this);
+    this.statsDirty = false;
+    this.recomputeStats();
+    this.player.hp = this.player.maxHp = this.stats.maxHp;
+    this.player.shield = this.stats.shield;
+    this.rerolls = this.stats.rerolls;
+    this.revivesLeft = this.stats.revives + Math.max(0, Math.floor(fl.revives ?? 0));
+    if (!this.difficulty.rerolls) this.rerolls = 0;
+    this.ultMeter = Math.max(this.ultMeter, Math.min(CFG.ultMax, CFG.ultStart + Math.max(0, fl.ultStart ?? 0) * CFG.ultMax));
+    this.addWeapon(this.startWeapon, this.startWeaponLevel);
+    for (const sw of run.start.weapons) this.addWeapon(sw.id, Math.max(1, Math.floor(sw.level)));
+    // (run modifiers that count weapons - Power of Friendship - see the start build right away)
+    if (this.statsDirty) {
+      this.statsDirty = false;
+      this.recomputeStats();
+    }
+    // start at level N: those level-ups are picked on the first frames (the level-up modal / the bot)
+    const lv = Math.max(1, Math.floor(run.start.level || 1));
+    if (lv > 1) {
+      this.level = lv;
+      this.xpNext = xpToNext(lv);
+      this.pendingLevels = lv - 1;
+    }
+  }
+
+  /** Weapon the hero starts with and its level (talent capstones may change them in install()). */
+  startWeapon: string;
+  startWeaponLevel = 1;
+
+  /** Is `e` this stage's final boss (and not an endless rematch)? */
+  isFinalBoss(e: Enemy): boolean {
+    return !this.endlessOn && e.def.id === this.stage.finalBoss;
+  }
+
+  /** Call `fn` every `seconds` of run time (relics / talents / twists). First call after `first` seconds (default: one period). */
+  every(seconds: number, fn: (w: World) => void, first = seconds): void {
+    this.timers.push({ every: Math.max(0.05, seconds), t: first, fn, once: false });
+  }
+
+  /** Call `fn` once after `seconds` of run time (only while the run plays). */
+  after(seconds: number, fn: (w: World) => void): void {
+    this.timers.push({ every: 0, t: Math.max(0, seconds), fn, once: true });
+  }
+
+  /** Rank of a talent node in this run (0 = not taken); weapon / ult code reads it. */
+  talentRank(id: string): number {
+    const n = this.run.talents[id];
+    return n && n > 0 ? Math.floor(n) : 0;
+  }
+
+  /**
+   * Extra damage for one weapon (and its evolution) as an additive fraction:
+   * the same channel as mastery (RunConfig.weaponDamage). Talents call it from
+   * install(); owned instances update right away.
+   */
+  addWeaponDamage(id: string, frac: number): void {
+    this.weaponBonus[id] = (this.weaponBonus[id] ?? 0) + frac;
+    for (const inst of this.weapons) inst.dmgMul = this.weaponDamageMul(inst.def) + (inst.lbInherit ?? 0);
+  }
+
+  /** Count a RunStats extra (content-specific counters: "nanis", "bakas", "charmed"...). */
+  bumpStat(key: RunStatCounter, n = 1): void {
+    this.collector.bump(key, n);
   }
 
   // ================================================================ events
@@ -382,6 +702,7 @@ export class World {
         this.clearBullets();
         u.def.start(this, u);
         this.emit("ultStart", { ult: u.def.id, x: this.player.x, y: this.player.y });
+        this.hookUlt(u);
       }
       return;
     }
@@ -407,10 +728,59 @@ export class World {
     }
     this.updateCombo(dt);
     this.ultKillBudget = Math.min(CFG.ultKillCap * 2, this.ultKillBudget + CFG.ultKillCap * dt);
-    if (!this.ult) this.addUlt(CFG.ultPerSecond * dt);
+    if (!this.ult) this.addUlt(CFG.ultPerSecond * dt * this.stats.ultGain);
     if (this.freezeT > 0) this.freezeT = Math.max(0, this.freezeT - dt);
+    this.updateEffects(dt);
     this.cleanup();
     this.rebuildGrid();
+  }
+
+  /** Relic / talent / twist timers, timed buffs, shield recharge, the step hook, pending stat recomputes. */
+  private updateEffects(dt: number): void {
+    const tm = this.timers;
+    for (let i = 0; i < tm.length; i++) {
+      const t = tm[i];
+      t.t -= dt;
+      if (t.t <= 0 && this.phase === "play") {
+        if (t.once) {
+          tm.splice(i--, 1);
+          t.fn(this);
+          continue;
+        }
+        t.t += t.every;
+        if (t.t <= 0) t.t = t.every;
+        t.fn(this);
+      }
+    }
+    const bf = this.buffs;
+    for (let i = 0; i < bf.length; i++) {
+      const b = bf[i];
+      if (b.t > 0) {
+        b.t -= dt;
+        if (b.t <= 0) {
+          b.t = 0;
+          this.statsDirty = true;
+        }
+      }
+    }
+    // shield recharge (charges above the max are bonus wards from effects: they stay until used)
+    const p = this.player;
+    const smax = this.stats.shield;
+    if (p.shield < smax) {
+      p.shieldT -= dt;
+      if (p.shieldT <= 0) {
+        p.shield++;
+        p.shieldT = p.shield < smax ? this.stats.shieldCd : 0;
+      }
+    }
+    if (this.hooks.has("step")) {
+      this.hStep.dt = dt;
+      this.hooks.emit("step", this.hStep);
+    }
+    if (this.statsDirty) {
+      this.statsDirty = false;
+      this.recomputeStats();
+    }
   }
 
   /** After death / victory the world idles: enemies keep animating in place. */
@@ -432,7 +802,12 @@ export class World {
     p.dashInv = Math.max(0, p.dashInv - dt);
     const wasCd = p.dashCd > 0;
     p.dashCd = Math.max(0, p.dashCd - dt);
-    if (wasCd && p.dashCd === 0) this.emit("dashReady", {});
+    if (wasCd && p.dashCd === 0) {
+      // one charge back; with more missing, the next one starts recharging
+      if (p.dashCharges < p.dashChargesMax) p.dashCharges++;
+      if (p.dashCharges < p.dashChargesMax) p.dashCd = p.dashMax;
+      this.emit("dashReady", {});
+    }
 
     let mx = inp.mx;
     let my = inp.my;
@@ -469,10 +844,10 @@ export class World {
     if (s.regen > 0 && p.hp < p.maxHp) p.hp = Math.min(p.maxHp, p.hp + s.regen * dt);
   }
 
-  /** Dash if off cooldown. Returns true when a dash started. */
+  /** Dash if a charge is ready. Returns true when a dash started. */
   tryDash(): boolean {
     const p = this.player;
-    if (p.dashCd > 0 || p.dashT > 0 || this.phase !== "play") return false;
+    if (p.dashCharges <= 0 || p.dashT > 0 || this.phase !== "play") return false;
     let dx = this.input.mx;
     let dy = this.input.my;
     const l = Math.sqrt(dx * dx + dy * dy);
@@ -488,9 +863,24 @@ export class World {
     p.dashT = CFG.dashTime;
     p.dashInv = CFG.dashTime + CFG.dashInvulnExtra;
     p.dashMax = CFG.dashCd * this.stats.dashCd;
-    p.dashCd = p.dashMax;
+    p.dashCharges--;
+    // (a charge already recharging keeps its progress)
+    if (p.dashCd <= 0) p.dashCd = p.dashMax;
     this.emit("dash", { x: p.x, y: p.y, dx, dy });
+    const h = this.hDash;
+    h.x = p.x;
+    h.y = p.y;
+    h.dx = dx;
+    h.dy = dy;
+    this.hooks.emit("dash", h);
     return true;
+  }
+
+  /** Dash meter for the HUD / touch button: 1 while a charge is ready, else the recharge progress. */
+  get dashMeter(): number {
+    const p = this.player;
+    if (p.dashCharges > 0) return 1;
+    return p.dashMax > 0 ? 1 - p.dashCd / p.dashMax : 1;
   }
 
   get invulnerable(): boolean {
@@ -498,15 +888,39 @@ export class World {
     return this.god || p.iframes > 0 || p.dashInv > 0 || this.ult !== null;
   }
 
-  /** Damage the player (contact, bullets, explosions). Returns true if it hurt. */
-  hurtPlayer(dmg: number, sx: number, sy: number): boolean {
+  /**
+   * Damage the player (contact, bullets, explosions). Returns true if it hurt.
+   * `by` names the source for RunStats.killedBy (enemy id / bullet sprite / effect id).
+   */
+  hurtPlayer(dmg: number, sx: number, sy: number, by = "hit"): boolean {
     const p = this.player;
     if (this.phase !== "play" || this.invulnerable) return false;
-    const d = Math.max(1, Math.round(dmg - this.stats.armor));
+    if (p.shield > 0) {
+      // a shield charge eats the whole hit (no damage, no combo loss), then i-frames
+      if (p.shieldT <= 0) p.shieldT = this.stats.shieldCd;
+      p.shield--;
+      p.iframes = CFG.hurtIframes;
+      const hb = this.hBlock;
+      hb.x = p.x;
+      hb.y = p.y;
+      hb.left = p.shield;
+      this.emit("shieldBlock", hb);
+      this.hooks.emit("block", hb);
+      return true;
+    }
+    const s = this.stats;
+    const d = Math.max(1, Math.round(s.dmgReduction > 0 ? (dmg - s.armor) * (1 - s.dmgReduction) : dmg - s.armor));
+    if (p.hp - d <= 0 && this.saveFromLethal(d)) return true;
     p.hp -= d;
     p.iframes = CFG.hurtIframes;
     p.hurtT = 0.3;
     this.damageTaken += d;
+    const hh = this.hHurt;
+    hh.dmg = d;
+    hh.sx = sx;
+    hh.sy = sy;
+    hh.hp = p.hp;
+    this.hooks.emit("hurt", hh);
     // a hit costs style: the combo drops one rank
     if (this.comboRank >= 1) this.dropRank();
     // small recoil away from the source
@@ -519,6 +933,7 @@ export class World {
     if (p.hp <= 0) {
       p.hp = 0;
       p.dead = true;
+      this.killedBy = by;
       this.phase = "dead";
       this.endCombo();
       this.emit("playerDied", { x: p.x, y: p.y });
@@ -526,11 +941,45 @@ export class World {
     return true;
   }
 
+  /**
+   * Plot Armor: a hit that would kill is survived at 1 HP when the keystone
+   * (flags.plotArmor) has charges left or a `lethal` hook listener saves it.
+   */
+  private saveFromLethal(d: number): boolean {
+    const p = this.player;
+    const h = this.hLethal;
+    h.dmg = d;
+    h.saved = false;
+    h.by = "";
+    if (this.plotArmor > 0) {
+      this.plotArmor--;
+      h.saved = true;
+      h.by = "plot_armor";
+    }
+    // listeners see a Plot Armor save (saved = true) and may save the hero themselves
+    this.hooks.emit("lethal", h);
+    if (!h.saved) return false;
+    this.plotArmorSaves++;
+    this.damageTaken += Math.max(0, p.hp - 1);
+    p.hp = 1;
+    p.iframes = this.plotArmorIframes;
+    p.hurtT = 0.3;
+    this.clearBullets();
+    this.emit("plotArmor", { x: p.x, y: p.y, by: h.by });
+    return true;
+  }
+
   heal(amount: number, silent = false): void {
     const p = this.player;
     const before = p.hp;
-    p.hp = Math.min(p.maxHp, p.hp + amount);
-    if (!silent && p.hp - before >= 1) this.emit("playerHeal", { amount: Math.round(p.hp - before), x: p.x, y: p.y });
+    const mul = this.stats.healMul;
+    p.hp = Math.min(p.maxHp, p.hp + (mul === 1 ? amount : amount * mul));
+    const got = p.hp - before;
+    if (!silent && got >= 1) this.emit("playerHeal", { amount: Math.round(got), x: p.x, y: p.y });
+    if (got > 0 && this.hooks.has("heal")) {
+      this.hAmount.amount = got;
+      this.hooks.emit("heal", this.hAmount);
+    }
   }
 
   /** Revive after death (Dream Shop). Returns false if none left. */
@@ -555,6 +1004,10 @@ export class World {
       else this.hitEnemy(e, e.hp + 1, null, a, 200, 0, "revive", 0xffffff);
     }
     this.emit("playerRevived", { x: p.x, y: p.y });
+    this.hPos.x = p.x;
+    this.hPos.y = p.y;
+    this.hooks.emit("revive", this.hPos);
+    // the final boss fell on the step the hero died: a Filler Arc run carries on, a normal run is won (Director)
     return true;
   }
 
@@ -574,13 +1027,20 @@ export class World {
   /** Cast the hero's ultimate if the meter is full. */
   tryUlt(): boolean {
     if (!this.ultReady) return false;
-    const def = ULTIMATES.get(this.hero.ult);
+    const def = ULTIMATES.get(this.ultId);
     if (!def) return false;
     this.ultMeter = 0;
     this.ultReadySent = false;
-    this.ult = { def, phase: "cutin", t: 0, power: 1 + (this.level - 1) * 0.06, data: {} };
+    this.ult = { def, phase: "cutin", t: 0, power: (1 + (this.level - 1) * 0.06) * this.stats.ultPower, data: {} };
     this.emit("ultCutin", { hero: this.hero.id, ult: def.id, name: def.name });
     return true;
+  }
+
+  private readonly hUlt = { id: "", power: 1 };
+  private hookUlt(u: UltState): void {
+    this.hUlt.id = u.def.id;
+    this.hUlt.power = u.power;
+    this.hooks.emit("ult", this.hUlt);
   }
 
   private updateUlt(dt: number): void {
@@ -592,24 +1052,27 @@ export class World {
       this.timeStop = false;
       this.ult = null;
       this.emit("ultEnd", { ult: u.def.id });
+      this.hUlt.id = u.def.id;
+      this.hooks.emit("ultEnd", this.hUlt);
     }
   }
 
   // ================================================================ combo
   /** Length of the combo timer at the current rank (HUD bar). */
   get comboWindow(): number {
-    return CFG.comboWindow[this.comboRank + 1];
+    return CFG.comboWindow[this.comboRank + 1] + this.stats.comboTime;
   }
   private addCombo(): void {
     this.combo++;
-    const win = CFG.comboWindow[this.comboRank + 1];
+    const ct = this.stats.comboTime;
+    const win = CFG.comboWindow[this.comboRank + 1] + ct;
     this.comboTimer = Math.min(win, Math.max(0, this.comboTimer) + CFG.comboRefill[this.comboRank + 1]);
     if (this.combo > this.maxCombo) this.maxCombo = this.combo;
     const r = rankFor(this.combo);
     if (r > this.comboRank) {
       this.comboRank = r;
       // a fresh rank starts with a full (shorter) window
-      this.comboTimer = CFG.comboWindow[r + 1];
+      this.comboTimer = CFG.comboWindow[r + 1] + ct;
       this.emit("comboRank", { rank: r, id: RANKS[r].id, count: this.combo });
     }
   }
@@ -626,7 +1089,7 @@ export class World {
     const r = this.comboRank - 1;
     this.comboRank = r;
     this.combo = RANKS[r].at;
-    this.comboTimer = CFG.comboWindow[r + 1];
+    this.comboTimer = CFG.comboWindow[r + 1] + this.stats.comboTime;
     this.emit("comboDrop", { rank: r, id: RANKS[r].id, count: this.combo });
   }
   private endCombo(): void {
@@ -658,10 +1121,15 @@ export class World {
     e.r = d.radius * sc;
     e.cy = d.height * 0.5 * sc;
     // (the director is built after the constructor's first lines; nothing spawns before that)
-    const hpScale = d.prop ? 1 : d.boss ? bossHpScale(d.boss.level, this.level) : enemyHpScale(this.t) * (this.director?.hpMul ?? 1);
-    e.maxHp = e.hp = Math.max(1, Math.round(d.hp * hpScale * (e.elite ? CFG.elite.hp : 1)));
-    e.speed = d.speed * (e.elite ? CFG.elite.speed : 1);
-    e.dmg = d.dmg * (e.elite ? CFG.elite.dmg : 1) * (d.boss || d.prop ? 1 : enemyDmgScale(this.t));
+    const df = this.difficulty;
+    const hpScale = d.prop
+      ? 1
+      : d.boss
+        ? bossHpScale(d.boss.level, this.level) * df.bossHp
+        : enemyHpScale(this.t) * (this.director?.hpMul ?? 1) * df.enemyHp * this.extraHpMul();
+    e.maxHp = e.hp = Math.max(1, Math.round(d.hp * hpScale * (e.elite ? CFG.elite.hp * df.eliteHp : 1)));
+    e.speed = d.speed * (e.elite ? CFG.elite.speed : 1) * (d.boss || d.prop ? 1 : df.enemySpeed);
+    e.dmg = d.dmg * (e.elite ? CFG.elite.dmg : 1) * (d.boss || d.prop ? 1 : enemyDmgScale(this.t)) * df.enemyDmg;
     e.face = x < this.player.x ? 1 : -1;
     e.t = 0;
     e.flash = 0;
@@ -676,13 +1144,27 @@ export class World {
     e.alpha = 1;
     e.z = 0;
     e.inv = 0;
+    e.skin = "";
     if (d.prop) this.propCount++;
     else this.enemyCount++;
     d.init?.(e, this);
     if (!this.muted) {
       if (e.elite) this.bus.emit("eliteSpawned", { enemy: e });
     }
+    if (e.elite && this.hooks.has("eliteSpawn")) {
+      this.hEnemy.enemy = e;
+      this.hooks.emit("eliteSpawn", this.hEnemy);
+    }
     return e;
+  }
+
+  /** Regular-enemy HP multiplier from the curse stat and the Filler Arc (1 in a plain run). */
+  private extraHpMul(): number {
+    let m = 1;
+    const c = this.stats.curse;
+    if (c > 0) m *= 1 + c * 0.25;
+    if (this.endlessOn) m *= 1 + this.stage.endless.hpPerMinute * ((this.t - this.endlessFrom) / 60);
+    return m;
   }
 
   /** Remove without drops/credit (despawn). */
@@ -724,7 +1206,10 @@ export class World {
       if (frozen) {
         e.vx = e.vy = 0;
       } else if (e.mode !== MODE_STRAIGHT) {
+        // (bullets fired during an enemy's update remember who shot them: RunStats.killedBy)
+        this.acting = d.id;
         d.update(e, this, dt);
+        this.acting = "";
       }
       // soft separation
       let sx = 0;
@@ -773,7 +1258,7 @@ export class World {
       const rr = e.r + pr;
       const d2 = dx * dx + dy * dy;
       if (d2 < rr * rr) {
-        if (e.dmg > 0 && !frozen) this.hurtPlayer(e.dmg, e.x, e.y);
+        if (e.dmg > 0 && !frozen) this.hurtPlayer(e.dmg, e.x, e.y, d.id);
         // keep a little personal space so the hero stays readable
         if (d2 > 1e-4 && !d.boss) {
           const dd = Math.sqrt(d2);
@@ -809,9 +1294,11 @@ export class World {
   hitEnemy(e: Enemy, base: number, owner: WeaponInstance | null, angle: number, knock: number, critBonus: number, source: string, color: number): boolean {
     if (e.dead || e.inv > 0) return false;
     const s = this.stats;
-    const crit = this.rng.next() < s.crit + critBonus;
+    let crit = this.rng.next() < s.crit + critBonus;
+    if (!crit && this.critRules.length) for (let i = 0; i < this.critRules.length && !crit; i++) crit = this.critRules[i](e, source);
     const v = CFG.damageVariance;
     let d = base * (1 + (this.rng.next() * 2 - 1) * v) * (crit ? s.critMult : 1);
+    if (s.bossDmg !== 1 && (e.elite || e.def.boss)) d *= s.bossDmg;
     d = Math.max(1, Math.round(d));
     e.hp -= d;
     e.flash = 0.08;
@@ -825,6 +1312,15 @@ export class World {
     if (owner) owner.damage += d;
     const key = source || "misc";
     this.damageBy.set(key, (this.damageBy.get(key) ?? 0) + d);
+    const hh = this.hHits[this.hitDepth] ?? (this.hHits[this.hitDepth] = { enemy: e, dmg: 0, crit: false, source: "", owner: null });
+    hh.enemy = e;
+    hh.dmg = d;
+    hh.crit = crit;
+    hh.source = key;
+    hh.owner = owner;
+    this.hitDepth++;
+    this.hooks.emit("hit", hh);
+    this.hitDepth--;
     if (!this.muted) {
       const ev = this.hitEv;
       ev.x = e.x;
@@ -838,14 +1334,27 @@ export class World {
       this.bus.emit("enemyHit", ev);
     }
     if (e.hp <= 0) {
-      this.killEnemy(e, owner);
+      if (e.def.boss && this.difficulty.sequel > 0 && this.sequelHook(e)) return false;
+      this.killEnemy(e, owner, key);
       return true;
     }
     return false;
   }
 
-  /** Kill (credit + drops + events). */
-  killEnemy(e: Enemy, owner: WeaponInstance | null): void {
+  /** Sequel Hook twist: a boss that would die gets back up once at 40 % HP with a 3 s flourish. */
+  private sequelHook(e: Enemy): boolean {
+    if (this.sequelUsed.has(e.uid)) return false;
+    if (this.difficulty.sequel < 2 && !this.isFinalBoss(e)) return false;
+    this.sequelUsed.add(e.uid);
+    e.hp = Math.max(1, Math.round(e.maxHp * 0.4));
+    e.inv = 3;
+    this.clearBullets();
+    this.emit("bossPhase", { id: e.def.id, phase: 9, x: e.x, y: e.y, title: "IT'S NOT OVER!", subtitle: "nobody really dies if there's a sequel" });
+    return true;
+  }
+
+  /** Kill (credit + drops + events). `source` = damage source id of the killing blow (RunStats, hooks). */
+  killEnemy(e: Enemy, owner: WeaponInstance | null, source = owner ? owner.def.id : ""): void {
     if (e.dead) return;
     e.dead = true;
     e.hp = 0;
@@ -854,19 +1363,23 @@ export class World {
       this.propCount--;
       this.dropPropLoot(e.x, e.y);
       this.emit("propBroken", { x: e.x, y: e.y, sprite: d.sprite });
+      this.hPos.x = e.x;
+      this.hPos.y = e.y;
+      this.hooks.emit("prop", this.hPos);
       return;
     }
     this.enemyCount--;
     this.kills++;
     if (owner) owner.kills++;
     this.addCombo();
-    if (d.boss) this.addUlt(CFG.ultPerBoss);
-    else if (e.elite) this.addUlt(CFG.ultPerElite);
+    const gain = this.stats.ultGain;
+    if (d.boss) this.addUlt(CFG.ultPerBoss * gain);
+    else if (e.elite) this.addUlt(CFG.ultPerElite * gain);
     else if (!this.ult) {
       // ordinary kills charge the meter up to CFG.ultKillCap per second (hordes don't spam ults)
       const g = Math.min(this.ultKillBudget, CFG.ultPerKill);
       this.ultKillBudget -= g;
-      this.addUlt(g);
+      this.addUlt(g * gain);
     }
     d.onDeath?.(e, this);
     // drops (later enemies are worth more XP)
@@ -893,17 +1406,50 @@ export class World {
       ev.kills = this.kills;
       this.bus.emit("enemyKilled", ev);
     }
+    const hk = this.hKills[this.killDepth] ?? (this.hKills[this.killDepth] = { enemy: e, x: 0, y: 0, elite: false, boss: false, source: "", owner: null });
+    hk.enemy = e;
+    hk.x = e.x;
+    hk.y = e.y;
+    hk.elite = e.elite;
+    hk.boss = !!d.boss;
+    hk.source = source;
+    hk.owner = owner;
+    this.killDepth++;
+    this.hooks.emit("kill", hk);
+    this.killDepth--;
     if (d.boss) {
       if (this.boss === e) this.boss = null;
       this.director.onBossDied(e);
-      const final = !!d.boss.final;
+      const final = this.isFinalBoss(e);
       this.emit("bossKilled", { x: e.x, y: e.y, title: d.boss.title, final });
+      const bk = this.hBossKill;
+      bk.enemy = e;
+      bk.final = final;
+      this.hooks.emit("bossKill", bk);
       if (final) {
-        // (the player may have died earlier in this same step: the director then wins the run right after a revive)
+        this.stageCleared = true;
         this.finalBossDown = true;
-        this.win();
+        if (this.stage.onFinalBossKilled?.(this, e)) return;
+        // (the player may have died earlier in this same step: the director then wins the run right after a revive;
+        // an endless run starts its Filler Arc either way and carries on after the revive)
+        if (this.run.endless) this.startEndless();
+        else this.win();
       }
     }
+  }
+
+  /**
+   * The Filler Arc: the final boss is down but the run goes on ("TO BE
+   * CONTINUED... JUST KIDDING - FILLER ARC!"), with rising HP / spawn scaling,
+   * elite waves and boss rematches (Director, StageDef.endless).
+   */
+  startEndless(): void {
+    if (this.endlessOn) return;
+    this.endlessOn = true;
+    this.endlessFrom = this.t;
+    this.director.startEndless();
+    this.emit("fillerArc", { t: this.t, stage: this.stage.id });
+    this.hooks.emit("endless", { t: this.t });
   }
 
   /** End the run in victory. */
@@ -918,7 +1464,7 @@ export class World {
       if (u.phase === "active") u.def.end?.(this, u);
       this.ult = null;
       this.timeStop = false;
-      const ultId = this.hero.ult;
+      const ultId = this.ultId;
       const pr = this.projectiles;
       for (let i = 0; i < pr.count; i++) {
         const p = pr.items[i];
@@ -930,7 +1476,7 @@ export class World {
   }
 
   /** Damage every enemy in a circle (ground point). */
-  explode(x: number, y: number, r: number, dmg: number, owner: WeaponInstance | null, knock: number, source: string, color: number, big = false): number {
+  explode(x: number, y: number, r: number, dmg: number, owner: WeaponInstance | null, knock: number, source: string, color: number, big = false, critBonus = 0): number {
     const buf = this.acquire();
     const n = this.grid.query(x, y, r + 24, buf);
     let hits = 0;
@@ -941,7 +1487,7 @@ export class World {
       const dy = e.y - e.cy - y;
       const rr = r + e.r;
       if (dx * dx + dy * dy > rr * rr) continue;
-      this.hitEnemy(e, dmg, owner, Math.atan2(dy, dx), knock, 0, source, color);
+      this.hitEnemy(e, dmg, owner, Math.atan2(dy, dx), knock, critBonus, source, color);
       hits++;
     }
     this.release();
@@ -1282,17 +1828,19 @@ export class World {
     // hygiene: past the cap the shot is dropped (callers may still configure the returned scratch bullet)
     if (this.bullets.count >= CFG.maxBullets) return this.droppedBullet;
     const b = this.bullets.spawn();
+    const df = this.difficulty;
     b.x = x;
     b.y = y;
-    b.vx = vx;
-    b.vy = vy;
-    b.dmg = dmg;
+    b.vx = df.bulletSpeed === 1 ? vx : vx * df.bulletSpeed;
+    b.vy = df.bulletSpeed === 1 ? vy : vy * df.bulletSpeed;
+    b.dmg = df.enemyDmg === 1 ? dmg : dmg * df.enemyDmg;
     b.sprite = sprite;
     b.r = r;
     b.life = life;
     b.age = 0;
     b.turn = 0;
     b.accel = 0;
+    b.from = this.acting;
     b.dead = false;
     if (!this.muted) {
       // one reused payload (bursts of 16+ bullets are common); audio rate-limits the sfx
@@ -1352,7 +1900,7 @@ export class World {
       }
       const rr = b.r + CFG.playerRadius - 2;
       if (dx * dx + dy * dy < rr * rr) {
-        if (this.hurtPlayer(b.dmg, b.x, b.y)) b.dead = true;
+        if (this.hurtPlayer(b.dmg, b.x, b.y, b.from || b.sprite)) b.dead = true;
       }
     }
   }
@@ -1391,6 +1939,7 @@ export class World {
     k.vy = Math.sin(a) * s * 0.6;
     k.value = value;
     k.golden = golden;
+    k.censored = false;
     k.state = 0;
     k.speed = 0;
     k.t = 0;
@@ -1412,11 +1961,15 @@ export class World {
         break;
       }
     }
-    // don't drop food at full HP - give coins instead
-    if ((kind === "onigiri" || kind === "cake") && this.player.hp >= this.player.maxHp) kind = "coin";
+    // don't drop food at full HP (or when food is censored) - give coins instead
+    let censored = false;
+    if (kind === "onigiri" || kind === "cake") {
+      censored = !this.difficulty.food;
+      if (censored || this.player.hp >= this.player.maxHp) kind = "coin";
+    }
     if (kind === "coin") {
       const n = r.int(3, 6);
-      for (let i = 0; i < n; i++) this.dropPickup("coin", x, y, 1);
+      for (let i = 0; i < n; i++) this.dropPickup("coin", x, y, 1).censored = censored;
     } else this.dropPickup(kind, x, y);
   }
 
@@ -1491,6 +2044,10 @@ export class World {
       ev.tier = g.tier;
       this.bus.emit("gem", ev);
     }
+    if (this.hooks.has("gem")) {
+      this.hValue.value = gain;
+      this.hooks.emit("gem", this.hValue);
+    }
     this.addXp(gain);
   }
 
@@ -1560,7 +2117,7 @@ export class World {
         k.vx *= decay;
         k.vy *= decay;
         if (k.t < 0.35) continue;
-        if (k.kind === "coin") {
+        if (k.kind === "coin" || k.kind === "heart") {
           if (d2 < pr2) {
             k.state = 1;
             k.speed = CFG.gemStartSpeed;
@@ -1622,15 +2179,26 @@ export class World {
   private collectPickup(k: Pickup): void {
     k.dead = true;
     const p = this.player;
+    const hp = this.hPickup;
+    hp.kind = k.kind;
+    hp.x = k.x;
+    hp.y = k.y;
+    hp.value = 1;
     switch (k.kind) {
       case "coin": {
         const v = k.value * this.stats.greed;
         this.coins += v;
         this.emit("coin", { x: k.x, y: k.y, value: v });
+        hp.value = v;
+        this.hooks.emit("pickup", hp);
         return;
       }
       case "onigiri":
         this.heal(20);
+        break;
+      case "heart":
+        this.heal(k.value);
+        hp.value = k.value;
         break;
       case "cake":
         this.heal(50);
@@ -1651,9 +2219,11 @@ export class World {
       case "chest":
         this.pendingChests.push({ golden: k.golden });
         this.emit("chestCollected", { x: k.x, y: k.y, golden: k.golden });
+        this.hooks.emit("pickup", hp);
         return;
     }
     this.emit("pickup", { kind: k.kind, x: k.x, y: k.y });
+    this.hooks.emit("pickup", hp);
   }
 
   /** Pull every gem (and coin) toward the player. */
@@ -1684,7 +2254,9 @@ export class World {
       this.xpNext = xpToNext(this.level);
       this.pendingLevels++;
       this.emit("levelUp", { level: this.level, x: this.player.x, y: this.player.y });
-      this.heal(Math.max(3, this.player.maxHp * CFG.levelHeal));
+      if (this.difficulty.levelHeal) this.heal(Math.max(3, this.player.maxHp * CFG.levelHeal));
+      this.hLevel.level = this.level;
+      this.hooks.emit("levelUp", this.hLevel);
     }
   }
 
@@ -1698,21 +2270,66 @@ export class World {
 
   addWeapon(id: string, level = 1): WeaponInstance | null {
     const def = WEAPONS.get(id);
-    if (!def || this.hasWeapon(id) || this.weapons.length >= CFG.weaponSlots) return null;
+    if (!def || this.hasWeapon(id) || this.weapons.length >= this.weaponSlots) return null;
     const used = new Set(this.weapons.map((w) => w.slot));
     let slot = 0;
     while (used.has(slot)) slot++;
-    const inst: WeaponInstance = { def, level: Math.min(level, def.levels.length), slot, timer: 0.25, t: 0, projs: [], uids: [], data: {}, damage: 0, kills: 0 };
+    const inst: WeaponInstance = {
+      def,
+      level: Math.min(level, this.weaponMaxLevel(def)),
+      slot,
+      timer: 0.25,
+      t: 0,
+      projs: [],
+      uids: [],
+      data: {},
+      damage: 0,
+      kills: 0,
+      dmgMul: this.weaponDamageMul(def),
+    };
     this.weapons.push(inst);
     this.weapons.sort((a, b) => a.slot - b.slot);
     this.buildVersion++;
+    if (!this.weaponsUsed.includes(id)) this.weaponsUsed.push(id);
+    if (this.statMods.length) this.statsDirty = true;
     def.init?.(this, inst);
     return inst;
   }
 
   setWeaponLevel(inst: WeaponInstance, level: number): void {
-    inst.level = Math.max(1, Math.min(inst.def.levels.length, level));
+    inst.level = Math.max(1, Math.min(this.weaponMaxLevel(inst.def), level));
     this.buildVersion++;
+  }
+
+  /**
+   * Highest level of a weapon in this run: its levels plus the mastery Limit
+   * Break bonus (RunConfig.weaponLevelBonus, base weapons only). An evolution
+   * instead inherits +CFG.limitBreakInherit damage per Limit Break level its
+   * base had when it evolved (docs/content/weapons.md §4).
+   */
+  weaponMaxLevel(def: WeaponDef): number {
+    const lb = this.run.weaponLevelBonus;
+    if (!lb || def.evolved) return def.levels.length;
+    return def.levels.length + Math.max(0, Math.min(4, Math.floor(lb[def.id] ?? 0)));
+  }
+
+  /** Mastery damage multiplier of a weapon (RunConfig.weaponDamage; an evolution adds its base weapon's entry). */
+  weaponDamageMul(def: WeaponDef): number {
+    const wd = this.run.weaponDamage;
+    const wb = this.weaponBonus;
+    let k = (wd?.[def.id] ?? 0) + (wb[def.id] ?? 0);
+    if (def.evolved) {
+      const b = baseWeaponOf(def);
+      if (b !== def) k += (wd?.[b.id] ?? 0) + (wb[b.id] ?? 0);
+    }
+    return k === 0 ? 1 : 1 + Math.max(-0.9, k);
+  }
+
+  /** May the level-up cards offer this weapon / passive as NEW (pool + banish)? */
+  inPool(kind: "weapon" | "passive", id: string): boolean {
+    if (this.banished.has(id)) return false;
+    const pool = kind === "weapon" ? this.run.weaponPool : this.run.passivePool;
+    return !pool || pool.includes(id);
   }
 
   /** Replace a maxed base weapon with its evolution (same slot, keeps damage stats). */
@@ -1723,10 +2340,27 @@ export class World {
     for (let i = 0; i < inst.projs.length; i++) if (inst.projs[i].uid === inst.uids[i]) inst.projs[i].dead = true;
     inst.projs.length = 0;
     inst.uids.length = 0;
-    const next: WeaponInstance = { def: evo, level: 1, slot: inst.slot, timer: 0.1, t: 0, projs: [], uids: [], data: {}, damage: inst.damage, kills: inst.kills };
+    // Limit Break inheritance: +15% per Limit Break level the base reached before evolving
+    const lbInherit = CFG.limitBreakInherit * Math.max(0, inst.level - inst.def.levels.length);
+    const next: WeaponInstance = {
+      def: evo,
+      level: 1,
+      slot: inst.slot,
+      timer: 0.1,
+      t: 0,
+      projs: [],
+      uids: [],
+      data: {},
+      damage: inst.damage,
+      kills: inst.kills,
+      dmgMul: this.weaponDamageMul(evo) + lbInherit,
+      lbInherit,
+    };
     const i = this.weapons.indexOf(inst);
     this.weapons[i] = next;
     this.buildVersion++;
+    if (!this.weaponsUsed.includes(evo.id)) this.weaponsUsed.push(evo.id);
+    if (this.statMods.length) this.statsDirty = true;
     evo.init?.(this, next);
     this.emit("evolution", { weapon: evo.id, name: evo.name, x: this.player.x, y: this.player.y });
     return next;
@@ -1734,9 +2368,10 @@ export class World {
 
   addPassive(id: string, level = 1): PassiveInstance | null {
     const def = PASSIVE_BY_ID.get(id);
-    if (!def || this.passiveLevel(id) > 0 || this.passives.length >= CFG.passiveSlots) return null;
+    if (!def || this.passiveLevel(id) > 0 || this.passives.length >= this.passiveSlots) return null;
     const pi: PassiveInstance = { def, level: Math.min(level, def.levels.length) };
     this.passives.push(pi);
+    if (!this.passivesUsed.includes(id)) this.passivesUsed.push(id);
     this.buildVersion++;
     this.recomputeStats();
     return pi;
@@ -1750,12 +2385,29 @@ export class World {
     this.recomputeStats();
   }
 
-  /** base -> hero trait -> meta ranks -> passives. Keeps current HP when max HP grows. */
+  /**
+   * base -> hero trait -> legacy Dream Shop ranks -> RunConfig.mods -> relic mods
+   * -> talent mods -> constellation -> passives -> run modifiers (statMods).
+   * Keeps current HP when max HP grows.
+   */
   recomputeStats(): void {
     const s = baseStats();
     this.hero.apply(s);
     applyMeta(s, this.meta);
+    const run = this.run;
+    for (let i = 0; i < run.mods.length; i++) run.mods[i](s);
+    for (const r of run.relics) RELICS.get(r.id)?.mods?.(s, relicStars(r.stars));
+    const tree = TALENT_TREES.get(this.hero.id);
+    if (tree)
+      for (const n of tree.nodes) {
+        if (!n.mods) continue;
+        const rank = talentRank(run.talents[n.id], n.maxRank);
+        if (rank > 0) n.mods(s, rank);
+      }
+    const cons = this.hero.constellations;
+    if (cons) for (let i = 0; i < Math.min(cons.length, this.cons); i++) cons[i].mods?.(s);
     for (const p of this.passives) p.def.apply(s, p.level);
+    for (let i = 0; i < this.statMods.length; i++) this.statMods[i](s);
     finalizeStats(s);
     const p = this.player;
     const grow = s.maxHp - p.maxHp;
@@ -1776,12 +2428,60 @@ export class World {
 
   /** Spend a reroll; returns the new offer, or null when none are left. */
   reroll(): UpgradeCard[] | null {
-    if (this.rerolls <= 0) return null;
+    if (!this.difficulty.rerolls) return null;
+    if (this.rerolls <= 0 && !this.freeRerolls) return null;
     // a maxed build only gets the Heal / Star Pouch fallbacks: rerolling can't change anything, keep the reroll
     if (!this.canReroll) return this.offer();
-    this.rerolls--;
+    if (!this.freeRerolls) this.rerolls--;
     this.currentOffer = makeOffer(this, this.stats.cards);
+    this.hooks.emit("reroll", { left: this.rerolls });
     return this.currentOffer;
+  }
+
+  /** Rerolls the level-up modal may still use (Infinity with free rerolls). */
+  get rerollsLeft(): number {
+    if (!this.difficulty.rerolls) return 0;
+    return this.freeRerolls ? Infinity : this.rerolls;
+  }
+
+  /**
+   * Banish a weapon / passive card of the current offer: its item never shows
+   * up again this run (NEW or upgrade) and the card is replaced. Returns the
+   * new offer, or null when no banish is left / the card can't be banished.
+   */
+  banish(card: UpgradeCard): UpgradeCard[] | null {
+    if (this.banishes <= 0 || !this.canBanish(card)) return null;
+    const offer = this.offer();
+    const i = offer.indexOf(card);
+    if (i < 0) return null;
+    this.banishes--;
+    this.banished.add(card.id);
+    offer[i] = banishCard(this, offer, i);
+    this.hooks.emit("banish", { id: card.id });
+    return offer;
+  }
+
+  /** Weapon / passive cards can be banished (evolutions and the Heal / Star Pouch fallbacks can't). */
+  canBanish(card: UpgradeCard): boolean {
+    return card.kind === "weapon" || card.kind === "passive";
+  }
+
+  /**
+   * Skip the pending level-up (RunConfig.flags.skip): no card, a refund of
+   * CFG.skipXp of the current level's XP cost and CFG.skipCoins coins.
+   * Returns false when no skip is left.
+   */
+  skipLevelUp(): boolean {
+    if (this.skips <= 0 || this.pendingLevels <= 0) return false;
+    this.skips--;
+    const lv = this.level - this.pendingLevels + 1;
+    this.currentOffer = null;
+    this.pendingLevels--;
+    this.coins += Math.round(CFG.skipCoins * this.stats.greed);
+    this.hooks.emit("skip", { level: lv });
+    // (the refund may chain into the next level: it is queued like any other)
+    this.addXp(this.xpNext * CFG.skipXp);
+    return true;
   }
 
   /** A reroll could produce a different offer (false once only the heal / coins fallbacks remain). */
@@ -1808,13 +2508,14 @@ export class World {
     if (!c) return null;
     const res = rollChest(this, c.golden);
     this.emit("chestOpened", res);
+    this.hooks.emit("chest", res);
     return res;
   }
 
   // ================================================================ summary
   summary(): RunSummary {
     const weapons = this.weapons.map((w) => ({ id: w.def.id, name: w.def.name, icon: w.def.icon, damage: Math.round(w.damage), kills: w.kills, level: w.level }));
-    const ultDef = ULTIMATES.get(this.hero.ult);
+    const ultDef = ULTIMATES.get(this.ultId);
     if (ultDef) {
       const d = this.damageBy.get(ultDef.id) ?? 0;
       if (d > 0) weapons.push({ id: ultDef.id, name: ultDef.name, icon: "", damage: Math.round(d), kills: 0, level: 0 });
@@ -1830,6 +2531,9 @@ export class World {
       victory: this.phase === "victory",
       damageTaken: this.damageTaken,
       weapons,
+      stage: this.stage.id,
+      stageCleared: this.stageCleared,
+      stats: this.collector.finish(),
     };
   }
 }

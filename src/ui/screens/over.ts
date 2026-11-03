@@ -1,10 +1,13 @@
 /**
- * Game over ("DREAM OVER…") and victory ("DAWN BREAKS!").
+ * Game over - the "TO BE CONTINUED ->" death stinger (docs/content/satire.md
+ * §4) - and victory (the stage's own text, "DAWN BREAKS!" in Dream Meadow).
  *
- * Defeat: the hero's portrait (greyed, tilted), a "so close" line (the boss's
- * HP left / the next boss's arrival / the gap to the best time), REVIVE when
- * owned, and RETRY next to RESULTS. RETRY banks the run exactly like the
- * Results screen (recordRun, once) before starting the next one, so coins,
+ * Defeat: the frozen frame goes sepia, the chunky arrow banner slides in from
+ * the right, a subtitle line (the killing boss's own line, a speedrun line, or
+ * a generic one), the hero's portrait (greyed, tilted), a "so close" line (the
+ * boss's HP left / the next boss's arrival / the gap to the best time), REVIVE
+ * when owned, and RETRY next to RESULTS. RETRY banks the run exactly like the
+ * Results screen (App.bankRun, once) before starting the next one, so coins,
  * bests and the run counter are never lost.
  */
 import { CFG } from "../../game/config";
@@ -14,7 +17,10 @@ import { BOSSES } from "../../game/registry";
 import type { World } from "../../game/world";
 import type { App, UiScreen } from "../app";
 import { esc, fmtTime, h, img, letters } from "../dom";
-import { recordRun, save } from "../save";
+import { deathLine } from "../hub/copy";
+import { portrait } from "../kit/art";
+import { save } from "../save";
+import { tbcBanner } from "../stinger";
 import { layer, onTap, sparkles } from "./common";
 
 /** "m:ss" */
@@ -47,22 +53,27 @@ function soClose(w: World): string {
 }
 
 export function openGameOver(app: App, w: World, victory: boolean): UiScreen {
-  const el = h("div", `modal ${victory ? "victory" : "gameover"}`);
+  const el = h("div", `modal ${victory ? "victory" : "gameover tbc-over"}`);
   const canRevive = !victory && w.revivesLeft > 0;
   const hd = heroDef(w.hero.id);
+  const killer = BOSSES.get(w.killedBy);
+  const sub = deathLine(w.t, killer?.name, { hero: hd.name, n: app.currentEpisode.n, time: fmtTime(w.t) });
+  const vic = w.stage.victory;
   el.innerHTML = victory
     ? `
     ${sparkles(30)}
-    <div class="over-t">${letters("DAWN BREAKS!", "ltr", 0.08)}</div>
-    <div class="over-s">the nightmare stampede fades with the sunrise<br>${fmtTime(w.t)} · LV ${w.level} · ${w.kills} KO</div>
+    <div class="over-t">${letters(vic.title || "DAWN BREAKS!", "ltr", 0.08)}</div>
+    <div class="over-s">${esc(vic.line || "the nightmare stampede fades with the sunrise")}<br>${fmtTime(w.t)} · LV ${w.level} · ${w.kills} KO</div>
     <div class="btn-row">
       <button class="btn" data-nav data-nav-default data-act="results">RESULTS ▶</button>
     </div>`
     : `
-    <div class="over-por" style="--hc:${app.heroColor(hd.id)}">${img(hd.portrait, "px", 0, 3)}<i class="sweat"></i></div>
-    <div class="over-t">${letters("DREAM OVER…", "ltr", 0.08)}</div>
+    <div class="sepia" aria-hidden="true"></div>
+    ${tbcBanner()}
+    <div class="over-sub">${esc(sub)}</div>
+    <div class="over-por" style="--hc:${app.heroColor(hd.id)}">${portrait(hd.portrait, 0, "pimg")}<i class="sweat"></i></div>
     <div class="over-close">${soClose(w)}</div>
-    <div class="over-s">${fmtTime(w.t)} · LV ${w.level} · ${w.kills} KO</div>
+    <div class="over-s">EPISODE ${app.currentEpisode.n} · ${fmtTime(w.t)} · LV ${w.level} · ${w.kills} KO</div>
     <div class="btn-row">
       ${canRevive ? `<button class="btn gold" data-nav data-nav-default data-act="revive">${img("icon_hp_up")} REVIVE (${w.revivesLeft})</button>` : ""}
       <button class="btn${canRevive ? " small" : ""}" data-nav ${canRevive ? "" : "data-nav-default"} data-act="retry">↻ RETRY</button>
@@ -83,9 +94,8 @@ export function openGameOver(app: App, w: World, victory: boolean): UiScreen {
     if (t < 0.5 || banked) return;
     // bank the run like the Results screen does (coins, bests, run counter), then go again
     banked = true;
-    recordRun(w.summary());
     app.sfx("uiConfirm");
-    app.retry();
+    app.retryFromGameOver();
   });
   onTap(el.querySelector('[data-act="results"]'), () => {
     if (t < 0.5 || banked) return;
@@ -93,7 +103,10 @@ export function openGameOver(app: App, w: World, victory: boolean): UiScreen {
     app.endRun();
   });
   // victory: the sfx + victory track already started with the "victory" event (feedback.ts)
-  if (!victory) app.sfx("gameOver");
+  if (!victory) {
+    app.sfx("gameOver");
+    setTimeout(() => app.sfx("toBeContinued"), 180);
+  }
   return {
     el,
     layer: layer(el),

@@ -40,10 +40,25 @@ export const CFG = {
   damageVariance: 0.12,
   /** Each level-up heals this fraction of max HP (min 3): steady sustain that rewards killing. */
   levelHeal: 0.03,
-  // build
+  // build (defaults; RunConfig.weaponSlots / passiveSlots override them per run)
   weaponSlots: 6,
   passiveSlots: 6,
   maxLevel: 5,
+  /**
+   * Generic weapon Limit Break (mastery: RunConfig.weaponLevelBonus) for a weapon
+   * without its own WeaponDef.limitBreak entries: every level past the last
+   * defined one gives +limitBreakDmg damage (additive fraction) and +1 amount.
+   */
+  limitBreakDmg: 0.2,
+  /** An evolution inherits this much extra damage per Limit Break level its base weapon had when it evolved. */
+  limitBreakInherit: 0.15,
+  /** Level-up skip refund: this fraction of the current level's XP cost, plus coins. */
+  skipXp: 0.25,
+  skipCoins: 10,
+  /** Seconds to recharge one shield charge (Stats.shield) by default. */
+  shieldCd: 15,
+  /** Plot Armor (keystone / relics): seconds of invulnerability after surviving a lethal hit (talents may raise it). */
+  plotArmorIframes: 1,
   rerolls: 2,
   baseCards: 3,
   // combo / overdrive
@@ -159,7 +174,16 @@ export function rankFor(count: number): number {
   return r;
 }
 
-/** Damage channels for per-enemy re-hit cooldowns (Enemy.lastHit). 0..5 are weapon slots. */
-export const CH_ULT = 6;
-export const CH_MISC = 7;
-export const CHANNELS = 8;
+/** Most weapon slots a build can ever have (RunConfig.weaponSlots is clamped to it). */
+export const MAX_WEAPON_SLOTS = 8;
+/** Most passive slots a build can ever have. */
+export const MAX_PASSIVE_SLOTS = 8;
+/**
+ * Damage channels for per-enemy re-hit cooldowns (Enemy.lastHit). 0..MAX_WEAPON_SLOTS-1
+ * are weapon slots (a board-bought 7th / 8th slot gets its own channel).
+ */
+export const CH_ULT = MAX_WEAPON_SLOTS;
+export const CH_MISC = MAX_WEAPON_SLOTS + 1;
+/** Relic / talent / twist effects (their own re-hit channel, so an aura never blocks a weapon). */
+export const CH_RELIC = MAX_WEAPON_SLOTS + 2;
+export const CHANNELS = MAX_WEAPON_SLOTS + 3;

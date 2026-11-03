@@ -1,9 +1,12 @@
 /**
- * Draws the simulation state through the renderer every frame: meadow, deco,
- * enemies (hit flash, squash, pop-in, elite rainbow aura), the hero (anim
- * state, i-frame blink, dash afterimages, HP bar), projectiles (data-driven
- * visuals + trails), enemy bullets, gems (streak trails), pickups, chests,
- * telegraphs and screen overlays. Reads the world; never mutates it.
+ * Draws the simulation state through the renderer every frame: the stage
+ * ground + deco (ground.ts) and its look (stage-view.ts: grade, ambient
+ * layers, sim directives), enemies (hit flash, squash, pop-in, elite rainbow
+ * aura, re-skin tints), the hero (anim state, i-frame blink, dash
+ * afterimages, HP bar, dash charge pips, shield bubble), projectiles
+ * (data-driven visuals + trails), enemy bullets, gems (streak trails),
+ * pickups, chests, telegraphs, relic flourishes and screen overlays. Reads
+ * the world; never mutates it.
  */
 import { C } from "../art/palette";
 import { lerpColor, rainbow } from "../core/color";
@@ -20,6 +23,8 @@ import { WorldTexts } from "./texts";
 import { TRAILS } from "./trails";
 import { WeaponFx } from "./weapon-fx";
 import { BestiaryFx } from "./bestiary-fx";
+import { RelicFx } from "./relic-fx";
+import { StageLook } from "./stage-view";
 
 interface HeroAnims {
   idle: number;
@@ -45,6 +50,10 @@ export class WorldView {
   readonly weaponFx: WeaponFx;
   /** Bestiary visuals (telegraph looks, boss auras, moon ring, death throes, victory dawn, grade overrides). */
   readonly bestiary: BestiaryFx;
+  /** The stage's look: grade keyframes, ambient layers, music ids, sim stageFx directives. */
+  readonly stage: StageLook;
+  /** Relic / talent / twist flourishes (relicProc events) and the Filler Arc banner. */
+  readonly relics: RelicFx;
   private hero!: HeroAnims;
   private heroSq = { x: 1, v: 0 };
   private trail: TrailEmitter;
@@ -56,6 +65,7 @@ export class WorldView {
   private hStreak: number;
   private hBeam: number;
   private hFlare: number;
+  private hHeart: number;
   /** In-world hero HUD (HP bar, dash pip). Off for the title-screen attract mode. */
   heroHud = true;
   /** Seconds left of the hero beacon forced on by a blast over the hero (coverHero). */
@@ -98,10 +108,13 @@ export class WorldView {
     this.texts = new WorldTexts(r);
     this.weaponFx = new WeaponFx(r, fx, this.anims, this.texts, (sec) => this.coverHero(sec));
     this.bestiary = new BestiaryFx(r, fx, this.anims, this.texts, (s) => this.pose(s));
+    this.stage = new StageLook(r, fx);
+    this.relics = new RelicFx(r, fx, this.texts);
     this.trail = new TrailEmitter(fx.ghosts, 0.024, 0.3, 0.62);
     this.hStreak = r.atlas.handle("fx_streak");
     this.hBeam = r.atlas.handle("fx_beam");
     this.hFlare = r.atlas.handle("fx_flare");
+    this.hHeart = r.atlas.handle("icon_heart");
     this.setWorld(w);
   }
 
@@ -124,10 +137,23 @@ export class WorldView {
     };
     this.texts.clear();
     this.lines.length = 0;
+    this.ground.setStage(w.stage);
+    this.stage.setWorld(w);
     this.weaponFx.setWorld(w);
     this.bestiary.setWorld(w);
+    this.relics.setWorld(w);
     this.hpGhost = 1;
   }
+
+  /** Animation clock for sprites: the stage's still frames / frame-rate cap (stageFx) quantize it. */
+  private animTime(t: number): number {
+    const st = this.stage;
+    if (st.stillT > 0) return this.stillAt;
+    this.stillAt = t;
+    const fps = st.animFps;
+    return fps > 0 ? Math.floor(t * fps) / fps : t;
+  }
+  private stillAt = 0;
 
   /** Rin ult slash line (from the feedback bridge). */
   addSlashLine(x0: number, y0: number, x1: number, y1: number): void {
@@ -157,6 +183,7 @@ export class WorldView {
     const r = this.r;
     const w = this.w;
     this.frameN++;
+    time = this.animTime(time);
     this.ground.draw(time, w.player.x, w.player.y);
     this.drawTelegraphs(time);
     this.drawPickups(time);
@@ -170,6 +197,8 @@ export class WorldView {
     this.drawBullets(time);
     this.drawDeadHero();
     this.bestiary.draw(time, dt, realDt);
+    this.relics.draw(time, realDt);
+    this.stage.draw(realDt);
     this.drawLines(realDt);
     this.texts.update(realDt);
     // banners ("MAGNET!", "BOOM!") go on top of the damage numbers: drawn at the end of fx.dmg.draw()
@@ -197,14 +226,17 @@ export class WorldView {
     // hero down: enemies right on top of her fade so the death pose reads
     const pl = w.player;
     const down = pl.dead;
+    const capFps = this.stage.stillT > 0 ? 0.001 : this.stage.animFps;
     for (let i = 0; i < w.enemies.count; i++) {
       const e = items[i];
       if (e.dead) continue;
       if (!cam.inView(e.x, e.y - e.cy, e.r + 28)) continue;
       const def = e.def;
-      const a = this.anims.fps(def.sprite, def.fps ?? 0);
-      // hop/flap in sync with the behaviour timer
-      let f = Math.floor((e.t + (e.a % 1)) * a.fps) % a.count;
+      // (a per-enemy skin re-dresses one enemy, e.g. the Rival (Recolour) as another hero)
+      const a = this.anims.fps(e.skin || def.sprite, def.fps ?? 0);
+      // hop/flap in sync with the behaviour timer (stage still frames / fps caps quantize it)
+      const et = capFps > 0 ? Math.floor(e.t * capFps) / capFps : e.t;
+      let f = Math.floor((et + (e.a % 1)) * a.fps) % a.count;
       if (frozen) f = 0;
       else if (def.frame) {
         const o = def.frame(e);
@@ -218,7 +250,7 @@ export class WorldView {
       const sy = sq * s;
       const y = e.y - e.z;
       r.shadow(e.x, e.y, def.shadow * e.scale * (1 - Math.min(0.4, e.z / 30)), def.prop ? 0.8 : 1);
-      const tint = frozen ? C.lightBlue : 0xffffff;
+      const tint = frozen ? C.lightBlue : (def.tint ?? 0xffffff);
       const flash = e.flash > 0 ? 1 : 0;
       let ea = e.alpha;
       if (down) {
@@ -227,7 +259,9 @@ export class WorldView {
         const rr = 40 + e.r;
         if (dx * dx + dy * dy < rr * rr) ea *= 0.5;
       }
-      if (e.elite || def.boss) {
+      // (Studio Change twist: an elite's outline only appears once it has been hit)
+      const outline = def.boss || (e.elite && !(w.look.eliteOutlineOnHit && e.hp >= e.maxHp));
+      if (outline) {
         // pulsing rainbow OUTLINE: four 1px-offset tinted silhouettes just behind the
         // sprite (sort key a hair smaller) so the enemy itself stays fully readable.
         const c = e.elite ? rainbow(time * 0.8 + e.uid * 0.1, 0.7) : C.pink;
@@ -338,6 +372,27 @@ export class WorldView {
     if (p.dashCd > 0 && !p.dead && this.heroHud) {
       const f = 1 - p.dashCd / Math.max(0.01, p.dashMax);
       r.rect(Layer.Text, Math.round(p.x - 6), Math.round(p.y + 7), 12 * f, 1, C.aqua, 0.8);
+    }
+    // multiple dash charges: one pip per charge (lit = ready) under the recharge bar
+    if (p.dashChargesMax > 1 && !p.dead && this.heroHud) {
+      const n = p.dashChargesMax;
+      const x0 = Math.round(p.x - (n * 4 - 1) / 2);
+      const py = Math.round(p.y + 9);
+      for (let i = 0; i < n; i++) {
+        const on = i < p.dashCharges;
+        r.rect(Layer.Text, x0 + i * 4 - 1, py - 1, 4, 3, C.outline, 0.85);
+        r.rect(Layer.Text, x0 + i * 4, py, 2, 1, on ? C.aqua : C.lavender, on ? 1 : 0.35);
+      }
+    }
+    // shield charges: a soft bubble + one star pip per charge above the HP bar
+    if (p.shield > 0 && !p.dead) {
+      const q = 0.5 + 0.5 * Math.sin(time * 3.1);
+      r.ring(Layer.Fx, p.x, p.y - 9, 12 + q, C.cyan, 0.25 + 0.15 * q, Flag.Add | Flag.Glow);
+      if (this.heroHud) {
+        const n = Math.min(6, p.shield);
+        const x0 = Math.round(p.x - (n * 3 - 1) / 2);
+        for (let i = 0; i < n; i++) r.rect(Layer.Text, x0 + i * 3, Math.round(p.y + 1), 2, 1, C.cyan, 0.95);
+      }
     }
   }
 
@@ -605,6 +660,8 @@ export class WorldView {
           if (k.state !== 1) r.shadow(k.x, k.y, 6 * cs, 0.55);
           if (cs > 1) r.glow(k.x, k.y - k.z - 3 * cs, 7 * cs, C.yellow, 0.3 + 0.1 * Math.sin(time * 5 + i));
           r.spr(Layer.Entity, h, k.x, k.y - k.z - 3 * cs, cs, cs, 0, 0xffffff, 1, 0, Flag.Glow);
+          // Censored twist: the coins that replaced food wear a black bar
+          if (k.censored) r.rect(Layer.Text, Math.round(k.x - 5), Math.round(k.y - k.z - 4 * cs), 10, 3, C.outline, 1);
           break;
         }
         case "chest": {
@@ -618,6 +675,14 @@ export class WorldView {
           const wob = Math.sin(time * 9) * 0.06;
           r.spr(Layer.Entity, a.first, k.x, k.y - k.z, (1 + wob) * (gold ? 1.25 : 1), (1 - wob) * (gold ? 1.25 : 1), 0, gold ? C.paleYellow : 0xffffff, 1, 0, 0);
           if (Math.floor(time * 3 + i) % 4 === 0) b.drawP(Layer.FxAdd, this.hFlare, k.x + Math.sin(time * 7) * 7, k.y - 14, 0.4, 0.4, time, C.white, 0.8, 0, Flag.Add | Flag.Glow | Flag.NoSnap, 8, 8);
+          break;
+        }
+        case "heart": {
+          // relic heart: small, pink, bobbing, magnet-pulled like a coin
+          const pulse = 0.85 + 0.15 * Math.sin(time * 8 + i);
+          if (k.state !== 1) r.shadow(k.x, k.y, 5, 0.5);
+          r.glow(k.x, k.y - k.z - 4 + bob, 8, C.pink, 0.35 * pulse);
+          r.spr(Layer.Entity, this.hHeart, k.x, k.y - k.z - 4 + bob, 0.6 * pulse, 0.6 * pulse, 0, 0xffffff, 1, 0, Flag.Glow);
           break;
         }
         default: {

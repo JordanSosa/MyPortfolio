@@ -1,14 +1,49 @@
 /**
  * Star Shot (Hoshi): bursts of homing stars at the nearest enemies.
  * Evolution: Galaxy Barrage (+ Wish Charm) - a rotating spiral stream of homing stars.
+ *
+ * Hoshi's talents (talents/hoshi.ts) read here, for both forms: Fan Chant
+ * rank 3 = +1 pierce, Backup Dancers = +1 star (spiral arm) per rank.
  */
 import { C } from "../../art/palette";
 import { TAU } from "../../core/math";
-import { PK_FREE, ROT_SPIN, type Enemy, type ProjHook, type WeaponDef, type WeaponInstance } from "../types";
+import { PK_FREE, ROT_SPIN, type Enemy, type ProjHook, type Projectile, type WeaponDef, type WeaponInstance } from "../types";
 import type { World } from "../world";
 import { fired, wstats, type WStats } from "./_shared";
 
 const targets: Enemy[] = [];
+
+/** The Star Shot (or Galaxy Barrage) instance, for damage attribution of talent / constellation stars. */
+export function starInst(w: World): WeaponInstance | null {
+  return w.hasWeapon("star_shot") ?? w.hasWeapon("galaxy_barrage") ?? null;
+}
+
+/** A small homing star from (x, y) toward angle a (Hoshi's talent / constellation shots, `source` = their id). */
+export function miniStar(w: World, owner: WeaponInstance | null, source: string, x: number, y: number, a: number, dmg: number, tgt: Enemy | null, scale = 0.7): Projectile {
+  const sp = 170 * w.stats.projSpeed;
+  const p = w.spawnProjectile(owner, source);
+  p.kind = PK_FREE;
+  p.x = x;
+  p.y = y;
+  p.speed = sp;
+  p.vx = Math.cos(a) * sp;
+  p.vy = Math.sin(a) * sp;
+  p.homing = 7;
+  p.target = tgt;
+  p.targetUid = tgt ? tgt.uid : 0;
+  p.r = 4;
+  p.dmg = dmg;
+  p.pierce = 1;
+  p.knock = 18;
+  p.life = 1.1;
+  p.sprite = "w_star";
+  p.scale = scale;
+  p.rotMode = ROT_SPIN;
+  p.spin = 12;
+  p.glow = true;
+  p.trail = "star";
+  return p;
+}
 
 function fireStar(w: World, inst: WeaponInstance, S: WStats, index: number): void {
   const pl = w.player;
@@ -33,7 +68,7 @@ function fireStar(w: World, inst: WeaponInstance, S: WStats, index: number): voi
   p.targetUid = target ? target.uid : 0;
   p.r = 5;
   p.dmg = S.dmg;
-  p.pierce = S.pierce;
+  p.pierce = S.pierce + (w.talentRank("hoshi_fan_chant") >= 3 ? 1 : 0);
   p.knock = S.knock;
   p.life = 1.7;
   p.sprite = "w_star";
@@ -59,6 +94,11 @@ export const starShot: WeaponDef = {
   ],
   upgrades: ["+1 star", "Damage +4, cooldown -12%, pierces 1 more", "+1 star", "Damage +4, +1 star, pierces 1 more"],
   evolution: { into: "galaxy_barrage", with: "wish_charm" },
+  // mastery Limit Breaks (docs/content/weapons.md §4): Lv6 at rank 5, Lv7 at rank 10
+  limitBreak: [
+    { dmg: 0.15, amount: 1, text: "LIMIT BREAK — Idol Stamina: +1 star, +15% damage" },
+    { dmg: 0.25, amount: 1, cd: 0.9, text: "MASTERED — Sold-Out Show: +1 star, +25% damage, −10% cooldown" },
+  ],
   update(w, inst, dt) {
     const S = wstats(w, inst);
     const d = inst.data;
@@ -79,7 +119,7 @@ export const starShot: WeaponDef = {
       return;
     }
     inst.timer = S.cd;
-    d.queue = S.amount;
+    d.queue = S.amount + w.talentRank("hoshi_backup_dancers");
     d.qt = 0;
     d.shot = 0;
     fired(w, inst, pl.x, pl.y);
@@ -107,7 +147,9 @@ export const galaxyBarrage: WeaponDef = {
     d.spin = ((d.spin ?? 0) + 2.7 * dt) % TAU;
     inst.timer -= dt;
     const pl = w.player;
-    const arms = Math.min(6, S.amount);
+    const dancers = w.talentRank("hoshi_backup_dancers");
+    const arms = Math.min(6 + dancers, S.amount + dancers);
+    const pierce = S.pierce + (w.talentRank("hoshi_fan_chant") >= 3 ? 1 : 0);
     while (inst.timer <= 0) {
       inst.timer += Math.max(0.06, S.cd);
       d.n = (d.n ?? 0) + 1;
@@ -124,7 +166,7 @@ export const galaxyBarrage: WeaponDef = {
         p.update = galaxyStar;
         p.r = 6;
         p.dmg = S.dmg;
-        p.pierce = S.pierce;
+        p.pierce = pierce;
         p.knock = S.knock;
         p.life = 1.5;
         p.sprite = "w_star_evo";

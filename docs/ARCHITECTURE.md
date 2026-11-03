@@ -18,16 +18,33 @@ src/
   audio/               api.ts (frozen contract) + index.ts `audio` implementation
 
   game/                PURE SIMULATION - no DOM / WebGL / audio imports. Runs in Vitest.
-    world.ts           World: entities, step(dt), combat, pickups, xp, build, ult, combo, chests
+    world.ts           World: entities, step(dt), combat, pickups, xp, build, ult, combo, chests; takes a RunConfig
+                       (stage, endless, twists, mods, pools, Limit Breaks, relics, talents, constellation, start
+                       bonuses, slots, flags), banish / skip, dash charges, shields, Plot Armor, the Filler Arc
+    run-config.ts      CONTRACT with src/meta: RunConfig (+ RUN_FLAGS keys) in, RunStats out (World.summary().stats)
+    defs.ts            CONTRACT: RelicDef, TalentTree / TalentNode (+ TALENT_TIER_POINTS), TwistDef, StageInfo,
+                       ConstellationDef, Rarity
+    stage.ts           StageDef (timeline, opening, props, final boss, endless, tiles / deco / grade / ambient /
+                       music / victory, hooks) + stageInfo / stageBosses / stagePhaseAt helpers
+    hooks.ts           gameplay hook toolkit: SimHooks payload types for `world.hooks` (never muted), Buff,
+                       onDashThrough (shared per-dash sweep)
+    run-stats.ts       RunStatsCollector (hooks -> RunStats counters, finish() at summary time)
     types.ts           entity + content definition types (Enemy, Projectile, WeaponDef, EnemyDef, ...)
     events.ts          GameEvents (typed bus payloads)
-    config.ts          DESIGN numbers (CFG), xpToNext, combo RANKS, damage channels
-    stats.ts           Stats block + modifier chain
-    heroes.ts          hero table (stats trait, start weapon, ult)
+    config.ts          DESIGN numbers (CFG), xpToNext, combo RANKS, damage channels (8 weapon slots, CH_ULT,
+                       CH_MISC, CH_RELIC)
+    stats.ts           Stats block + modifier chain (pipeline order in the header)
+    heroes.ts          hero table (stats trait, start weapon, ult, constellations C1-C6)
     passives.ts        passive table (8 passives x 5 levels)
-    meta.ts            Dream Shop upgrades + costs
-    upgrades.ts        level-up card generation / application, chest rewards
-    registry.ts        auto-registry (import.meta.glob) of weapons / enemies / bosses / ultimates
+    meta.ts            legacy Dream Shop ranks (WorldOptions.meta; tests / balance probe)
+    upgrades.ts        level-up card generation / application (pools, banish, Limit Break cards, Light Novel
+                       titles), chest rewards (chest luck)
+    registry.ts        auto-registry (import.meta.glob) of weapons / enemies / bosses / ultimates / stages /
+                       relics / talent trees / twists (+ registerStage for tests / tools, twistHeat, stageInfos)
+    stages/*.ts        one file per stage (dream-meadow.ts = the original slice, timeline included)
+    relics/*.ts        one file per rarity (n, r, sr, ssr, ur, lr, mythic); `_util.ts` (proc, atStar)
+    talents/*.ts       one tree per hero (hoshi, rin, mochi); `_node.ts` helpers
+    twists/*.ts        Plot Twist groups (production, story, broadcast); `_twist.ts` helpers
     weapons/*.ts       one file per weapon (+ its evolution); `_shared.ts` helpers, `_fx.ts` (weaponFx kinds,
                        reused-payload emit helpers, random on-screen targets)
     enemies/*.ts       one file per enemy behaviour (props too); `_steer.ts` helpers, `_bullets.ts` (fair
@@ -36,13 +53,17 @@ src/
                        state + moon-ring geometry, import-cycle free for the bot / view)
     ultimates/*.ts     one file per hero ultimate
     director/
-      timeline.ts      spawn phases + timed events AS DATA
-      events.ts        event-kind handlers (swarmLine, encircle, flood, elite, boss)
-      director.ts      continuous spawning, props, boss warning/entrance, run end
+      timeline.ts      SpawnPhase / TimelineEvent types + Dream Meadow compat exports (the data lives in stages/)
+      events.ts        event-kind handlers (swarmLine, batStorm, wispRush, encircle, flood, elite, boss)
+      director.ts      stage-driven spawning, props, boss warning/entrance, run end, Filler Arc waves / rematches
 
   view/                draws the world with the renderer (reads the World, never mutates it)
-    world-view.ts      enemies, hero, projectiles, bullets, gems, pickups, telegraphs, overlays
-    ground.ts          infinite procedural meadow + deco (stable per-cell hashing)
+    world-view.ts      enemies (+ per-enemy skins / tints), hero (+ dash charge pips, shield bubble), projectiles,
+                       bullets, gems, pickups (+ relic hearts, censored coins), telegraphs, overlays
+    ground.ts          stage-driven infinite ground: tile region rules + scatter / tall deco (stable per-cell hashing)
+    stage-view.ts      StageLook: grade + ambient keyframes, extra ambient layers, clear colour, stage music ids,
+                       sim `stageFx` directives (grade override, render scale, anim fps cap, speed lines, stills)
+    relic-fx.ts        relic / talent / twist procs, shields, Plot Armor, ENCORE!, the Filler Arc sequence + cards
     trails.ts          projectile trail presets (keyed by Projectile.trail)
     texts.ts           in-world bitmap texts ("LEVEL UP!", "FREEZE!")
     anims.ts           sprite handle cache
@@ -55,6 +76,16 @@ src/
                        juice, boss death throes, the VICTORY dawn sequence and the grade overrides (LUNATIC MOON
                        dim, enrage red, sunrise sweep)
 
+  meta/                PURE ACCOUNT LAYER (Season 2) - no DOM / localStorage. Runs in Vitest. docs/META.md
+    profile.ts         Profile (save v2) type, defaults, field-by-field sanitiser; reconcile.ts content-aware repair
+    tuning.ts          every tunable economy / gacha / board number
+    economy.ts         grade, line-by-line payout, hero XP + mastery curves, costs
+    board/             Training Arc: 120-node constellation (data, layout, costs), buy / refund / respec, applyBoard
+    heroes.ts          levels, talents (tier gating), constellations      gacha/  banners, pity, pulls, spark, exchange
+    achievements/      Plot Points (defs/*.ts auto-registered), evaluation, in-run watcher
+    unlocks.ts codex.ts  unlock rules + hints, discoveries + bounties      legacy.ts transfer.ts  save v1 migration, export string
+    loadout.ts         loadout -> RunConfig (validation)                   rewards.ts  applyRunToProfile -> RunReport
+
   ui/                  DOM: app state machine, HUD, screens, modals, save
     app.ts             App: loop, screens, modals, level-up / chest / game-over flow, settings, run-start stinger,
                        Back-gesture history guard, AutoQuality feed, WebGL draw throttle under modals
@@ -66,7 +97,8 @@ src/
                        OVERDRIVE-ready bubble x2, "fills as you fight" once per run)
     wake.ts            Screen Wake Lock during runs (re-acquired when the page is visible again)
     nav.ts             keyboard / gamepad menu navigation (spatial focus; `refocus` after in-place re-renders)
-    save.ts            persisted save (kko.save.v1), validated on load (`sanitizeSave`), tutorial flags
+    save.ts            THE storage boundary: save v2 (kko.save.v2 Profile), v1 migration, repair, export / import,
+                       runPlan / recordRun, v1-shaped `save.data` view for the pre-hub screens (docs/META.md §2)
     dom.ts             tiny DOM helpers (atlas sprite -> <img>, sprite pre-decode, `Bump` WAAPI one-shots, fmtNum)
     styles.css         all UI styles (palette CSS variables)
     screens/*.ts       splash, title, select, levelup, chest, pause, settings, over, results, shop
@@ -74,8 +106,10 @@ src/
   debug/
     bot.ts             autoplay bot + `simulate()` headless runner (PURE; used by tests, ?autoplay, ?skip, attract,
                        the balance probe; `noDash` / `randomPicks` make the "lazy" weak-player proxy)
-    params.ts          URL params (?autoplay ?seed ?hero ?skip ?god ?mute ?quality ?screen ?fps ?speed)
-    hooks.ts           window.__kk (skipTo, spawn, giveXp, levelUp, chest, ult, give, clearWeapons, pause, endRun, stats ...)
+    params.ts          URL params (?autoplay ?seed ?hero ?skip ?god ?mute ?quality ?screen ?fps ?speed) + Season 2
+                       run configs (?stage ?endless ?twists ?relics ?talents ?cons ?flags ?lb ?startLevel ?slots)
+    hooks.ts           window.__kk (skipTo, spawn, giveXp, levelUp, chest, ult, give, clearWeapons, pause, endRun, stats,
+                       relic, twist, endless, stageFx, runStats ...)
     fps.ts             FPS meter
 
 tests/                 vitest: core math, xp/cards/chests/meta, headless 3-minute bot runs, boss, ults,
@@ -83,16 +117,24 @@ tests/                 vitest: core math, xp/cards/chests/meta, headless 3-minut
                        bullet hygiene), integrity.test.ts (final boss + death on one step, coin merge, a full
                        unmuted run with a listener on every event: bounded lists, victory)
                        quality.test.ts (AutoQuality stepping, guessTier, save validation, fmtNum)
+                       Season 2 sim: stages.test.ts (registry, Dream Meadow parity: frozen run fingerprints +
+                       ground draw-call parity against tests/fixtures/, a test-only second stage), runconfig.test.ts
+                       (stat pipeline, pools, Limit Breaks, slots, start bonuses, flags, banish / skip, bot policy),
+                       effects.test.ts (hook toolkit, every relic, talent trees, constellations, Plot Twists),
+                       endless.test.ts (Filler Arc, RunStats, the view's stage look / stageFx directives)
 tools/balance.probe.ts `npm run balance`: full headless runs, every hero x seed, good + lazy bot, pacing report (section 6)
+tools/progression.sim.ts `npm run progression`: consecutive runs with one account (bot + spending policy), hours to
+                       every EXPANSION §2 milestone, income / power curves (docs/META.md §9)
 scripts/e2e.mjs        Playwright e2e: desktop / mobile portrait / mobile landscape, screenshots, fails on errors
 scripts/peak.mjs       peak-chaos readability shots (adaptive bloom limiter on / off)
 scripts/icons.mjs      regenerates public/icon-192.png + icon-512.png from the atlas
 public/                PWA manifest + icons
 ```
 
-Dependency direction: `ui -> view -> game`, `ui/view -> render/fx/core`,
+Dependency direction: `ui -> view -> game`, `ui -> meta -> game`, `ui/view -> render/fx/core`,
 `game -> core (events, rng, pool, spatial, math) + art/palette (colours only)`.
-**Nothing in `src/game` may import `render`, `fx`, `ui`, `view`, `audio` or touch the DOM.**
+**Nothing in `src/game` may import `render`, `fx`, `ui`, `view`, `audio` or touch the DOM;
+`src/meta` follows the same rule and never touches localStorage (only `src/ui/save.ts` does).**
 
 ---
 
@@ -196,8 +238,9 @@ pixelated`); each step down also lowers the enemy cap and particle budget.
 | splash (before the unlock gesture) | none | `App.unlockAudio` picks the track for the current screen |
 | title / select / settings | `title` | `App.goTitle / goSelect` |
 | Dream Shop | `shop` | `App.goShop` |
-| run | `battle` + `setIntensity(enemies, combo rank, boss)` | `App.startRun`, `Feedback.frame` |
-| boss alive | `def.boss.music` (`boss` / `final`) | `feedback.ts bossSpawn`; back to `battle` 2 s of **game time** (`world.t`) after a non-final boss dies (frame time is clamped on slow devices, so it is not used); `App.revived` restores the right one |
+| run | the stage's `music.battle` + `setIntensity(enemies, combo rank, boss)` | `App.startRun` (`view.stage.music("battle")`), `Feedback.frame` |
+| boss alive | the stage's `music.final` for its final boss (or a boss asking for `final`), else `music.boss` | `feedback.ts bossSpawn` (`StageLook.bossMusic`); back to the battle theme 2 s of **game time** (`world.t`) after a non-final boss dies (frame time is clamped on slow devices, so it is not used); `App.revived` restores the right one |
+| Filler Arc | the battle theme returns 1.2 s after "...IN THE FILLER ARC!" | `relic-fx.ts fillerArc` -> `Feedback.musicBackAt` |
 | level-up / chest / pause | (muffled) | `App.openModal` |
 | run-start stinger | `battle` starts with READY? | `App.startRun` |
 | death | duck, then `gameover` with the DREAM OVER modal (2.0 s after death) | `feedback.ts playerDied`, `App.gameFrame` |
@@ -233,6 +276,25 @@ Hitstop / slow-mo are global `time` effects triggered by the feedback bridge.
   reproducible per seed (tested).
 - **Events**: `world.emit(type, payload)`. Hot events reuse one payload object.
   `world.muted = true` silences everything (fast-forward).
+- **Two buses**: `world.bus` = presentation (view / HUD / audio, silent while
+  muted); `world.hooks` = gameplay hooks (`hooks.ts` SimHooks: kill, hit, hurt,
+  lethal, block, levelUp, dash, ult, ultEnd, pickup, gem, chest, eliteSpawn,
+  bossSpawn, bossKill, prop, heal, revive, reroll, banish, skip, endless, step),
+  **never muted**, so relics / talents / twists / RunStats behave the same in a
+  fast-forward (runs stay reproducible per seed). One reused payload per hook.
+- **RunConfig** (`run-config.ts`): `new World({ hero, seed, run })`; without
+  `run` = `defaultRunConfig()` (Dream Meadow, everything unlocked - identical
+  to the shipped slice: `tests/stages.test.ts` replays frozen fingerprints).
+  Stat pipeline (`World.recomputeStats`): base -> hero trait -> legacy Dream
+  Shop -> `run.mods` -> relic mods -> talent mods -> constellation -> passives
+  -> `world.statMods` (run modifiers, timed `Buff`s) -> `finalizeStats`.
+  Twists scale `world.difficulty` (enemy HP / speed / damage, spawns, cap,
+  bullets, elites, boss warning / intro / sequel, food, level heal, rerolls)
+  and set `world.look` presentation hints (darken, elite outlines, censored).
+- **Endless**: with `run.endless` the final boss's death calls
+  `World.startEndless()` instead of `win()` (`stageCleared` either way): the
+  director then runs `StageDef.endless` (HP / spawn growth per endless minute,
+  elite waves, boss rematches scaled per loop, an episode card every 5:00).
 
 ### Events (src/game/events.ts)
 
@@ -245,7 +307,8 @@ Hitstop / slow-mo are global `time` effects triggered by the feedback bridge.
 | combo / ult | `comboRank`, `comboDrop` (fell one rank), `comboBreak`, `ultReady`, `ultCutin`, `ultStart`, `ultEnd`, `ultSlash`, `ultBurst`, `ultMeow` |
 | director | `waveIncoming`, `bossWarning`, `bossSpawn`, `bossKilled`, `bossEnrage`, `bossPhase` |
 | bestiary | `enemyFx` (EFX_* cue + position / direction / power, reused payload), `bulletsCleared` (fired before the bullet list is emptied) |
-| run | `victory` |
+| run | `victory`, `fillerArc` (endless continues), `fillerWave` (elite wave / rematch), `fillerEpisode` (every 5:00) |
+| Season 2 | `shieldBlock`, `plotArmor` (lethal hit survived), `ultEncore` (ENCORE! heart meteors), `relicProc` (relic / talent / twist proc, reused payload), `stageFx` (sim -> view look directive) |
 
 Feedback for each lives in `src/view/feedback.ts` (one `bus.on` per event).
 
@@ -316,8 +379,11 @@ export const eyepuff: EnemyDef = {
 export const enemies: EnemyDef[] = [eyepuff];
 ```
 
-The director picks it up as soon as its id appears in a `timeline.ts` phase
-mix (the 2:00+ phases already list `eyepuff`, `pumpkin`, `teddy`, `wisp`).
+The director picks it up as soon as its id appears in a stage's phase mix
+(`src/game/stages/<stage>.ts`; Dream Meadow's 2:00+ phases already list
+`eyepuff`, `pumpkin`, `teddy`, `wisp`). `special: true` keeps an event / twist
+enemy out of every random pick; `tint` re-colours a re-used sprite and a
+per-enemy `e.skin` re-dresses one enemy (the Rival (Recolour)).
 Elite variants, hit flash, squash, knockback, separation, death confetti
 (`colors`), gems and HP scaling are all automatic. Telegraphs:
 `w.telegraphCircle(...)` / `w.telegraphLine(...)`. Bullets: `shoot / ring / fan`
@@ -370,17 +436,100 @@ view need (e.g. the moon ring) live in import-free `_*.ts` files.
 
 ### Director event (`src/game/director/`)
 
-Data goes in `timeline.ts` (`EVENTS`), behaviour in `events.ts`:
+Data goes in the stage file (`StageDef.events`), behaviour in `events.ts`:
 `EVENT_HANDLERS.myEvent = (w, d, ev) => { ... }`. Use `d.addTask((dt) => stillRunning)`
 for events that unfold over time (see `flood`, `batStorm`, `wispRush`). Emit
 `waveIncoming` once for the HUD banner (kinds `swarm`, `encircle`, `storm`,
-`wisps`, else "STAMPEDE!").
+`wisps`, else "STAMPEDE!"; `TimelineEvent.label` overrides the text, e.g.
+"POP QUIZ!"). Spawn through `w.spawnEnemy` so twists / curse / the Filler Arc
+scale it, and read `w.difficulty.elite` for elite counts.
+
+### Stage (`src/game/stages/<stage>.ts`)
+
+`export const stages: StageDef[] = [myStage]` (types in `stage.ts`;
+`stages/dream-meadow.ts` is the reference, `docs/content/stages.md` has
+stages 2-5 written field for field). Everything a stage changes is data:
+
+- sim: `phases` (mix / rate / cap per time window), `events` (bosses included),
+  `opening` ring, `finalBoss` (its death = victory, or the Filler Arc),
+  `enrageAt`, `props` (ids / interval / max), `endless` (`EndlessDef`), hooks
+  `onStart(w)` and `onFinalBossKilled(w, boss)` (return true to own the ending).
+- view: `tiles` (sprite + region rules: noise paths / patches, hash accents,
+  `cuts` / `mul` / `weights` frame picks), `deco` (`scatter` + `tall` layers,
+  `salt` decorrelates hashes), `clearColor`, `grade` keyframes (preset name or
+  inline values, over `t / gradeSpan`, default span = the final boss's arrival),
+  `ambient.base` (engine petals / motes / fireflies) + `ambient.layers`
+  (sprinkles, snow, bubbles, glitch motes: `stage-view.ts` draws them),
+  `music` (battle / boss / final track ids), `victory` texts.
+- a boss that degrades the show (Cancel-sama) emits `stageFx` directives:
+  `w.emit("stageFx", { kind: "grade" | "renderScale" | "animFps" | "speedLines" |
+  "still" | "reset", value, seconds, id })`; `StageLook.directive` applies them and
+  `Feedback.dispose` resets them.
+- the account layer reads `stageInfo(def)` / `stageInfos()` (bosses, final boss,
+  enemies, requires, rewardMul). `registerStage(def)` adds one at runtime (tests:
+  `tests/stages.test.ts` runs a test-only stage with its own tileset and roster).
+
+### Relic (`src/game/relics/<rarity>.ts`)
+
+`RelicDef { id, name, rarity, icon: "icon_relic_<id>", flavor, desc(stars),
+mods?(s, stars), install?(w, stars) }` (values per star from
+`docs/content/relics.md`, `atStar(table, stars)`). Stat parts go in `mods`
+(applied in the pipeline). Behaviour in `install`, through the hook toolkit:
+
+```ts
+install(w, s) {
+  w.hooks.on("kill", (k) => { if (!k.boss && w.rng.next() < 0.02) w.dropPickup("heart", k.x, k.y, 3); });
+  w.every(15, () => { ... });                 // periodic (w.after(sec, fn) = one-shot)
+  const mode = new Buff(w);                   // timed stat buff (recomputes on start / expiry)
+  w.statMods.push((st) => { if (mode.on) st.cooldown -= 0.4; });
+  onDashThrough(w, (e) => w.hitEnemy(e, 10 * w.stats.might, null, 0, 160, 0, "rubber_duck", 0xffe14d));
+  proc(w, "my_relic", x, y);                  // view flourish (relic-fx.ts; default: sparkle + name tag)
+}
+```
+
+Hook listeners must not allocate per event (payloads are reused: read, don't
+keep). Gameplay randomness uses `w.rng`. Relic damage uses source = relic id.
+New look for a proc: a `case` in `view/relic-fx.ts proc()`.
+
+### Talent tree (`src/game/talents/<hero>.ts`)
+
+`export const talentTrees: TalentTree[] = [{ hero, branches: [3 names], nodes }]`,
+nodes from `node(id, name, branch, tier, maxRank, desc, { mods?, install? })`
+(`talents/_node.ts`); 5 / 3 / 3 / 3 / 1 ranks per branch, ids `<hero>_<slug>`
+(unique across trees: the meta layer indexes them globally), tier gating is the
+meta layer's (`TALENT_TIER_POINTS`). Weapon / ult parts read the rank in the
+weapon or ult file: `w.talentRank("hoshi_backup_dancers")` (also for its
+evolution); per-weapon damage: `w.addWeaponDamage("star_shot", 0.06 * r)`;
+start weapon changes: set `w.startWeapon` / `w.startWeaponLevel` in `install`
+(it runs before the start weapon is added); forced crits: `w.critRules.push(...)`.
+
+### Constellation (`HeroDef.constellations`, `src/game/heroes.ts`)
+
+Six `ConstellationDef { name, desc, mods?, install? }` per hero (C1..C6), applied
+up to `RunConfig.constellation`; ult / weapon code reads `w.cons` (e.g. Supernova
+Shower +10 meteors at C4).
+
+### Plot Twist (`src/game/twists/<group>.ts`)
+
+`TwistDef { id, name, icon, maxRank, heat: [per-rank increments], desc(rank),
+install(w, rank), note?, unlockedBy? }`. Usually it scales `w.difficulty`, pushes
+a `w.statMods` entry, sets a `w.look` hint for the view, or registers a timer
+(`shounen_rival`). Total heat = `twistHeat(ids, ranks)` (= `RunStats.heat`).
+
+### RunStats counters
+
+Collected by `run-stats.ts` from `world.hooks`; content-specific counters
+(`nanis`, `bakas`, `charmed`, ...) go through `w.bumpStat(key, n)`. A new
+counter = an optional field on `RunStats` (contract: additive only) + its
+collection in `RunStatsCollector`.
 
 ### Passive (`src/game/passives.ts`)
 
 Append `{ id, name, icon, levels: [5 texts], apply(stats, level) }`. Stats are
-recomputed from scratch (base -> hero -> meta -> passives). New stat? add it
-to `Stats` in `stats.ts` (+ `baseStats`) and read it where needed.
+recomputed from scratch (base -> hero -> account / relic / talent /
+constellation mods -> passives -> run modifiers). New stat? add it to `Stats`
+in `stats.ts` (+ `baseStats`, + a clamp in `finalizeStats` if it needs one) and
+read it where needed.
 
 ### Ultimate (`src/game/ultimates/<name>.ts`)
 
@@ -429,7 +578,10 @@ start weapon and ultimate. The select screen lists `HEROES` automatically.
 | Enemy bullets (`enemyShoot` sfx, rate-limited; pop-in flash, end-of-life fade, moons rotate along velocity) | `World.spawnBullet` emits `enemyShoot` (one reused payload), `WorldView.drawBullets` |
 | Elite / boss aura | `WorldView.drawEnemies`: 4 one-pixel offset tinted silhouettes (no `Glow` flag) + soft halo |
 | Hero behind a tree | `Ground.draw(time, px, py)` fades that canopy |
-| Ambient petals / motes / fireflies, day -> dusk -> night grade | `Feedback.frame` |
+| Ambient petals / motes / fireflies + stage ambient layers, the stage's grade keyframes (Dream Meadow: day -> dusk -> night), sim `stageFx` directives | `view/stage-view.ts` (`Feedback.frame` -> `StageLook.frame`, `WorldView.draw` -> `StageLook.draw`) |
+| Relic / talent procs (name tag + flourish), shield BLOCK!, PLOT ARMOR! (hitstop, slow-mo, rays), ENCORE!, SAKUGA MODE border, the rival's title pop | `view/relic-fx.ts` |
+| Filler Arc: final boss throes, "TO BE CONTINUED..." freeze-frame (letterbox, sepia), record scratch, "JUST KIDDING! ...IN THE FILLER ARC!", fireworks, the battle theme returns; elite-wave / rematch banners, FILLER EPISODE cards every 5:00 | `view/relic-fx.ts fillerArc` |
+| Banish mode (cards get a red BANISH veil, unbanishable ones grey out), SKIP, LIMIT BREAK! tags, 5-6 card grid | `ui/screens/levelup.ts` (LU_CSS) |
 
 ---
 
@@ -583,11 +735,12 @@ runs with the limiter on and off (`node scripts/peak.mjs`, shots in `shots/peak/
 | Engine | `src/core`, `src/render`, `src/fx` | keep APIs coherent, document in ENGINE.md |
 | Simulation | `src/game/**` | pure; content = new files in the registry folders |
 | View / UI | `src/view/**`, `src/ui/**`, `src/main.ts`, `index.html`, `src/render/quality.ts` | |
+| Account layer | `src/meta/**`, `src/ui/save.ts` (the only storage boundary) | pure (no DOM / localStorage); numbers in `meta/tuning.ts`; Plot Points = files in `meta/achievements/defs/` |
 | Debug / tests | `src/debug/**`, `tests/**`, `scripts/e2e.mjs`, `scripts/icons.mjs` | |
 
 Parallel content work: one agent per new file in `weapons/`, `enemies/`,
 `bosses/`, `ultimates/`. Shared files that need a line or two:
-`director/timeline.ts` (tuning), `view/trails.ts` (new trail looks),
+`stages/<stage>.ts` (timeline tuning), `view/trails.ts` (new trail looks),
 `game/events.ts` + `view/feedback.ts` (new event types).
 
 ---
@@ -629,3 +782,35 @@ Handy URLs: `/?screen=title`, `/?screen=select`, `/?autoplay=1&skip=185&god=1`
 `__kk.boss("lady_lunatic")` (boss now; `true` = with the WARNING), `__kk.bossHp(0.2)` (jump to a phase),
 `__kk.enrage()`. Boss screenshots: `/?screen=game&hero=rin&god=1&skip=355` (no autoplay: the hero stands
 still, the boss comes to it), then `__kk.clearWeapons()` and `__kk.world.director.spawnMul = 0`.
+
+Season 2 run configs from the URL (`debug/params.ts debugRunConfig`; any of them builds a RunConfig):
+`/?screen=game&endless=1&skip=548&god=1` then kill Lady (`__kk.bossHp(0.001)`) -> the Filler Arc,
+`&relics=sakuga_cel:6,sentai_badge:3`, `&talents=hoshi_encore,hoshi_choreography:5`, `&cons=6`,
+`&twists=budget_cuts:3,spoilers`, `&flags=banish:3,skip:2,dashCharges:2`, `&lb=star_shot:2`,
+`&stage=<id>`, `&startLevel=5`, `&slots=7,7`. Console: `__kk.relic(id, stars)`, `__kk.twist(id, rank)`,
+`__kk.endless()`, `__kk.stageFx("renderScale", 0.5)`, `__kk.runStats()`. Season 2 shots (Dream Meadow
+old-vs-new parity, Filler Arc, relic procs, dash pips + shield, banish / skip level-up on 3 devices):
+`shots/sim-core/`.
+
+---
+
+## 9. Meta layer (account progression)
+
+`src/meta` turns the profile into a `RunConfig` and a finished run back into
+profile progress; details, formulas and APIs in **docs/META.md**.
+
+```
+save.profile --buildRunConfig(profile, choice)--> { hero, config } --> new World({ hero, run: config })
+World.summary() --applyRunToProfile(profile, summary)--> RunReport (payout lines, XP, mastery, unlocks, Plot Points)
+```
+
+- Storage: `src/ui/save.ts` only (`kko.save.v2`; v1 migrated once and kept; corrupt
+  data repaired or set aside, never fatal).
+- Content: every meta function reads a `MetaContent` catalogue (`gameContent()` from the
+  registries, or a fixed one in tests), so account rules never depend on how much
+  content has shipped.
+- Adding content: a Plot Point is a new entry in `src/meta/achievements/defs/<group>.ts`
+  (or a new file there); an unlock condition is a row in `UNLOCK_RULES`; a board node is
+  a spec in `src/meta/board/data.ts` (ids are save keys: never rename, removed ids are
+  refunded); numbers go in `src/meta/tuning.ts`.
+- Tests: `tests/meta.*.test.ts`. Economy: `npm run progression`.

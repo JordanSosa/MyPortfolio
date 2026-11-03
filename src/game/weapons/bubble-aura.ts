@@ -73,6 +73,11 @@ export const bubbleAura: WeaponDef = {
   ],
   upgrades: ["Damage +2, area +10%", "Damage +2, ticks 10% faster", "Damage +2, area +15%, stronger slow", "Damage +3, area +15%, ticks faster"],
   evolution: { into: "ocean_dome", with: "heart_locket" },
+  // mastery Limit Breaks (docs/content/weapons.md §4): Lv6 at rank 5, Lv7 at rank 10
+  limitBreak: [
+    { area: 0.15, dmg: 0.2, text: "LIMIT BREAK — Extra Foam: +15% area, +20% damage" },
+    { dmg: 0.3, cd: 0.9, text: "MASTERED — Bath Time: +30% damage, ticks 10% faster" },
+  ],
   update(w, inst, dt) {
     const S = wstats(w, inst);
     const R = (S.L.radius ?? 30) * S.area;

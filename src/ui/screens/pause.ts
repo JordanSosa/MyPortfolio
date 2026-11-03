@@ -3,7 +3,6 @@
  * sheet, resume / settings / quit. Pause (P / START / BACK) toggles it closed;
  * Esc / B / Android Back resume through the nav back path.
  */
-import { CFG } from "../../game/config";
 import { describeStats } from "../../game/stats";
 import type { World } from "../../game/world";
 import type { App, UiScreen } from "../app";
@@ -28,8 +27,8 @@ export function openPause(app: App, w: World): UiScreen {
       <div class="h1">PAUSED</div>
       <div class="h2">${esc(w.hero.name)} · LV ${w.level} · ${fmtTime(w.t)} · ${w.kills} KO</div>
       <div class="build">
-        <div class="h2">WEAPONS</div><div class="row">${slots(CFG.weaponSlots, weapons)}</div>
-        <div class="h2">PASSIVES</div><div class="row">${slots(CFG.passiveSlots, passives)}</div>
+        <div class="h2">WEAPONS</div><div class="row">${slots(w.weaponSlots, weapons)}</div>
+        <div class="h2">PASSIVES</div><div class="row">${slots(w.passiveSlots, passives)}</div>
       </div>
       <div class="stat-grid">${describeStats(w.stats)
         .map(([k, v]) => `<div><span>${esc(k)}</span><b>${esc(v)}</b></div>`)

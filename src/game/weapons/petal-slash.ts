@@ -3,10 +3,14 @@
  * behind; extra Amount adds up / down / diagonal arcs).
  * Evolution: Sakura Tempest (+ Big Ribbon) - a 360 degree whirlwind every 0.8 s
  * that also flings petal blades.
+ *
+ * Rin's talents (talents/rin.ts) read here, for both forms: Wide Stance (+6%
+ * area per rank), Petal Storm (each slash launches 1-3 homing petal blades),
+ * Crescent Moon Draw (every 3rd swing is a 360 degree moon slash, r 56, x1.5).
  */
 import { C } from "../../art/palette";
 import { TAU } from "../../core/math";
-import { PK_ATTACHED, PK_FREE, ROT_SPIN, SHAPE_CIRCLE, SHAPE_ELLIPSE, type WeaponDef, type WeaponInstance } from "../types";
+import { PK_ATTACHED, PK_FREE, ROT_SPIN, SHAPE_CIRCLE, SHAPE_ELLIPSE, type Enemy, type WeaponDef, type WeaponInstance } from "../types";
 import type { World } from "../world";
 import { fired, wstats, type WStats } from "./_shared";
 
@@ -21,11 +25,71 @@ function aimAngle(w: World): number {
   return pl.face > 0 ? 0 : Math.PI;
 }
 
+/** Wide Stance: area multiplier from the talent rank (1 without it). */
+function stance(w: World): number {
+  const r = w.talentRank("rin_wide_stance");
+  return r > 0 ? 1 + 0.06 * r : 1;
+}
+
+/** Petal Storm / Sakura blades: one homing petal blade from the hero toward `a` (target optional). */
+function petalBlade(w: World, inst: WeaponInstance, a: number, dmg: number, pierce: number, tgt: Enemy | null, source?: string): void {
+  const pl = w.player;
+  const q = w.spawnProjectile(inst, source);
+  q.kind = PK_FREE;
+  q.x = pl.x + Math.cos(a) * 10;
+  q.y = pl.y - 8 + Math.sin(a) * 10;
+  q.speed = 150 * w.stats.projSpeed;
+  q.vx = Math.cos(a) * q.speed;
+  q.vy = Math.sin(a) * q.speed;
+  q.r = 4;
+  q.homing = 3.2;
+  q.target = tgt;
+  q.targetUid = tgt ? tgt.uid : 0;
+  q.dmg = dmg;
+  q.pierce = pierce;
+  q.knock = 30;
+  q.life = 0.75;
+  q.sprite = "ult_petal";
+  q.rotMode = ROT_SPIN;
+  q.spin = 14;
+  q.trail = "petal";
+}
+
+const near: Enemy[] = [];
+
+/** Crescent Moon Draw: a 360 degree moon slash around the hero (r 56 x area, x1.5 damage). */
+function moonSlash(w: World, inst: WeaponInstance, r: number, dmg: number, knock: number): void {
+  const pl = w.player;
+  const p = w.spawnProjectile(inst);
+  p.kind = PK_ATTACHED;
+  p.ox = 0;
+  p.oy = -8;
+  p.x = pl.x;
+  p.y = pl.y - 8;
+  p.shape = SHAPE_CIRCLE;
+  p.r = r;
+  p.dmg = dmg;
+  p.knock = knock;
+  p.pierce = Infinity;
+  p.hitEvery = 0.5;
+  p.life = 0.4;
+  p.sprite = "w_tempest";
+  p.fps = 18;
+  p.rotMode = ROT_SPIN;
+  p.spin = 14;
+  p.scale = (r * 2) / 44;
+  p.tint = 0xfff1c4;
+  p.pop = true;
+  p.glow = true;
+  p.alpha = 0.95;
+}
+
 function slash(w: World, inst: WeaponInstance, S: WStats, k: number): void {
   const pl = w.player;
   if (k === 0) inst.data.aim = aimAngle(w);
   const a = (inst.data.aim ?? 0) + DIRS[k % DIRS.length];
-  const reach = 19 * S.area;
+  const area = S.area * stance(w);
+  const reach = 19 * area;
   const p = w.spawnProjectile(inst);
   p.kind = PK_ATTACHED;
   p.ox = Math.cos(a) * reach;
@@ -35,8 +99,8 @@ function slash(w: World, inst: WeaponInstance, S: WStats, k: number): void {
   p.shape = SHAPE_ELLIPSE;
   p.ang = a;
   p.r = 1;
-  p.hw = 24 * S.area;
-  p.hh = 16 * S.area;
+  p.hw = 24 * area;
+  p.hh = 16 * area;
   p.dmg = S.dmg;
   p.knock = S.knock;
   p.pierce = Infinity;
@@ -45,9 +109,19 @@ function slash(w: World, inst: WeaponInstance, S: WStats, k: number): void {
   p.sprite = "w_slash";
   p.anim = 1;
   p.rot = a;
-  p.scale = S.area;
+  p.scale = area;
   p.glow = true;
   p.trail = "slash";
+  // Petal Storm: 1 / 2 / 3 homing petal blades at the nearest enemies (8 damage, pierce 1)
+  const storm = w.talentRank("rin_petal_storm");
+  if (storm > 0) {
+    const n = w.nearestEnemies(pl.x, pl.y - 8, 150, storm, near);
+    for (let i = 0; i < storm; i++) {
+      const t = n > 0 ? near[i % n] : null;
+      const ta = t ? Math.atan2(t.y - t.cy - (pl.y - 8), t.x - pl.x) : a + (i - (storm - 1) / 2) * 0.4;
+      petalBlade(w, inst, ta, 8 * w.stats.might * (inst.dmgMul ?? 1), 1, t);
+    }
+  }
 }
 
 export const petalSlash: WeaponDef = {
@@ -66,6 +140,11 @@ export const petalSlash: WeaponDef = {
   ],
   upgrades: ["Also slashes behind you", "Damage +6, area +15%", "Cooldown -18%", "Damage +8, area +15%"],
   evolution: { into: "sakura_tempest", with: "big_ribbon" },
+  // mastery Limit Breaks (docs/content/weapons.md §4): Lv6 at rank 5, Lv7 at rank 10
+  limitBreak: [
+    { dmg: 0.2, area: 0.15, text: "LIMIT BREAK — Whetstone: +20% damage, +15% area" },
+    { dmg: 0.25, cd: 0.85, text: "MASTERED — One Thousand Cuts: +25% damage, −15% cooldown" },
+  ],
   update(w, inst, dt) {
     const S = wstats(w, inst);
     const d = inst.data;
@@ -84,6 +163,11 @@ export const petalSlash: WeaponDef = {
     d.queue = Math.min(DIRS.length, S.amount);
     d.qt = 0;
     d.k = 0;
+    // Crescent Moon Draw: every 3rd swing is a full moon slash
+    if (w.talentRank("rin_crescent_draw") > 0) {
+      d.vol = (d.vol ?? 0) + 1;
+      if (d.vol % 3 === 0) moonSlash(w, inst, 56 * S.area * stance(w), S.dmg * 1.5, S.knock * 1.2);
+    }
     fired(w, inst, w.player.x, w.player.y);
   },
 };
@@ -104,7 +188,14 @@ export const sakuraTempest: WeaponDef = {
     if (inst.timer > 0) return;
     inst.timer = S.cd;
     const pl = w.player;
-    const r = 36 * S.area;
+    // Crescent Moon Draw on the evolution: every 3rd whirl is a moon slash (r 56, x1.5)
+    const d = inst.data;
+    let moon = false;
+    if (w.talentRank("rin_crescent_draw") > 0) {
+      d.vol = (d.vol ?? 0) + 1;
+      moon = d.vol % 3 === 0;
+    }
+    const r = (moon ? 56 : 36) * S.area * stance(w);
     const p = w.spawnProjectile(inst);
     p.kind = PK_ATTACHED;
     p.ox = 0;
@@ -113,7 +204,7 @@ export const sakuraTempest: WeaponDef = {
     p.y = pl.y - 8;
     p.shape = SHAPE_CIRCLE;
     p.r = r;
-    p.dmg = S.dmg;
+    p.dmg = moon ? S.dmg * 1.5 : S.dmg;
     p.knock = S.knock;
     p.pierce = Infinity;
     p.hitEvery = 0.5;
@@ -127,33 +218,14 @@ export const sakuraTempest: WeaponDef = {
     p.pop = true;
     p.alpha = 0.92;
     // petal blades: the fan is centred on the nearest enemy (a boss in range wins) and the blades curve in
-    const n = Math.min(14, S.amount + 2);
+    // (Petal Storm adds its blades to the fan)
+    const storm = w.talentRank("rin_petal_storm");
+    const n = Math.min(14 + storm, S.amount + 2 + storm);
     const b = w.boss;
     const tgt = b && !b.dead && Math.abs(b.x - pl.x) < 150 && Math.abs(b.y - b.cy - pl.y) < 150 ? b : w.nearestEnemy(pl.x, pl.y - 8, 150);
     const a0 = tgt ? Math.atan2(tgt.y - tgt.cy - (pl.y - 8), tgt.x - pl.x) : w.rng.angle();
     const pdmg = (S.L.petalDmg ?? 14) * w.stats.might;
-    for (let k = 0; k < n; k++) {
-      const a = a0 + (k / n) * TAU;
-      const q = w.spawnProjectile(inst);
-      q.kind = PK_FREE;
-      q.x = pl.x + Math.cos(a) * 10;
-      q.y = pl.y - 8 + Math.sin(a) * 10;
-      q.speed = 150 * w.stats.projSpeed;
-      q.vx = Math.cos(a) * q.speed;
-      q.vy = Math.sin(a) * q.speed;
-      q.r = 4;
-      q.homing = 3.2;
-      q.target = k === 0 ? tgt : null;
-      q.targetUid = q.target ? q.target.uid : 0;
-      q.dmg = pdmg;
-      q.pierce = 3;
-      q.knock = 30;
-      q.life = 0.75;
-      q.sprite = "ult_petal";
-      q.rotMode = ROT_SPIN;
-      q.spin = 14;
-      q.trail = "petal";
-    }
+    for (let k = 0; k < n; k++) petalBlade(w, inst, a0 + (k / n) * TAU, pdmg, 3, k === 0 ? tgt : null);
     fired(w, inst, pl.x, pl.y);
   },
 };

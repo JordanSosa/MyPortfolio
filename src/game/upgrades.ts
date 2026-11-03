@@ -7,16 +7,41 @@
  *   NEW weapon while a weapon slot is free (w 6) / NEW passive while a passive slot is free (w 5)
  * Rarity: evolution > epic (lucky double level, chance 4% x luck) > rare (NEW weapon or MAX level) > common.
  * Empty / short pool -> "Heal 30 HP" and "+50 coins" fallbacks.
+ *
+ * Season 2 gates (World): NEW items only from RunConfig.weaponPool / passivePool
+ * (World.inPool), banished items never come back, slot limits come from the
+ * RunConfig (World.weaponSlots / passiveSlots), and a weapon's max level grows
+ * with its mastery Limit Breaks (World.weaponMaxLevel; those cards carry
+ * `limitBreak`).
  */
 import { CFG } from "./config";
 import { PASSIVES, PASSIVE_BY_ID } from "./passives";
 import { WEAPONS, baseWeapons } from "./registry";
 import type { ChestResult, UpgradeCard, WeaponDef } from "./types";
+import { limitBreakText } from "./weapons/_shared";
 import type { World } from "./world";
 
 interface Cand {
   card: UpgradeCard;
   w: number;
+}
+
+/** Light Novel Title twist: far too long card subtitles (generic tropes, no real titles). */
+const NOVEL: ((n: string) => string)[] = [
+  (n) => `The ${n} I Picked Up in Another World Was Secretly Level 99?!`,
+  (n) => `Apparently My ${n} Is the Strongest, but I Just Want a Quiet Life`,
+  (n) => `I Was Reborn as a Humble ${n}, So I Maxed It Out (Vol. 12)`,
+  (n) => `Everyone Laughed at My ${n}, Until It Evolved Twice`,
+  (n) => `My Party Kicked Me Out, but My ${n} Was Overpowered All Along?!`,
+  (n) => `A Slow, Relaxing Life With My ${n} (That Keeps Getting Interrupted)`,
+];
+
+/** Card title for this run: the item name, or the Light Novel Title version of it. */
+function title(w: World, id: string, name: string): string {
+  if (!w.novelTitles) return name;
+  let h = 0;
+  for (let i = 0; i < id.length; i++) h = (h * 31 + id.charCodeAt(i)) >>> 0;
+  return `${name}: ${NOVEL[h % NOVEL.length](name)}`;
 }
 
 export const HEAL_CARD: Readonly<UpgradeCard> = {
@@ -42,8 +67,9 @@ export const COINS_CARD: Readonly<UpgradeCard> = {
 
 function weaponUpText(def: WeaponDef, from: number, to: number): string {
   const parts: string[] = [];
+  const n = def.levels.length;
   for (let l = from + 1; l <= to; l++) {
-    const t = def.upgrades[l - 2];
+    const t = l > n ? limitBreakText(def, l - n) : def.upgrades[l - 2];
     if (t) parts.push(t);
   }
   return parts.join(" · ") || def.desc;
@@ -56,15 +82,18 @@ export function evolutionCards(w: World): UpgradeCard[] {
     const def = inst.def;
     if (def.evolved || !def.evolution) continue;
     if (inst.level < def.levels.length) continue;
+    if (w.banished.has(def.evolution.into)) continue;
     if (w.passiveLevel(def.evolution.with) <= 0) continue;
     const evo = WEAPONS.get(def.evolution.into);
     if (!evo) continue;
+    // (evolving a Limit-Broken weapon carries +15% damage per Limit Break level into the evolution)
+    const lb = inst.level - def.levels.length;
     out.push({
       kind: "evolution",
       id: evo.id,
-      name: evo.name,
+      name: title(w, evo.id, evo.name),
       icon: evo.icon,
-      desc: evo.desc,
+      desc: lb > 0 ? `${evo.desc} +${Math.round(lb * CFG.limitBreakInherit * 100)}% (Limit Break)` : evo.desc,
       from: inst.level,
       to: 1,
       rarity: "evolution",
@@ -82,44 +111,47 @@ function candidates(w: World, ownedOnly: boolean): Cand[] {
   const epicChance = 0.04 * luck;
   for (const inst of w.weapons) {
     const def = inst.def;
-    const max = def.levels.length;
-    if (inst.level >= max) continue;
+    const max = w.weaponMaxLevel(def);
+    if (inst.level >= max || w.banished.has(def.id)) continue;
     let to = inst.level + 1;
     let rarity: UpgradeCard["rarity"] = to >= max ? "rare" : "common";
     if (to < max && w.rng.next() < epicChance) {
       to++;
       rarity = "epic";
     }
-    out.push({ w: 10, card: { kind: "weapon", id: def.id, name: def.name, icon: def.icon, desc: weaponUpText(def, inst.level, to), from: inst.level, to, rarity } });
+    const card: UpgradeCard = { kind: "weapon", id: def.id, name: title(w, def.id, def.name), icon: def.icon, desc: weaponUpText(def, inst.level, to), from: inst.level, to, rarity };
+    if (max !== def.levels.length) card.max = max;
+    if (to > def.levels.length) card.limitBreak = true;
+    out.push({ w: 10, card });
   }
   for (const pi of w.passives) {
     const def = pi.def;
     const max = def.levels.length;
-    if (pi.level >= max) continue;
+    if (pi.level >= max || w.banished.has(def.id)) continue;
     let to = pi.level + 1;
     let rarity: UpgradeCard["rarity"] = to >= max ? "rare" : "common";
     if (to < max && w.rng.next() < epicChance) {
       to++;
       rarity = "epic";
     }
-    out.push({ w: 8, card: { kind: "passive", id: def.id, name: def.name, icon: def.icon, desc: def.levels[to - 1], from: pi.level, to, rarity } });
+    out.push({ w: 8, card: { kind: "passive", id: def.id, name: title(w, def.id, def.name), icon: def.icon, desc: def.levels[to - 1], from: pi.level, to, rarity } });
   }
   if (ownedOnly) return out;
-  if (w.weapons.length < CFG.weaponSlots) {
+  if (w.weapons.length < w.weaponSlots) {
     for (const def of baseWeapons()) {
-      if (w.hasWeapon(def.id)) continue;
+      if (w.hasWeapon(def.id) || !w.inPool("weapon", def.id)) continue;
       // already own its evolved form?
       if (def.evolution && w.hasWeapon(def.evolution.into)) continue;
-      out.push({ w: 6, card: { kind: "weapon", id: def.id, name: def.name, icon: def.icon, desc: def.desc, from: 0, to: 1, rarity: "rare" } });
+      out.push({ w: 6, card: { kind: "weapon", id: def.id, name: title(w, def.id, def.name), icon: def.icon, desc: def.desc, from: 0, to: 1, rarity: "rare" } });
     }
   }
-  if (w.passives.length < CFG.passiveSlots) {
+  if (w.passives.length < w.passiveSlots) {
     for (const def of PASSIVES) {
-      if (w.passiveLevel(def.id) > 0) continue;
+      if (w.passiveLevel(def.id) > 0 || !w.inPool("passive", def.id)) continue;
       // nudge passives that would evolve an owned weapon
       let wt = 5;
       for (const inst of w.weapons) if (inst.def.evolution?.with === def.id) wt += 3;
-      out.push({ w: wt, card: { kind: "passive", id: def.id, name: def.name, icon: def.icon, desc: def.levels[0], from: 0, to: 1, rarity: "common" } });
+      out.push({ w: wt, card: { kind: "passive", id: def.id, name: title(w, def.id, def.name), icon: def.icon, desc: def.levels[0], from: 0, to: 1, rarity: "common" } });
     }
   }
   return out;
@@ -159,24 +191,45 @@ export function makeOffer(w: World, count: number = w.stats.cards): UpgradeCard[
  * build that only gets the Heal / Star Pouch fallbacks.
  */
 export function canChangeOffer(w: World, count: number = w.stats.cards): boolean {
+  const p = poolSize(w);
+  return p.n > count || (p.n > 0 && p.epic && w.stats.luck > 0);
+}
+
+const POOL = { n: 0, epic: false };
+/** Number of distinct cards the pool could offer right now (no RNG; shared scratch result). */
+function poolSize(w: World): { n: number; epic: boolean } {
   let n = evolutionCards(w).length;
   let epic = false;
   for (const inst of w.weapons) {
-    const max = inst.def.levels.length;
-    if (inst.level >= max) continue;
+    const max = w.weaponMaxLevel(inst.def);
+    if (inst.level >= max || w.banished.has(inst.def.id)) continue;
     n++;
     if (inst.level + 1 < max) epic = true;
   }
   for (const pi of w.passives) {
     const max = pi.def.levels.length;
-    if (pi.level >= max) continue;
+    if (pi.level >= max || w.banished.has(pi.def.id)) continue;
     n++;
     if (pi.level + 1 < max) epic = true;
   }
-  if (w.weapons.length < CFG.weaponSlots)
-    for (const def of baseWeapons()) if (!w.hasWeapon(def.id) && !(def.evolution && w.hasWeapon(def.evolution.into))) n++;
-  if (w.passives.length < CFG.passiveSlots) for (const def of PASSIVES) if (w.passiveLevel(def.id) <= 0) n++;
-  return n > count || (n > 0 && epic && w.stats.luck > 0);
+  if (w.weapons.length < w.weaponSlots)
+    for (const def of baseWeapons()) if (!w.hasWeapon(def.id) && w.inPool("weapon", def.id) && !(def.evolution && w.hasWeapon(def.evolution.into))) n++;
+  if (w.passives.length < w.passiveSlots) for (const def of PASSIVES) if (w.passiveLevel(def.id) <= 0 && w.inPool("passive", def.id)) n++;
+  POOL.n = n;
+  POOL.epic = epic;
+  return POOL;
+}
+
+/**
+ * Replacement for the banished card at `index` of `offer`: a fresh pick from the
+ * pool that is not already in the offer, else the Heal / Star Pouch fallbacks.
+ */
+export function banishCard(w: World, offer: UpgradeCard[], index: number): UpgradeCard {
+  const pool = candidates(w, false).filter((c) => !offer.some((o, i) => i !== index && o.kind === c.card.kind && o.id === c.card.id));
+  const c = pickWeighted(w, pool);
+  if (c) return c.card;
+  if (!offer.some((o) => o.kind === "heal")) return { ...HEAL_CARD };
+  return { ...COINS_CARD };
 }
 
 /** Apply a card to the build. */
@@ -214,8 +267,10 @@ export function applyCard(w: World, card: UpgradeCard): void {
  * `coins` in the result is the total coin delta (bonus + any Star Pouch rewards).
  */
 export function rollChest(w: World, golden: boolean): ChestResult {
-  const jackpot = w.rng.next() < 0.05 * w.stats.luck;
-  const n = jackpot ? 5 : golden ? 3 : 1;
+  const cl = Math.max(0, Math.min(1, w.run.flags.chestLuck ?? 0));
+  const jackpot = w.rng.next() < 0.05 * w.stats.luck * (1 + cl);
+  // chest luck: a plain chest may roll like a golden one (no extra RNG draw without it)
+  const n = jackpot ? 5 : golden || (cl > 0 && w.rng.next() < cl) ? 3 : 1;
   const rewards: UpgradeCard[] = [];
   const bonus = Math.round((golden ? 60 : 15 + w.rng.int(0, 15)) * (jackpot ? 3 : 1) * w.stats.greed);
   const before = w.coins;

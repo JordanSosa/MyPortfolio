@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run --fsModuleCache=false --testTimeout=60000",
     "balance": "vitest run --config tools/vitest.balance.config.ts --root . --fsModuleCache=false --disableConsoleIntercept",
+    "progression": "vitest run --config tools/progression.vitest.config.ts --root . --fsModuleCache=false --disableConsoleIntercept",
     "shot": "node scripts/shot.mjs",
     "sprites": "node scripts/sprites.mjs"
   },

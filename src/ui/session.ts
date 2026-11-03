@@ -9,6 +9,10 @@
  * Slow frames (> 25 ms of sim time) sub-step at 1/30 instead of 1/60 - the same
  * step the bot and the balance probe use - so a struggling phone isn't asked to
  * simulate twice as many steps.
+ *
+ * The run's RunConfig (stage, relics, talents, twists...) rides in the options
+ * (`WorldOptions.run`, see src/game/run-config.ts); the attract mode keeps it
+ * across its restarts.
  */
 import { substep } from "../core/loop";
 import { Bot, simulate } from "../debug/bot";

@@ -1,10 +1,13 @@
 /**
  * Player stat block + modifier system.
  *
- * Stats are recomputed from scratch whenever the build changes:
- *   base -> hero trait -> meta ranks (Dream Shop) -> passives (by level)
+ * Stats are recomputed from scratch whenever the build changes (World.recomputeStats):
+ *   base -> hero trait -> legacy Dream Shop ranks -> RunConfig.mods (account: board,
+ *   hero level, mastery...) -> relic mods (by stars) -> talent mods (by rank) ->
+ *   constellation -> passives (by level) -> run modifiers (World.statMods: relic /
+ *   talent / twist effects that depend on run state, timed buffs) -> finalizeStats.
  * Each source is a pure `(stats) => void` modifier, so adding a new stat
- * source is just another function in the chain (see World.recomputeStats).
+ * source is just another function in the chain.
  *
  * Weapons read the multipliers when they fire:
  *   damage   = base * might          cooldown = base * cooldown
@@ -51,8 +54,29 @@ export interface Stats {
   knock: number;
   revives: number;
   rerolls: number;
-  /** Cards offered per level-up. */
+  /** Cards offered per level-up (clamped to 1..6 - the Infinite Gacha Credit Card offers 6). */
   cards: number;
+  // ---- Season 2 (docs/EXPANSION.md §5-8)
+  /** Curse: more enemies (spawn rate x (1 + curse)) that are a little tougher (HP x (1 + curse / 4)). 0 = none. */
+  curse: number;
+  /** Dream Gem find multiplier (reported in RunStats.gemFind, paid out by src/meta). */
+  gemFind: number;
+  /** Fraction of incoming damage removed after armor, 0..0.8 (Plot Armor passive, relics). */
+  dmgReduction: number;
+  /** Healing multiplier (food, level-up heal, relic heals; not regen). */
+  healMul: number;
+  /** Shield charges: each one absorbs a whole hit (then i-frames). 0 = none. */
+  shield: number;
+  /** Seconds to recharge one shield charge. */
+  shieldCd: number;
+  /** Overdrive meter gain multiplier (kills, elites, bosses, the passive trickle). */
+  ultGain: number;
+  /** Overdrive strength multiplier (UltState.power). */
+  ultPower: number;
+  /** Seconds added to every combo window. */
+  comboTime: number;
+  /** Damage multiplier against elites and bosses. */
+  bossDmg: number;
 }
 
 export type StatMod = (s: Stats) => void;
@@ -80,6 +104,16 @@ export function baseStats(): Stats {
     revives: 0,
     rerolls: CFG.rerolls,
     cards: CFG.baseCards,
+    curse: 0,
+    gemFind: 1,
+    dmgReduction: 0,
+    healMul: 1,
+    shield: 0,
+    shieldCd: CFG.shieldCd,
+    ultGain: 1,
+    ultPower: 1,
+    comboTime: 0,
+    bossDmg: 1,
   };
 }
 
@@ -89,7 +123,18 @@ export function finalizeStats(s: Stats): Stats {
   s.dashCd = Math.max(0.4, s.dashCd);
   s.crit = Math.min(0.9, Math.max(0, s.crit));
   s.maxHp = Math.max(1, Math.round(s.maxHp));
-  s.cards = Math.max(1, Math.min(4, Math.round(s.cards)));
+  s.cards = Math.max(1, Math.min(6, Math.round(s.cards)));
+  s.curse = Math.max(0, s.curse);
+  s.dmgReduction = Math.min(0.8, Math.max(0, s.dmgReduction));
+  s.healMul = Math.max(0, s.healMul);
+  s.shield = Math.max(0, Math.floor(s.shield));
+  s.shieldCd = Math.max(2, s.shieldCd);
+  s.rerolls = Math.max(0, Math.floor(s.rerolls));
+  s.ultGain = Math.max(0, s.ultGain);
+  s.ultPower = Math.max(0, s.ultPower);
+  s.comboTime = Math.max(0, s.comboTime);
+  s.bossDmg = Math.max(0, s.bossDmg);
+  s.revives = Math.max(0, Math.floor(s.revives));
   return s;
 }
 

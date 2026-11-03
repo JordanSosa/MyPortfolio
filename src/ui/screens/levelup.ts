@@ -3,6 +3,14 @@
  * (common / rare / epic / animated rainbow evolution), shimmer, NEW! or
  * "Lv x -> y", rerolls, queued level-ups. Mobile safety: taps are ignored for
  * the first 350 ms and must come from a FRESH touch (not the joystick finger).
+ *
+ * Season 2 (sim agent; the hub-ui agent owns the rest of src/ui): BANISH xN
+ * (tap it, then a card: that item leaves the pool for the run and the card is
+ * replaced) and SKIP xN (no card, a small XP + coin refund) appear when the
+ * RunConfig grants them (flags.banish / flags.skip); "LIMIT BREAK!" cards for
+ * mastery levels past Lv 5; a compact grid when 5-6 cards are offered (the
+ * Infinite Gacha Credit Card); free rerolls read "REROLL FREE". The few rules
+ * for those live in LU_CSS below (injected once) so styles.css stays untouched.
  */
 import { Bot } from "../../debug/bot";
 import { PASSIVE_BY_ID } from "../../game/passives";
@@ -18,7 +26,46 @@ const RARITY_LABEL: Record<string, string> = { common: "COMMON", rare: "RARE", e
 const GUARD = 0.35;
 const bot = new Bot(99);
 
+/** Season 2 level-up rules: banish mode, limit-break tag, the 5-6 card grid. */
+const LU_CSS = `
+.lu-foot .btn.banish{background:linear-gradient(180deg,#ff6b8f,#d63a64)}
+.lu-foot .btn.banish.on{filter:brightness(1.25);box-shadow:0 0 0 3px var(--outline),0 0 18px #ff4d6d}
+.lu-foot .btn.skip{background:linear-gradient(180deg,#8fd6ff,#4a8fd6)}
+.levelup.banishing .card::after{content:"✕ BANISH";position:absolute;inset:0;display:grid;place-items:center;background:rgba(140,20,60,.78);color:#fff;font-family:var(--font);font-size:1.3em;letter-spacing:.08em;text-shadow:var(--ol1);border-radius:13px;pointer-events:none}
+.levelup.banishing .card.nobanish{filter:grayscale(.8) brightness(.6);pointer-events:none}
+.levelup.banishing .card.nobanish::after{content:none}
+.card .tag.lb{background:linear-gradient(90deg,#ffe14d,#ff8fd0,#8fd6ff);color:var(--outline)}
+.levelup.many .cards{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:.55em;width:min(44em,100%)}
+.levelup.many .card{width:auto;min-height:0;padding:.6em .6em .55em}
+.levelup.many .card .ds{font-size:.85em}
+@media (orientation:portrait){
+.levelup.many .lu-title{font-size:2.2em;margin-bottom:.1em}
+.levelup.many .cards{grid-template-columns:repeat(2,minmax(0,1fr));width:min(30em,100%)}
+.levelup.many .card{display:flex;flex-direction:column;text-align:center;padding:.5em .45em .5em;row-gap:.15em}
+.levelup.many .card .ic{width:2.8em;height:2.8em;margin:0}
+.levelup.many .card .ic img{width:2.4em;height:2.4em}
+.levelup.many .card .nm{padding:0;font-size:.95em}
+.levelup.many .card .ds{padding:0;font-size:.78em}
+.levelup.many .card .pips{position:static;margin-top:.15em}
+.levelup.many .card .lvl-ch{font-size:.75em}
+}
+@media (orientation:landscape) and (max-height:520px){
+.levelup.many .card .ic{width:2.6em;height:2.6em;margin-top:.2em}
+.levelup.many .card .ic img{width:2.2em;height:2.2em}
+.levelup.many .card .ds{font-size:.75em}
+}`;
+let cssDone = false;
+function injectCss(): void {
+  if (cssDone || typeof document === "undefined") return;
+  cssDone = true;
+  const s = document.createElement("style");
+  s.dataset.kk = "levelup-s2";
+  s.textContent = LU_CSS;
+  document.head.appendChild(s);
+}
+
 function maxLevel(c: UpgradeCard): number {
+  if (c.max) return c.max;
   if (c.kind === "weapon") return WEAPONS.get(c.id)?.levels.length ?? 5;
   if (c.kind === "passive") return PASSIVE_BY_ID.get(c.id)?.levels.length ?? 5;
   return 0;
@@ -43,6 +90,10 @@ export function cardHtml(c: UpgradeCard, i: number, interactive = true): string 
   } else if (c.from === 0) {
     tag = `<span class="tag">NEW!</span>`;
     line = c.kind === "weapon" ? "NEW WEAPON" : "NEW PASSIVE";
+  } else if (c.limitBreak) {
+    // Lv6 = LIMIT BREAK!, the last mastery level (Lv7) = MASTERED!
+    tag = `<span class="tag lb">${c.to >= max && c.to > 6 ? "MASTERED!" : "LIMIT BREAK!"}</span>`;
+    line = `WEAPON · Lv <b>${c.from}</b> → <b>${c.to}</b>`;
   } else {
     tag = c.to >= max ? `<span class="tag max">MAX!</span>` : `<span class="tag lv">Lv${c.from}→${c.to}</span>`;
     line = `${c.kind === "weapon" ? "WEAPON" : "PASSIVE"} · Lv <b>${c.from}</b> → <b>${c.to}</b>`;
@@ -67,32 +118,70 @@ export function cardHtml(c: UpgradeCard, i: number, interactive = true): string 
 }
 
 export function openLevelUp(app: App, w: World): UiScreen {
+  injectCss();
   const el = h("div", "modal levelup");
+  // BANISH / SKIP only exist when the run grants them (RunConfig.flags.banish / skip)
+  const hasBanish = w.banishes > 0;
+  const hasSkip = w.skips > 0;
   el.innerHTML = `
     <div class="rays"></div>
     <div class="lu-title">${letters("LEVEL UP!", "ltr", 0.05)}</div>
     <div class="lu-sub"></div>
     <div class="cards"></div>
-    <div class="lu-foot"><button class="btn violet small" data-nav data-act="reroll"></button></div>`;
+    <div class="lu-foot"><button class="btn violet small" data-nav data-act="reroll"></button>${hasBanish ? `<button class="btn small banish" data-nav data-act="banish"></button>` : ""}${hasSkip ? `<button class="btn small skip" data-nav data-act="skip"></button>` : ""}</div>`;
   app.ui.appendChild(el);
   const cardsEl = el.querySelector(".cards") as HTMLElement;
   const sub = el.querySelector(".lu-sub") as HTMLElement;
   const rerollBtn = el.querySelector('[data-act="reroll"]') as HTMLButtonElement;
+  const banishBtn = el.querySelector('[data-act="banish"]') as HTMLButtonElement | null;
+  const skipBtn = el.querySelector('[data-act="skip"]') as HTMLButtonElement | null;
   let openT = 0;
   let busy = false;
+  let banishing = false;
   let cards: UpgradeCard[] = [];
   let autoT = 0;
   const L = layer(el);
+
+  const setBanishing = (on: boolean) => {
+    banishing = on;
+    el.classList.toggle("banishing", on);
+    banishBtn?.classList.toggle("on", on);
+    updateSub();
+  };
+  const updateSub = () => {
+    sub.textContent = banishing
+      ? "TAP A CARD TO BANISH IT FOR THE RUN"
+      : `LV ${w.level - w.pendingLevels + 1}${w.pendingLevels > 1 ? `  ·  +${w.pendingLevels - 1} MORE` : ""}  ·  CHOOSE ONE`;
+  };
+  const updateFoot = () => {
+    const left = w.rerollsLeft;
+    rerollBtn.innerHTML = `${img("icon_reroll")} REROLL ${left === Infinity ? "FREE" : `×${left}`}`;
+    // (a maxed build only gets the Heal / Star Pouch fallbacks: a reroll could not change them)
+    rerollBtn.disabled = left <= 0 || !w.canReroll;
+    if (banishBtn) {
+      banishBtn.textContent = `✕ BANISH ×${w.banishes}`;
+      banishBtn.disabled = w.banishes <= 0 || !cards.some((c) => w.canBanish(c));
+    }
+    if (skipBtn) {
+      skipBtn.textContent = `» SKIP ×${w.skips}`;
+      skipBtn.disabled = w.skips <= 0;
+    }
+  };
 
   const render = (list: UpgradeCard[]) => {
     // keyboard / gamepad focus survives the in-place re-render (reroll, next queued level)
     const prevAct = L.focus?.dataset.act ?? null;
     cards = list;
+    el.classList.toggle("many", list.length > 4);
     cardsEl.innerHTML = list.map((c, i) => cardHtml(c, i)).join("");
-    sub.textContent = `LV ${w.level - w.pendingLevels + 1}${w.pendingLevels > 1 ? `  ·  +${w.pendingLevels - 1} MORE` : ""}  ·  CHOOSE ONE`;
-    rerollBtn.innerHTML = `${img("icon_reroll")} REROLL ×${w.rerolls}`;
-    // (a maxed build only gets the Heal / Star Pouch fallbacks: a reroll could not change them)
-    rerollBtn.disabled = w.rerolls <= 0 || !w.canReroll;
+    banishing = false;
+    el.classList.remove("banishing");
+    banishBtn?.classList.remove("on");
+    updateSub();
+    updateFoot();
+    cardsEl.querySelectorAll<HTMLElement>(".card").forEach((b, i) => {
+      if (!w.canBanish(list[i])) b.classList.add("nobanish");
+    });
     list.forEach((_, i) => setTimeout(() => app.sfx("cardFlip", 0.7, i * 2), 110 + i * 110));
     openT = 0;
     autoT = 0;
@@ -110,7 +199,44 @@ export function openLevelUp(app: App, w: World): UiScreen {
     // real pointer clicks must come from a fresh touch; synthetic (keyboard/gamepad) clicks have detail 0
     const pointer = (e as MouseEvent).detail > 0;
     if (pointer && !app.input.isFresh(e)) return;
-    pick(i);
+    if (banishing) banish(i);
+    else pick(i);
+  };
+
+  /** Banish mode: the tapped card's item leaves the pool, a fresh card flips into its place. */
+  const banish = (i: number) => {
+    const c = cards[i];
+    if (!c || busy || !w.canBanish(c)) return;
+    const next = w.banish(c);
+    if (!next) return;
+    busy = true;
+    app.sfx("uiBack");
+    const b = cardsEl.querySelectorAll<HTMLElement>(".card")[i];
+    b?.classList.add("gone");
+    setTimeout(() => {
+      busy = false;
+      render(next);
+    }, 260);
+  };
+
+  /** Skip this level-up: no card, an XP + coin refund (the next queued level, or back to the game). */
+  const skip = () => {
+    if (busy || openT < GUARD || w.skips <= 0) return;
+    if (!w.skipLevelUp()) return;
+    busy = true;
+    app.sfx("coin");
+    cardsEl.querySelectorAll<HTMLElement>(".card").forEach((b) => b.classList.add("gone"));
+    setTimeout(() => {
+      busy = false;
+      if (w.pendingLevels > 0) {
+        app.input.markTouchesStale();
+        app.sfx("levelUp", 0.6);
+        render(w.offer());
+      } else {
+        app.closeModal();
+        time.easeTo(1, 0.25);
+      }
+    }, 330);
   };
 
   const pick = (i: number) => {
@@ -136,13 +262,20 @@ export function openLevelUp(app: App, w: World): UiScreen {
   };
 
   onTapGuarded(rerollBtn, () => {
-    if (busy || openT < GUARD || w.rerolls <= 0 || !w.canReroll) return;
+    if (busy || openT < GUARD || w.rerollsLeft <= 0 || !w.canReroll) return;
     const next = w.reroll();
     if (next) {
       app.sfx("reroll");
       render(next);
     }
   });
+  if (banishBtn)
+    onTapGuarded(banishBtn, () => {
+      if (busy || openT < GUARD || w.banishes <= 0) return;
+      app.sfx(banishing ? "uiBack" : "uiConfirm", 0.8);
+      setBanishing(!banishing);
+    });
+  if (skipBtn) onTapGuarded(skipBtn, skip);
   render(w.offer());
 
   return {

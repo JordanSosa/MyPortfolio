@@ -12,6 +12,8 @@ import "@fontsource/pixelify-sans/400.css";
 import "@fontsource/pixelify-sans/700.css";
 import "@fontsource/silkscreen/400.css";
 import "./ui/styles.css";
+import "./ui/kit/kit.css";
+import "./ui/hub/hub.css";
 import { readParams } from "./debug/params";
 import { installHooks } from "./debug/hooks";
 import { App } from "./ui/app";
@@ -76,14 +78,16 @@ function createApp(): App | null {
 async function boot(): Promise<void> {
   // block pinch / double-tap zoom and long-press menus on iOS
   for (const ev of ["gesturestart", "gesturechange", "gestureend"]) document.addEventListener(ev, (e) => e.preventDefault(), { passive: false });
-  document.addEventListener("dblclick", (e) => e.preventDefault(), { passive: false });
-  document.addEventListener("contextmenu", (e) => e.preventDefault());
+  // (text fields keep their double-tap selection and long-press paste menu: the save import box)
+  const textField = (t: EventTarget | null) => !!(t as HTMLElement | null)?.closest?.("textarea, input");
+  document.addEventListener("dblclick", (e) => !textField(e.target) && e.preventDefault(), { passive: false });
+  document.addEventListener("contextmenu", (e) => !textField(e.target) && e.preventDefault());
   document.addEventListener(
     "touchmove",
     (e) => {
       const t = e.target as HTMLElement | null;
-      // allow scrolling inside scrollable menus only
-      if (!t?.closest(".select, .results, .shop, .pause-panel, .settings-panel")) e.preventDefault();
+      // allow scrolling inside scrollable menus only (hub pages / sheets / strips use .kscroll / .kscroll-x)
+      if (!t?.closest(".kscroll, .kscroll-x, .tabbar, .results, .pause-panel, .settings-panel, textarea")) e.preventDefault();
     },
     { passive: false },
   );

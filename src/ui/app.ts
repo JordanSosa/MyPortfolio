@@ -1,9 +1,20 @@
 /**
  * App state machine + main loop.
  *
- *   splash ("tap to start", unlocks audio) -> title (attract-mode game behind)
- *   -> select -> game <-> level-up / chest / pause modals -> game over / victory
- *   -> results -> title.  Dream Shop and Settings hang off the title.
+ *   splash ("tap to start", unlocks audio) -> HUB (Season 2: a page stack over
+ *   the live attract game - home, episodes, loadout, Training Arc, heroes, Merch
+ *   Machine, wiki; ui/hub/) -> game (episode title card, READY? / GO!) <->
+ *   level-up / chest / pause modals -> TO BE CONTINUED / victory -> Episode
+ *   Results -> hub (or straight to the Training Arc / a retry). Settings hang
+ *   off the hub and the pause menu.
+ *
+ * Runs started from the hub use the ACCOUNT RunConfig (save.runPlan(): board,
+ * hero level, talents, relics, twists ...; the legacy `meta` option is NOT
+ * passed, the board already contains the old Dream Shop nodes). Deep links /
+ * autoplay keep the debug config (?stage= ...) or the World default + the
+ * legacy Dream Shop view. Every finished run is banked exactly once
+ * (`bankRun`, save.recordRun -> RunReport) whether it ends on Results or on a
+ * game-over RETRY.
  *
  * One Renderer / Fx / Input for the whole app. The current Session (real run
  * or attract) is stepped with the global `time` (hitstop, slow-mo, pause).
@@ -12,8 +23,9 @@
  *  - the ultimate cut-in is never covered or interrupted: modals (level-up,
  *    chest) wait until the sim has left its cut-in, a pause request during it
  *    is deferred (`pausePending`), and the overlay always follows the sim;
- *  - a history entry guards every non-title screen, so Android Back / the
- *    edge-swipe gesture pauses or steps back instead of leaving mid-run;
+ *  - a history entry guards everything but the hub's home page (and the
+ *    splash): Android Back / the edge-swipe gesture closes an overlay, pops a
+ *    hub page, pauses or steps back instead of leaving; at home it leaves;
  *  - while a modal or the Results screen is up, the WebGL scene redraws at
  *    most 30x per second (the DOM on top keeps full rate).
  */
@@ -23,7 +35,7 @@ import { Loop } from "../core/loop";
 import { urlSeed } from "../core/rng";
 import { time } from "../core/time";
 import { FpsMeter } from "../debug/fps";
-import type { DebugParams } from "../debug/params";
+import { debugRunConfig, type DebugParams } from "../debug/params";
 import { createFx, type Fx } from "../fx";
 import { CFG } from "../game/config";
 import { heroDef } from "../game/heroes";
@@ -40,17 +52,29 @@ import { openLevelUp } from "./screens/levelup";
 import { openGameOver } from "./screens/over";
 import { openPause } from "./screens/pause";
 import { showResults } from "./screens/results";
-import { showSelect } from "./screens/select";
-import { showShop } from "./screens/shop";
 import { openSettings } from "./screens/settings";
 import { showSplash } from "./screens/splash";
-import { showTitle } from "./screens/title";
 import { markBorn } from "./screens/common";
 import { Tutorial } from "./tutorial";
 import { ScreenWake } from "./wake";
+import { Hub, type PageId, type PageOpts } from "./hub/hub";
+import { episodeTitle } from "./hub/copy";
+import { clearRunToasts, kitTick, overlaysOpen, toast, trophyIcon, type KitHost, type ToastOpts } from "./kit";
+import { money } from "./kit/art";
+import { showEpisodeCard, type EpisodeCard } from "./stinger";
+import { AchievementWatch } from "../meta/achievements/engine";
+import type { RunReport } from "../meta/rewards";
+import { fmtInt } from "./dom";
+import type { RunConfig } from "../game/run-config";
 import type { RunSummary } from "../game/world";
 
-export type ScreenId = "splash" | "title" | "select" | "game" | "results" | "shop";
+export type ScreenId = "splash" | "hub" | "game" | "results";
+
+/** The run's episode (title card + Episode Results header). */
+export interface EpisodeInfo {
+  n: number;
+  title: string;
+}
 
 /** Same condition as the compact landscape layouts in styles.css. */
 const COMPACT_LANDSCAPE = window.matchMedia("(orientation: landscape) and (max-height: 520px)");
@@ -61,6 +85,10 @@ const DEATH_MODAL_DELAY = 2.0;
 /** Run-start stinger: READY? for this long (sim paused), then GO! (s). */
 const INTRO_READY = 0.6;
 const INTRO_END = 1.25;
+/** Hub runs: the episode title card holds this long before READY? (s). */
+const INTRO_CARD = 1.35;
+/** In-run Plot Point check interval (real s; AchievementWatch builds a summary each poll). */
+const ACH_POLL = 1;
 
 export interface UiScreen {
   el: HTMLElement;
@@ -70,7 +98,7 @@ export interface UiScreen {
   update?(realDt: number): void;
 }
 
-export class App {
+export class App implements KitHost {
   readonly r: Renderer;
   readonly fx: Fx;
   readonly input: Input;
@@ -90,12 +118,27 @@ export class App {
   sub: UiScreen | null = null;
   game: Session | null = null;
   attract: Session | null = null;
+  /** The hub screen while `screen === "hub"`. */
+  hub: Hub | null = null;
   /** Hero picked on the select screen. */
   hero: string;
   private lvIntro = -1;
   private endT = 0;
   private ended = false;
   private lastSummary: RunSummary | null = null;
+  /** Report of the last banked run (Episode Results, the hub's "Previously on..."). */
+  private report: RunReport | null = null;
+  /** The current run was banked already (Results and the game-over RETRY both bank, once). */
+  private banked = false;
+  /** The current run uses the account loadout (hub PLAY / RETRY of one). */
+  private account = false;
+  private episode: EpisodeInfo = { n: 1, title: "" };
+  private epCard: EpisodeCard | null = null;
+  /** Seconds the episode card holds before READY? (0 = no card). */
+  private introCardT = 0;
+  private introReadyShown = false;
+  private achWatch: AchievementWatch | null = null;
+  private achT = 0;
   /** The ultimate cut-in overlay on screen (removed when the sim leaves its cut-in). */
   private cutin: CutinHandle | null = null;
   private unlocked = false;
@@ -181,12 +224,24 @@ export class App {
     prewarmSprites(warm);
     this.startAttract();
     const sc = this.params.screen;
+    // deep links: ?screen=hub|title (home) | stages | select / loadout | board / shop | heroes | hero | gacha | wiki | settings
+    const deep: Record<string, PageId[]> = {
+      hub: ["home"],
+      title: ["home"],
+      stages: ["home", "stages"],
+      select: ["home", "stages", "loadout"],
+      loadout: ["home", "stages", "loadout"],
+      board: ["home", "board"],
+      shop: ["home", "board"],
+      heroes: ["home", "heroes"],
+      hero: ["home", "heroes", "hero"],
+      gacha: ["home", "gacha"],
+      wiki: ["home", "wiki"],
+    };
     if (this.params.autoplay || sc === "game") this.startRun(this.hero);
-    else if (sc === "title") this.goTitle();
-    else if (sc === "select") this.goSelect();
-    else if (sc === "shop") this.goShop();
+    else if (sc && deep[sc]) this.goHub(deep[sc], { hero: this.params.hero ?? undefined, tab: new URLSearchParams(this.params.query).get("tab") ?? undefined });
     else if (sc === "settings") {
-      this.goTitle();
+      this.goHub();
       this.openSettingsModal();
     } else if (sc === "results") {
       this.startRun(this.hero);
@@ -202,7 +257,7 @@ export class App {
     try {
       audio.unlock();
       this.applySettings();
-      this.music(this.screen === "game" ? "battle" : this.screen === "shop" ? "shop" : "title");
+      this.music(this.screen === "game" && this.game ? this.game.view.stage.music("battle") : this.screen === "hub" ? (this.hub?.top?.music ?? "hub") : "title");
     } catch (e) {
       console.warn("[audio] unlock failed", e);
     }
@@ -235,7 +290,27 @@ export class App {
   }
 
   // ================================================================ history guard (Android Back)
-  /** Arm the Back guard: one same-URL history entry while a non-title screen is up. */
+  /** Nothing to step back to: the hub's home page (or the splash) with no overlay, sheet or settings open. */
+  private atRoot(): boolean {
+    if (this.sub || overlaysOpen() > 0) return false;
+    if (this.screen === "splash") return true;
+    return this.screen === "hub" && (this.hub?.depth ?? 1) <= 1;
+  }
+
+  /** Arm the Back guard (one same-URL history entry) unless at the root, where it is dropped so Back leaves. */
+  syncHistory(): void {
+    if (this.atRoot()) this.releaseHistory();
+    else this.guardHistory();
+  }
+
+  /** KitHost: a sheet / dialog / reveal opened or closed. */
+  overlayOpened(): void {
+    this.syncHistory();
+  }
+  overlayClosed(): void {
+    this.syncHistory();
+  }
+
   private guardHistory(): void {
     try {
       if (!(history.state as { kk?: number } | null)?.kk) history.pushState({ kk: 1 }, "");
@@ -244,7 +319,6 @@ export class App {
     }
   }
 
-  /** Back at the root (title): drop the guard so the next Back leaves the page. */
   private releaseHistory(): void {
     try {
       if ((history.state as { kk?: number } | null)?.kk) {
@@ -258,30 +332,21 @@ export class App {
 
   private onPopState(): void {
     if (this.selfPops > 0) {
-      // our own releaseHistory(): if the player already moved on (title -> select), re-arm the guard
+      // our own releaseHistory(): if the player already moved on (home -> a page), re-arm the guard
       this.selfPops--;
-      if (this.screen !== "title" && this.screen !== "splash") this.guardHistory();
+      if (!this.atRoot()) this.guardHistory();
       return;
     }
-    if (this.screen === "title" || this.screen === "splash") {
-      // Back on the title leaves the page; it only closes an open settings panel first
-      if (this.sub) this.nav.top?.onBack?.();
-      return;
-    }
-    // stay on the page: re-arm the guard, then route the gesture like Esc
-    this.guardHistory();
-    if (this.sub) {
-      this.nav.top?.onBack?.();
-      return;
-    }
-    if (this.screen === "game") {
+    // (at the root there is no guard entry: Back already left the page)
+    if (this.atRoot()) return;
+    // route the gesture like Esc / gamepad B, then re-arm the guard if there is still somewhere to go back from
+    if (this.sub || overlaysOpen() > 0) this.nav.top?.onBack?.();
+    else if (this.screen === "game") {
       if (!this.modal) this.pause();
       else if (this.modalKind === "pause") this.resume();
       // level-up / chest / game over: Back is ignored (a choice is required)
-      return;
-    }
-    // select / shop / results: one step back (to the title)
-    this.nav.top?.onBack?.();
+    } else this.nav.top?.onBack?.(); // hub page -> pop; results -> hub
+    this.syncHistory();
   }
 
   // ================================================================ screens
@@ -304,26 +369,22 @@ export class App {
     this.input.showTouchControls(false);
     this.touchShown = false;
     this.aqHold = 1;
-    if (id !== "title" && id !== "splash") this.guardHistory();
+    this.hub = scr instanceof Hub ? scr : null;
+    this.syncHistory();
   }
 
-  goTitle(): void {
+  /** Open the hub at `path` (home first; e.g. ["home", "board"] for the results' Upgrade). */
+  goHub(path: PageId[] = ["home"], opts: PageOpts = {}): void {
     this.endGame();
     this.wake.release();
     if (!this.attract) this.startAttract();
-    this.setScreen("title", showTitle(this));
-    this.releaseHistory();
-    this.music("title");
+    clearRunToasts();
+    this.setScreen("hub", new Hub(this, path, opts));
   }
 
-  goSelect(): void {
-    this.setScreen("select", showSelect(this));
-    this.music("title");
-  }
-
-  goShop(): void {
-    this.setScreen("shop", showShop(this));
-    this.music("shop");
+  /** Back to the hub home (pause QUIT, results HUB). */
+  goTitle(): void {
+    this.goHub();
   }
 
   private startAttract(): void {
@@ -339,7 +400,11 @@ export class App {
    * Begin a run with `hero`. `intro` (GO! on the select screen) plays the
    * run-start stinger: READY? with the sim paused, HUD fly-in, GO!.
    */
-  startRun(hero: string, intro = false): void {
+  startRun(hero: string, intro = false, run?: RunConfig, opts: { account?: boolean } = {}): void {
+    // Season 2: the account loadout (src/meta buildRunConfig) arrives as `run` with opts.account; RETRY rebuilds it,
+    // debug URLs (?stage= ?relics= ?endless=1 ...) build one, else the World's default (Dream Meadow)
+    this.account = !!opts.account && !!run;
+    this.runConfig = run ?? debugRunConfig(this.params);
     this.hero = heroDef(hero).id;
     save.data.lastHero = this.hero;
     save.save();
@@ -355,26 +420,44 @@ export class App {
     this.game = new Session(this, {
       hero: this.hero,
       seed,
-      meta: save.data.meta,
+      // an account RunConfig already holds the old Dream Shop ranks (board nodes): never both
+      meta: this.account ? undefined : save.data.meta,
       god: this.params.god,
       maxEnemies: QUALITY[this.tier].maxEnemies,
       bot: this.params.autoplay,
       hooks: this.hookset(),
+      run: this.runConfig,
     });
     this.ended = false;
+    this.banked = false;
     this.endT = 0;
     this.lvIntro = -1;
     this.pausePending = false;
     this.skipEdges = false;
+    const w = this.game.world;
+    this.episode = { n: save.profile.lifetime.runs + 1, title: episodeTitle(w.stage.id, { hero: w.hero.name, stage: w.stage.name }) };
     this.setScreen("game", null);
+    clearRunToasts();
     if (this.params.skip > 0) this.game.skip(this.params.skip);
     this.wake.acquire();
     // first few runs: how to play (move -> dash -> overdrive)
     this.tut = save.data.runs < 3 && !this.params.autoplay ? new Tutorial(this.hud, this.input, this.game.world) : null;
-    if (intro && !this.params.autoplay && this.params.skip <= 0) this.beginIntro();
+    // in-run Plot Point toasts (real players only)
+    this.achWatch = this.params.autoplay ? null : new AchievementWatch(save.profile);
+    this.achT = 0;
+    if (intro && !this.params.autoplay && this.params.skip <= 0) this.beginIntro(this.account);
     else this.tut?.start();
-    this.music("battle", 1.5);
+    this.music(this.game.view.stage.music("battle"), 1.5);
     this.sfx("uiConfirm");
+  }
+
+  /** RunConfig of the current / last run (undefined = the World default). */
+  private runConfig: RunConfig | undefined;
+
+  /** Hub GO: the saved loadout -> RunConfig (repaired, never throws) -> a run with the episode card. */
+  startAccountRun(): void {
+    const plan = save.runPlan();
+    this.startRun(plan.hero, true, plan.config, { account: true });
   }
 
   private hookset() {
@@ -411,6 +494,7 @@ export class App {
     this.endIntro();
     this.tut?.dispose();
     this.tut = null;
+    this.achWatch = null;
     this.pausePending = false;
     if (this.game) {
       this.game.dispose();
@@ -422,41 +506,80 @@ export class App {
     this.r.camera.zoomTo(1, 10);
   }
 
-  /** End the current run and show results (from game over, victory, quit). */
+  /**
+   * Bank the current run into the profile (payout, XP, mastery, records,
+   * unlocks, Plot Points) exactly once and return its report.
+   */
+  bankRun(): RunReport | null {
+    const g = this.game;
+    if (!g) return this.report;
+    if (this.banked && this.report) return this.report;
+    this.lastSummary = g.world.summary();
+    this.report = save.recordRun(this.lastSummary);
+    this.banked = true;
+    return this.report;
+  }
+
+  /** End the current run and show the Episode Results (from game over, victory, quit). */
   endRun(): void {
     const g = this.game;
     if (!g) return;
-    this.lastSummary = g.world.summary();
-    const summary = this.lastSummary;
+    const report = this.bankRun() as RunReport;
+    const summary = this.lastSummary as RunSummary;
     if (this.modal) this.closeModal();
     this.endCutin();
     this.endIntro();
     this.tut?.dispose();
     this.tut = null;
+    this.achWatch = null;
     this.pausePending = false;
     this.wake.release();
     this.input.showTouchControls(false);
-    this.setScreen("results", showResults(this, summary));
+    clearRunToasts();
+    this.setScreen("results", showResults(this, summary, report, this.episode));
     this.music(summary.victory ? "victory" : "gameover", 1);
   }
 
+  /** Same episode again: an account run re-plans (the profile just gained XP / unlocks), a debug run reuses its config. */
   retry(): void {
-    this.startRun(this.hero);
+    if (this.account) this.startAccountRun();
+    else this.startRun(this.hero, false, this.runConfig);
+  }
+
+  /** Game over RETRY: bank the run, say what it paid, go again. */
+  retryFromGameOver(): void {
+    const r = this.bankRun();
+    this.retry();
+    if (r) this.toast(`Episode ${fmtInt(r.episode)} banked!`, { kind: "good", reward: `${money("coins", `+${fmtInt(r.coins.total)}`)}${r.gems.total ? money("gems", `+${fmtInt(r.gems.total)}`) : ""}`, inRun: true, ms: 2600 });
   }
 
   // ================================================================ run-start stinger
-  private beginIntro(): void {
+  /** READY? (sim paused) -> GO!; hub runs first show the "EPISODE N" title card. */
+  private beginIntro(card = false): void {
     this.introT = 0;
     this.introGo = false;
+    this.introReadyShown = false;
+    this.introCardT = card ? INTRO_CARD : 0;
     time.paused = true;
-    this.game?.view.pose(0.9);
+    this.game?.view.pose(this.introCardT + 0.9);
+    if (card && this.game) {
+      this.epCard?.remove();
+      this.epCard = showEpisodeCard(this.ui, this.episode.n, this.episode.title, this.game.world.stage.name);
+      this.sfx("narratorSting");
+    } else this.showReady();
+  }
+
+  private showReady(): void {
+    this.introReadyShown = true;
+    this.epCard?.leave();
     this.hud.intro(true);
     this.sfx("countTick", 0.6, 4);
   }
 
   private introFrame(dt: number): void {
     this.introT += dt;
-    if (!this.introGo && this.introT >= INTRO_READY) {
+    if (!this.introReadyShown && this.introT >= this.introCardT) this.showReady();
+    if (!this.introGo && this.introT >= this.introCardT + INTRO_READY) {
       this.introGo = true;
       if (!this.modal) time.paused = false;
       this.hud.introGo();
@@ -465,10 +588,12 @@ export class App {
       this.sfx("uiConfirm");
       this.tut?.start();
     }
-    if (this.introT >= INTRO_END) this.endIntro();
+    if (this.introT >= this.introCardT + INTRO_END) this.endIntro();
   }
 
   private endIntro(): void {
+    this.epCard?.remove();
+    this.epCard = null;
     if (this.introT < 0) return;
     if (!this.introGo && !this.modal) time.paused = false;
     this.introT = -1;
@@ -544,7 +669,9 @@ export class App {
       m.close();
       this.sub = null;
       if (under) under.el.style.visibility = "";
-      if (this.screen === "title") this.releaseHistory();
+      this.syncHistory();
+      // an import / reset may have replaced the profile: the hub re-reads it
+      this.hub?.refreshTop();
     });
     this.sub = m;
     markBorn();
@@ -569,23 +696,31 @@ export class App {
       }
     } else this.ctxToast = false;
     if (this.screen === "game" && g) this.gameFrame(g, dt);
+    kitTick(dt);
     this.current?.update?.(dt);
     this.modal?.update?.(dt);
     this.sub?.update?.(dt);
 
     // menus over the attract game: keep its hero clear of the logo / menu
     if (this.attract) {
-      const menu = this.screen === "title" || this.screen === "splash";
+      const menu = this.screen === "hub" || this.screen === "splash";
       const compact = COMPACT_LANDSCAPE.matches;
       const v = this.r.camera.view;
+      const anchor = this.screen === "hub" ? (this.hub?.camAnchor() ?? null) : null;
       // desktop / tablet landscape: logo + portraits on top, the menu (or TAP TO START) stacked in the centre
       // column down to ~85 % height -> the hero runs in the open meadow left of it (22 %, 62 %)
       const wide = !compact && v.w > v.h * 1.2;
       // portrait: below the centred menu (80 % height);
       // compact landscape: title = logo left, menu right -> the hero runs in the gap between them;
       // splash = key art in the middle -> the hero runs on the right
-      this.attract.camOffY = menu && !compact ? (wide ? -0.12 : -0.3) * v.h : 0;
-      this.attract.camOffX = !menu ? 0 : wide ? 0.28 * v.w : compact ? (this.screen === "title" ? -0.08 : -0.3) * v.w : 0;
+      if (anchor) {
+        // hub pages that leave a window on the game say where (screen fractions)
+        this.attract.camOffX = (0.5 - anchor.x) * v.w;
+        this.attract.camOffY = (0.5 - anchor.y) * v.h;
+      } else {
+        this.attract.camOffY = menu && !compact ? (wide ? -0.12 : -0.3) * v.h : 0;
+        this.attract.camOffX = !menu ? 0 : wide ? 0.28 * v.w : compact ? (this.screen === "hub" ? -0.08 : -0.3) * v.w : 0;
+      }
     }
     // results: the finished run stays on screen, frozen
     const s = this.screen === "game" || this.screen === "results" ? g : this.attract;
@@ -594,7 +729,8 @@ export class App {
     // a modal / Results covers the scene: redraw it at most 30x per second (input, HUD and modals stay full rate)
     this.drawAcc += dt;
     this.drawSimAcc += time.dt;
-    const throttled = !!this.modal || this.screen === "results";
+    // (hub pages that cover the attract game count too)
+    const throttled = !!this.modal || this.screen === "results" || (this.screen === "hub" && !!this.hub?.coversScene);
     if (!throttled || this.drawAcc >= THROTTLED_DRAW) {
       r.beginFrame(this.drawAcc);
       if (s) s.draw(r.time, this.drawSimAcc, this.drawAcc);
@@ -656,7 +792,7 @@ export class App {
       this.tut?.relayout();
     }
     inp.setUltCharge(w.ultMeter / CFG.ultMax, w.ultReady);
-    inp.setDashCharge(w.player.dashMax > 0 ? 1 - w.player.dashCd / w.player.dashMax : 1);
+    inp.setDashCharge(w.dashMeter);
 
     // a pause asked for during the cut-in / READY? opens right after it
     if (this.pausePending && !this.modal && !cut && !hold) this.pause();
@@ -695,28 +831,50 @@ export class App {
         this.openModal("over", openGameOver(this, w, true));
       }
     }
-    if (!this.modal && w.phase === "play") this.tut?.frame(dt);
+    if (!this.modal && w.phase === "play") {
+      this.tut?.frame(dt);
+      this.pollPlotPoints(w, dt);
+    }
+  }
+
+  /** In-run Plot Point toasts: about once a second of play, never under a modal; bottom centre, clear of the hero. */
+  private pollPlotPoints(w: Session["world"], dt: number): void {
+    const watch = this.achWatch;
+    if (!watch || this.introT >= 0) return;
+    this.achT += dt;
+    if (this.achT < ACH_POLL) return;
+    this.achT = 0;
+    for (const def of watch.poll(w.summary().stats)) {
+      this.sfx("achievement", 0.7);
+      this.toast(def.name, { kind: "ach", kicker: "PLOT POINT!", icon: trophyIcon("kt-img"), inRun: true });
+    }
   }
 
   /** After the game-over revive. */
   revived(): void {
     this.ended = false;
     this.endT = 0;
-    const b = this.game?.world.boss;
-    this.music(b?.def.boss ? (b.def.boss.music ?? "boss") : "battle", 1);
+    const g = this.game;
+    const b = g?.world.boss;
+    if (g) this.music(b?.def.boss ? g.view.stage.bossMusic(b) : g.view.stage.music("battle"), 1);
   }
 
-  /** Flash a small message at the bottom of the screen. */
-  toast(msg: string): void {
-    const el = document.createElement("div");
-    el.className = "toast";
-    el.textContent = msg;
-    this.ui.appendChild(el);
-    setTimeout(() => el.remove(), 2300);
+  /** A toast (kit: queued, rate-limited; `inRun` = the bottom strip, clear of the hero). */
+  toast(msg: string, o: ToastOpts = {}): void {
+    toast(this, msg, o);
   }
 
   get lastRun(): RunSummary | null {
     return this.lastSummary;
+  }
+
+  /** Report of the last banked run (null before the first one this session). */
+  get lastReport(): RunReport | null {
+    return this.report;
+  }
+
+  get currentEpisode(): EpisodeInfo {
+    return this.episode;
   }
 
   /** UI accent colour for a hero. */
