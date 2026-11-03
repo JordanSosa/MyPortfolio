@@ -162,8 +162,7 @@ export const INST: Record<string, InstFn> = {
   glock(v, m, len, vel) {
     const f = mtof(m);
     v.tone({ w: "sine", f, a: 0.001, d: 0.75, s: 0, v: 0.2 * vel });
-    v.fm({ f, ratio: 2.76, idx: 1.1, idx2: 0.04, it: 0.12, a: 0.001, d: 0.35, s: 0, v: 0.08 * vel });
-    v.tone({ w: "sine", f: f * 2.76, a: 0.001, d: 0.09, s: 0, v: 0.035 * vel });
+    v.fm({ f, ratio: 2.76, idx: 1.4, idx2: 0.04, it: 0.1, a: 0.001, d: 0.35, s: 0, v: 0.09 * vel });
     v.noise({ a: 0.0008, d: 0.008, s: 0, v: 0.04 * vel, bp: 5000, q: 1.5 });
   },
   /** kazoo: buzzy square through a nasal "oo-ah" formant, scooped attack, wide vibrato */

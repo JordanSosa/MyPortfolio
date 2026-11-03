@@ -25,6 +25,9 @@ const SHOUT: DrumPat = {
   c: "!x",
 };
 
+/** intensity >= 0.8: crash-ride 8ths, china-ish open hats, tom pickups */
+const PERC: DrumPat = { o: "..x...x...x...x.", tamb: "x.x.x.x.x.x.x.x.", th: "............x...", tm: "..............x." };
+
 const HONK = "@x x . . . . . . | . | . | . | x x . . . . . . | . | . | .";
 
 const sections: Record<string, SectionDef> = {
@@ -51,6 +54,7 @@ const sections: Record<string, SectionDef> = {
         "F#5 F#5 B5 F#5 D6 - C#6 B5 | B5 - - G5 - - D5 G5 | C#6 - E6 - A6 - G6 F#6 | A#5 - - - C#6 - - - |" +
         "F#5 F#5 B5 F#5 D6 - E6 F#6 | G6 - - F#6 D6 - B5 - | E6 - - D6 B5 - G5 - | F#6 - - - - - . . |",
       drums: DOUBLE,
+      perc: PERC,
     },
     fill: DOUBLE_FILL,
   },
@@ -66,6 +70,7 @@ const sections: Record<string, SectionDef> = {
         "D6 . D6 . B5 . D6 E6 | E6 . E6 . C#6 . E6 F#6 | F#6 - - E6 C#6 - - A5 | B5 - - - - - . . |" +
         "G6 . G6 . D6 . G6 A6 | A6 . A6 . E6 . A6 B6 | G6 - - - E6 - - C6 | F#6 - - - C#6 - A#5 - |",
       drums: SHOUT,
+      perc: PERC,
     },
     fill: { k: "x...x...x...x...", s: "x.x.x.x.xxxxXXXX", up: "x---------------" },
   },
@@ -82,6 +87,7 @@ const sections: Record<string, SectionDef> = {
         "B5 - - - D6 - - - | D6 - - - G6 - - - | F#6 - - - D6 - E6 F#6 | E6 - - - C#6 - - - |" +
         "B5 - - - F#6 - - - | G6 - - - B6 - A6 G6 | G6 - F#6 E6 F#6 - C#6 - | B5 - - - - - - - |",
       drums: DOUBLE,
+      perc: PERC,
     },
     fill: DOUBLE_FILL,
   },
@@ -94,13 +100,14 @@ export const bossFinale: SongDef = {
   key: "B minor",
   delayBeats: 0.5,
   channels: [
-    { id: "bass", inst: "bassSaw", vol: 0.55, center: 38, voicing: "root" },
+    { id: "bass", inst: "bassSaw", vol: 0.55, center: 41, voicing: "root" },
     { id: "str", inst: "strings", vol: 1.4, center: 62, rev: 0.4 },
-    { id: "horn", inst: "brass", vol: 1.3, center: 64, rev: 0.2, pan: -0.15 },
+    { id: "horn", inst: "brass", vol: 1.8, center: 64, rev: 0.2, pan: -0.15 },
     { id: "lead", inst: "leadDist", vol: 2.0, rev: 0.2, dly: 0.12 },
     { id: "drums", inst: "drums", vol: 0.75 },
-    { id: "arp", inst: "arpSq", vol: 1.8, center: 76, layer: 0.6, dly: 0.25, pan: 0.25 },
-    { id: "choir", inst: "choir", vol: 1.2, center: 66, layer: 0.8, rev: 0.5, pan: 0.1 },
+    { id: "arp", inst: "arpSq", vol: 3.6, center: 76, layer: 0.6, dly: 0.25, pan: 0.25 },
+    { id: "choir", inst: "choir", vol: 1.6, center: 66, layer: 0.8, rev: 0.5, pan: 0.1 },
+    { id: "perc", inst: "drums", vol: 1.5, layer: 0.8 },
   ],
   sections,
   order: ["intro", "A", "B", "C", "A", "C"],

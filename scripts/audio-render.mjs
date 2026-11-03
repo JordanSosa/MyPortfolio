@@ -9,6 +9,7 @@
 //   node scripts/audio-render.mjs --layers        # intensity layers: every layered track at intensity 0 vs 1 (level + band deltas)
 //   node scripts/audio-render.mjs --degrade       # cancel's budget cuts: 64 s with degrade 0 / .34 / .67 / 1, per-segment spectra
 //   node scripts/audio-render.mjs --mix [--filter candy]  # per-channel solo levels (10 s, intensity 1) vs the full mix
+//   node scripts/audio-render.mjs --scenes        # scripted Season 2 moments (MYTHIC pull, 10-pull, death stinger, lost 50/50)
 //   node scripts/audio-render.mjs --chaos         # headroom: base chaos over battle + Season 2 chaos over every stage theme
 //
 // Renders run inside headless Chromium (OfflineAudioContext) on tools/audio.html,
@@ -186,7 +187,7 @@ function segments(file, segs) {
 const args = parseArgs();
 const OUT = new URL("../shots/audio/", import.meta.url).pathname;
 mkdirSync(OUT, { recursive: true });
-const all = !args.sfx && !args.tracks && !args.analyze && !args.chaos && !args.spam && !args.live && !args.layers && !args.degrade && !args.mix;
+const all = !args.sfx && !args.tracks && !args.analyze && !args.chaos && !args.spam && !args.live && !args.layers && !args.degrade && !args.mix && !args.scenes;
 const filter = args.filter && args.filter !== true ? String(args.filter).split(",") : null;
 const pick = (id) => !filter || filter.some((f) => id.includes(f));
 const fullLength = args.seconds === "full";
@@ -194,6 +195,7 @@ const seconds = fullLength ? 0 : Number(args.seconds ?? 20);
 
 const fmt = (x, d = 2) => (Number.isFinite(x) ? x.toFixed(d) : String(x));
 const problems = [];
+const srcRate = {};
 
 function report(name, s, kind) {
   const issues = [];
@@ -280,7 +282,7 @@ try {
 
   if (all || args.spam) {
     console.log("\n== rate limit / voice cap (40 triggers, 5 ms apart) ==");
-    for (const id of ["hit", "gem", "enemyDie", "explosion"]) {
+    for (const id of ["hit", "gem", "enemyDie", "explosion", "missile", "boba", "teacup", "crunch", "fireball", "honk", "lightstick"]) {
       const r = await page.evaluate((id) => window.__audioRender.spam(id, 40, 0.005), id);
       console.log(`${id.padEnd(10)} played ${r.played}/40`);
       report(`spam_${id}`, r.stats, "spam");
@@ -316,14 +318,31 @@ try {
       if (t === "cancel" && !fullLength) o.degrade = [[0, 0], [len * 0.25, 0.34], [len * 0.5, 0.67], [len * 0.75, 1]];
       const r = await page.evaluate(([t, o]) => window.__audioRender.track(t, o), [t, o]);
       report(`music_${t}`, r.stats, "music");
+      srcRate[t] = r.srcPerSec;
       written.tracks.push(save(`music_${t}`, r.wav));
     }
+    // CPU proxy: synth sources started per second (each = an oscillator or noise buffer + its envelope / filters)
+    // reference: the busiest base-game track (already shipped and profiled on phones)
+    const BASE = ["title", "battle", "boss", "final", "victory", "gameover", "shop"];
+    const ref = Math.max(0, ...BASE.map((t) => srcRate[t] ?? 0));
+    console.log("sources started per second" + (ref ? ` (busiest base-game track = ${fmt(ref, 0)})` : "") + ":");
+    console.log("  " + Object.entries(srcRate).map(([t, v]) => `${t} ${fmt(v, 0)}`).join("  "));
+    for (const [t, v] of Object.entries(srcRate)) if (ref && v > ref * 1.25) problems.push(`music_${t}: ${fmt(v, 0)} sources/s, over 1.25x the busiest base-game track (${fmt(ref, 0)})`);
     if (!filter || pick("xfade")) {
       const r = await page.evaluate(() =>
         window.__audioRender.track("battle", { seconds: 12, intensity: [[0, 1]], then: { at: 5, track: "boss", fade: 1.2 }, muffle: [[8.5, true], [10.5, false]] }),
       );
       report("xfade_battle_boss", r.stats, "music");
       written.tracks.push(save("xfade_battle_boss", r.wav));
+    }
+  }
+
+  if (all || args.scenes) {
+    console.log("\n== scenes (scripted Season 2 moments, timings from gacha.md / src/ui) ==");
+    for (const name of (await page.evaluate(() => window.__audioRender.scenes)).filter(pick)) {
+      const r = await page.evaluate((n) => window.__audioRender.scene(n), name);
+      report(`scene_${name}`, r.stats, "mix");
+      written.tracks.push(save(`scene_${name}`, r.wav));
     }
   }
 
@@ -345,22 +364,25 @@ try {
   }
 
   if (all || args.layers) {
-    console.log("\n== intensity layers (12 s at intensity 0 vs 1; bosses 0.4 vs 1) ==");
+    console.log("\n== intensity layers (12 s of the looped sections at intensity 0 vs 1; bosses 0.4 vs 1) ==");
     for (const t of tracks.filter(pick).filter((t) => Object.keys(meta[t].layers).length)) {
       const lo = isBoss(t) ? 0.4 : 0;
-      const a = await page.evaluate(([t, lo]) => window.__audioRender.track(t, { seconds: 12, intensity: [[0, lo]] }), [t, lo]);
-      const b = await page.evaluate((t) => window.__audioRender.track(t, { seconds: 12, intensity: [[0, 1]] }), t);
+      const from = meta[t].totalSeconds - meta[t].loopSeconds + 0.5; // skip the intro
+      const secs = from + 12.5;
+      const a = await page.evaluate(([t, lo, secs]) => window.__audioRender.track(t, { seconds: secs, intensity: [[0, lo]] }), [t, lo, secs]);
+      const b = await page.evaluate(([t, secs]) => window.__audioRender.track(t, { seconds: secs, intensity: [[0, 1]] }), [t, secs]);
       const fa = save(`layers_${t}_lo`, a.wav);
       const fb = save(`layers_${t}_hi`, b.wav);
-      const sa = segments(fa, [["lo", 2, 12]])?.[0];
-      const sb = segments(fb, [["hi", 2, 12]])?.[0];
+      const sa = segments(fa, [["lo", from, from + 12]])?.[0];
+      const sb = segments(fb, [["hi", from, from + 12]])?.[0];
       const d = sa && sb ? sb.rms - sa.rms : NaN;
       console.log(
-        `${t.padEnd(13)} @${lo}: rms ${fmt(sa?.rms, 1)} dB  centroid ${fmt(sa?.centroid, 0)} Hz   @1: rms ${fmt(sb?.rms, 1)} dB  centroid ${fmt(sb?.centroid, 0)} Hz   delta ${fmt(d, 1)} dB  peak@1 ${fmt(b.stats.peakDb, 1)} dB`,
+        `${t.padEnd(13)} @${lo}: rms ${fmt(sa?.rms, 1)} dB  centroid ${fmt(sa?.centroid, 0)} Hz  >4k ${fmt((sa?.hi ?? 0) * 100, 2)}%   @1: rms ${fmt(sb?.rms, 1)} dB  centroid ${fmt(sb?.centroid, 0)} Hz  >4k ${fmt((sb?.hi ?? 0) * 100, 2)}%   delta ${fmt(d, 1)} dB  peak@1 ${fmt(b.stats.peakDb, 1)} dB`,
       );
       if (b.stats.clipped || b.stats.nan) problems.push(`layers ${t}: clipping/NaN at intensity 1`);
       if (sa && sa.rms < -42) problems.push(`layers ${t}: too sparse at intensity ${lo} (${fmt(sa.rms, 1)} dB)`);
-      if (Number.isFinite(d) && d < 0.8 && sb.centroid - sa.centroid < 150) problems.push(`layers ${t}: intensity barely changes anything (${fmt(d, 1)} dB)`);
+      // a layer must be heard: louder, brighter, or more top end (dense boss mixes are held level by the glue compressor)
+      if (Number.isFinite(d) && d < 0.8 && sb.centroid - sa.centroid < 150 && sb.hi < sa.hi * 1.5) problems.push(`layers ${t}: intensity barely changes anything (${fmt(d, 1)} dB)`);
     }
   }
 
@@ -409,6 +431,13 @@ try {
       ["suspend", "suspend", 800],
       ["resume", "resume", 1200],
       ["boss xfade", "music:boss", 2500],
+      ["hub", "music:hub", 2500],
+      ["gacha", "music:gacha|sfx:gachaCharge", 2000],
+      ["mythic cut", "sfx:gachaMythicGlitch|cut", 1200],
+      ["mythic boom", "sfx:gachaMythicBoom|music:gacha_mythic", 2500],
+      ["cancel epic", "music:cancel|int:0.7|deg:0", 3000],
+      ["cancel cuts", "deg:0.67", 4000],
+      ["cancel rushed", "deg:1", 3000],
       ["none", "music:none", 1500],
       ["silence", "wait", 1500],
     ];
@@ -419,6 +448,8 @@ try {
       if (label === "suspend" && r.state !== "suspended") problems.push("live: suspend did not suspend");
       if (label === "resume" && r.state !== "running") problems.push("live: resume did not resume");
       if (label === "silence" && r.rmsDb > -60) problems.push("live: music did not stop");
+      if (["hub", "gacha", "cancel epic", "cancel cuts", "cancel rushed", "mythic boom"].includes(label) && r.rmsDb < -40) problems.push(`live: ${label} silent`);
+      if (label.startsWith("cancel") && r.section === "") problems.push(`live: ${label} has no section`);
     }
   }
 

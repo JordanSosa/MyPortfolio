@@ -19,6 +19,9 @@ const OOMPAH: DrumPat = {
 };
 const OOMPAH_FILL: DrumPat = { k: "x...x...x...x...", s: "x.xxx.xxx.x.xxxx", tim: "x.......x.x.x.x.", c: "x" };
 
+/** the "things are getting out of hand" layer (intensity >= 0.8): snare drags, cymbal swells, extra kicks */
+const PERC: DrumPat = { s: "..o.o...o.o.o.oo", k: "......x.......x.", tamb: "x.x.x.x.x.x.x.x.", up: ". | . | . | ........x-------" };
+
 const LEAD_A =
   "C6 . C6 D6 Eb6 . C6 . | F6 . Eb6 D6 C6 . Ab5 . | B5 . B5 C6 D6 . G5 . | C6 - Eb6 - G6 - - . |" +
   "Ab5 . Ab5 Bb5 C6 . Ab5 . | F5 . Ab5 C6 F6 . Eb6 D6 | D6 . C6 . Ab5 . F5 . | G5 - - - . G5 Ab5 B5 |";
@@ -46,6 +49,7 @@ const sections: Record<string, SectionDef> = {
       arp: "@0 1 2 3 2 1 0 1 0 1 2 3 2 1 0 1",
       lead: LEAD_A,
       drums: OOMPAH,
+      perc: PERC,
     },
     fill: OOMPAH_FILL,
   },
@@ -62,6 +66,7 @@ const sections: Record<string, SectionDef> = {
         "G4 - - - C5 - - - | Ab4 - - - C5 - - - | G4 - - - B4 - - - | G4 - - - C5 - - - |" +
         "Ab4 - - - Eb5 - - - | Ab4 - - - F4 - - - | F4 - - - Ab4 - - - | G4 - - - B4 - - - |",
       drums: OOMPAH,
+      perc: PERC,
     },
     fill: OOMPAH_FILL,
   },
@@ -78,6 +83,7 @@ const sections: Record<string, SectionDef> = {
         "Ab6 - - G6 Eb6 - - - | F6 - - Eb6 D6 - - - | F6 - - - Db6 - - - | B5 - - - D6 - F6 - |",
       brass: "@x - - - - - - . | x - - - - - - . | x - - - x - - - | x - - - - - - - |",
       drums: { k: "x...x...x...x...", s: "....x.......x...", tim: "x...............", h: "x.x.x.x.x.x.x.x." },
+      perc: PERC,
     },
     fill: { k: "x...x...x...x...", s: "x.x.x.x.xxxxXXXX", tim: "x...x...x.x.x.x.", up: "x---------------" },
   },
@@ -97,6 +103,7 @@ const sections: Record<string, SectionDef> = {
         "C5 - - - Ab4 - - - | C5 - - - G4 - - - | Ab4 - - - B4 - - - | C5 - - - - - - - |",
       brass: "@x - - - x - - - | x - - - x - - - | x - - - x - - - | x - - - x - - - | x - - - x - - - | x - - - x - - - | x - - - x - - - | x - - - - - - -",
       drums: { ...OOMPAH, s: "....x.......x...", o: "..x...x...x...x." },
+      perc: PERC,
     },
     fill: OOMPAH_FILL,
   },
@@ -109,14 +116,15 @@ export const bossCandy: SongDef = {
   key: "C minor",
   delayBeats: 0.5,
   channels: [
-    { id: "tuba", inst: "tuba", vol: 0.95, center: 38, voicing: "root" },
-    { id: "stab", inst: "stab", vol: 2.3, center: 64, rev: 0.15, pan: -0.15 },
+    { id: "tuba", inst: "tuba", vol: 0.7, center: 41, voicing: "root" },
+    { id: "stab", inst: "stab", vol: 3.4, center: 64, rev: 0.15, pan: -0.15 },
     { id: "choir", inst: "choir", vol: 1.05, center: 62, rev: 0.45 },
-    { id: "lead", inst: "glock", vol: 1.6, rev: 0.25, dly: 0.15, pan: 0.05 },
+    { id: "lead", inst: "glock", vol: 3.0, rev: 0.25, dly: 0.15, pan: 0.05 },
     { id: "drums", inst: "drums", vol: 0.78 },
-    { id: "arp", inst: "glock", vol: 0.85, center: 84, layer: 0.6, dly: 0.22, rev: 0.12, pan: 0.3 },
+    { id: "arp", inst: "glock", vol: 1.4, center: 84, layer: 0.6, dly: 0.22, rev: 0.12, pan: 0.3 },
     { id: "kazoo", inst: "kazoo", vol: 1.6, layer: 0.8, rev: 0.2, pan: -0.25 },
-    { id: "brass", inst: "brass", vol: 1.1, center: 60, layer: 0.8, rev: 0.3, pan: 0.15 },
+    { id: "perc", inst: "drums", vol: 1.4, layer: 0.8 },
+    { id: "brass", inst: "brass", vol: 1.6, center: 60, layer: 0.8, rev: 0.3, pan: 0.15 },
   ],
   sections,
   order: ["intro", "A", "B", "C", "A2", "C"],

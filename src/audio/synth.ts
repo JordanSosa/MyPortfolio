@@ -183,6 +183,9 @@ export function curve(kit: Kit, name: "soft" | "drive" | "crush" | "clip" | "lof
 
 export const EPS = 0.0001;
 
+/** Sources (oscillators / noise buffers) started so far - a CPU-cost proxy for the offline perf report. */
+export const synthStats = { sources: 0 };
+
 export function mtof(m: number): number {
   return 440 * Math.pow(2, (m - 69) / 12);
 }
@@ -363,6 +366,7 @@ export class Voice {
   }
 
   private track(src: AudioScheduledSourceNode, start: number, stop: number): void {
+    synthStats.sources++;
     src.start(start);
     src.stop(stop + 0.01);
     this.srcs.push(src);
@@ -507,6 +511,7 @@ export class Voice {
     this.chain(src, o, t, dec).connect(g);
     tail.connect(this.dest(o));
     // random start offset so repeated bursts never sound identical
+    synthStats.sources++;
     src.start(t, Math.random() * 1.5);
     src.stop(end + 0.01);
     this.srcs.push(src);

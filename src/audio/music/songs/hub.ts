@@ -120,7 +120,7 @@ export const hub: SongDef = {
     { id: "keys", inst: "ep", vol: 1.05, center: 64, rev: 0.3, dly: 0.1, pan: -0.15 },
     { id: "pad", inst: "padSoft", vol: 0.3, center: 60, rev: 0.5 },
     { id: "bell", inst: "musicbox", vol: 1.1, center: 84, rev: 0.4, dly: 0.3, pan: 0.3 },
-    { id: "lead", inst: "flute", vol: 1.25, rev: 0.35, dly: 0.18 },
+    { id: "lead", inst: "flute", vol: 1.5, rev: 0.35, dly: 0.18 },
     { id: "drums", inst: "drums", vol: 0.62 },
   ],
   sections,

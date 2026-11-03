@@ -5,6 +5,7 @@
  */
 import type { MusicTrack, SfxId, SfxOpts } from "./api";
 import { Engine, songFor } from "./engine";
+import { synthStats } from "./synth";
 import { SFX } from "./sfx";
 import { INST } from "./music/inst";
 
@@ -210,7 +211,11 @@ export interface TrackRenderOpts {
  * lookahead as realtime). Creating all notes up front would make long renders
  * crawl (every not-yet-started node is still traversed each render quantum).
  */
+/** Sources started by the last renderTrack call (perf report). */
+export const lastRender = { sources: 0, seconds: 0 };
+
 export async function renderTrack(track: Exclude<MusicTrack, "none">, o: TrackRenderOpts = {}): Promise<AudioBuffer> {
+  const src0 = synthStats.sources;
   const seconds = o.seconds ?? 20;
   const sr = o.sr ?? 44100;
   const STEP = 0.1;
@@ -249,8 +254,109 @@ export async function renderTrack(track: Exclude<MusicTrack, "none">, o: TrackRe
       void ctx.resume();
     });
   }
+  const out = cut(await ctx.startRendering());
+  lastRender.sources = synthStats.sources - src0;
+  lastRender.seconds = seconds;
+  return out;
+}
+
+/** One step of a scripted scene: at `t` seconds play an sfx, switch music, duck, set intensity / degrade. */
+export type SceneStep =
+  | { t: number; sfx: SfxId; vol?: number; pitch?: number }
+  | { t: number; music: MusicTrack; fade?: number }
+  | { t: number; duck: number; secs: number }
+  | { t: number; intensity: number }
+  | { t: number; degrade: number };
+
+/** Render a scripted moment (a gacha pull, a death...) exactly as the engine would play it. */
+export async function renderScene(steps: SceneStep[], seconds: number, sr = 44100): Promise<AudioBuffer> {
+  const ctx = offline(seconds, sr);
+  const eng = new Engine(ctx);
+  let vt = 0;
+  eng.clock = () => vt;
+  eng.setVolumes(DEFAULT_VOLS);
+  const todo = [...steps].sort((a, b) => a.t - b.t);
+  let i = 0;
+  const run = (now: number) => {
+    vt = now;
+    while (i < todo.length && todo[i].t + PRE <= now + 1e-6) {
+      const s = todo[i++];
+      if ("sfx" in s) eng.sfx(s.sfx, { vol: s.vol, pitch: s.pitch }, Math.max(now, s.t + PRE));
+      else if ("music" in s) eng.music(s.music, s.fade ?? 1);
+      else if ("duck" in s) eng.duck(s.duck, s.secs);
+      else if ("intensity" in s) eng.setIntensity(s.intensity);
+      else eng.setDegrade(s.degrade);
+    }
+    eng.tick(now);
+  };
+  const STEP = 0.05;
+  const q = (t: number) => Math.round(t * sr / 128) * 128 / sr;
+  run(PRE);
+  for (let t = q(PRE + STEP); t < seconds + PRE - STEP; t = q(t + STEP)) {
+    const tt = t;
+    ctx.suspend(tt).then(() => {
+      run(tt);
+      void ctx.resume();
+    });
+  }
   return cut(await ctx.startRendering());
 }
+
+/** The moments the Season 2 UI scripts (timings from docs/content/gacha.md and src/ui). */
+export const SCENES: Record<string, { seconds: number; steps: SceneStep[] }> = {
+  // gacha.md storyboard: summon, meteor, impact -> MYTHIC: glitch + music cut, silence + error, boom at 2.3 s, sting at 5.5 s
+  mythic_pull: {
+    seconds: 13,
+    steps: [
+      { t: 0, music: "gacha", fade: 0 },
+      { t: 2, sfx: "gachaCharge" },
+      { t: 2, duck: 0.5, secs: 2.2 },
+      { t: 3.2, sfx: "gachaMeteor" },
+      { t: 4.2, sfx: "gachaMythicGlitch" },
+      { t: 4.2, music: "none", fade: 0 },
+      { t: 6.5, sfx: "gachaMythicBoom" },
+      { t: 7.2, sfx: "voiceBlip" },
+      { t: 7.35, sfx: "voiceBlip" },
+      { t: 7.5, sfx: "voiceBlip" },
+      { t: 9.7, music: "gacha_mythic", fade: 0 },
+    ],
+  },
+  // src/ui/hub/gacha.ts as it is wired today: charge, meteor at 0.7 s, reveal at 1.25 s, card flips every 0.16 s
+  ssr_ten_pull: {
+    seconds: 8,
+    steps: [
+      { t: 0, music: "gacha", fade: 0 },
+      { t: 1.5, sfx: "uiConfirm" },
+      { t: 1.6, sfx: "gachaCharge" },
+      { t: 2.3, sfx: "gachaMeteor" },
+      { t: 2.85, sfx: "gachaRevealSSR" },
+      ...Array.from({ length: 10 }, (_, i) => ({ t: 2.95 + i * 0.16, sfx: (i === 4 ? "starUp" : "cardFlip") as SfxId, vol: 0.7, pitch: i })),
+      { t: 4.9, sfx: "gachaDupe" },
+    ],
+  },
+  // the TO BE CONTINUED death screen (src/ui/screens/over.ts): gameOver, then the riff 0.18 s later, over the gameover track
+  death_tbc: {
+    seconds: 7,
+    steps: [
+      { t: 0, music: "candy", fade: 0 },
+      { t: 0, intensity: 0.8 },
+      { t: 2, sfx: "playerDie" },
+      { t: 3, music: "gameover", fade: 0.6 },
+      { t: 3, sfx: "gameOver" },
+      { t: 3.18, sfx: "toBeContinued" },
+    ],
+  },
+  // losing the 50/50 in the Merch Machine
+  lost_5050: {
+    seconds: 6,
+    steps: [
+      { t: 0, music: "gacha", fade: 0 },
+      { t: 1.5, sfx: "gachaRevealSSR" },
+      { t: 2.6, sfx: "recordScratch" },
+      { t: 2.9, sfx: "gachaLost5050" },
+    ],
+  },
+};
 
 // ---------------------------------------------------------------- WAV + transfer
 

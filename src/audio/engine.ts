@@ -47,6 +47,9 @@ export const LOOKAHEAD = 0.15;
 
 const BASE = { master: 0.9, music: 2.0, sfx: 2.5 };
 const MUFFLE_HZ = 620;
+/** music reverb / delay return levels (wet) */
+const MUSIC_REV_WET = 0.75;
+const MUSIC_DLY_WET = 0.55;
 
 interface Active {
   id: SfxId;
@@ -92,6 +95,8 @@ export class Engine {
   private readonly duckGain: GainNode;
   private readonly musicRev: Reverb;
   private readonly musicDly: Delay;
+  /** music("none", ~0) muted the shared reverb / delay returns (a true "the music cuts"); the next track restores them */
+  private tailsCut = false;
   private voices: Active[] = [];
   private last = new Map<SfxId, number>();
   /** Newest voice per id (merge target for rate-limited triggers). */
@@ -153,8 +158,8 @@ export class Engine {
     this.musicVol.connect(this.musicLP);
     this.musicIn = ctx.createGain();
     this.musicIn.connect(this.musicVol);
-    this.musicRev = makeReverb(ctx, this.musicIn, 1.8, 2.4, 0.75, 0.55, 3, this.realtime ? 60 : -1);
-    this.musicDly = makeDelay(ctx, this.musicIn, 0.3, 0.38, 0.55);
+    this.musicRev = makeReverb(ctx, this.musicIn, 1.8, 2.4, MUSIC_REV_WET, 0.55, 3, this.realtime ? 60 : -1);
+    this.musicDly = makeDelay(ctx, this.musicIn, 0.3, 0.38, MUSIC_DLY_WET);
   }
 
   now(): number {
@@ -332,15 +337,29 @@ export class Engine {
     const f = Math.max(0, Number.isFinite(fade) ? fade : 1);
     if (prev) prev.fadeOut(now, f);
     this.current = null;
-    if (track === "none") return;
+    if (track === "none") {
+      // a hard cut (gacha MYTHIC: "the music cuts") must not leave echoes ringing in the shared tails
+      if (prev && f < 0.06) this.setTails(false, now);
+      return;
+    }
     const song = songFor(track);
     // let the old track dip first so the new downbeat lands clean
     const start = now + 0.05 + (prev ? Math.min(f * 0.45, 1.2) : 0);
     const p = new Player(this.kit, song, { dry: this.musicIn, rev: this.musicRev.input, dly: this.musicDly.input }, start, prev ? 0.08 : 0.02, this.intensity);
     this.musicDly.setTime(p.delaySeconds, start);
+    if (this.tailsCut) this.setTails(true, start);
     this.players.push(p);
     this.current = p;
     p.update(now, now + LOOKAHEAD);
+  }
+
+  private setTails(on: boolean, at: number): void {
+    this.tailsCut = !on;
+    for (const [g, wet] of [[this.musicRev.output.gain, MUSIC_REV_WET], [this.musicDly.output.gain, MUSIC_DLY_WET]] as const) {
+      g.cancelScheduledValues(at);
+      g.setValueAtTime(g.value, at);
+      g.setTargetAtTime(on ? wet : 0, at, on ? 0.05 : 0.008);
+    }
   }
 
   /** Advance music scheduling; call every ~25 ms (realtime) or stepwise (offline). */

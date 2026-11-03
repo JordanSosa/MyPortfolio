@@ -17,6 +17,8 @@ const TAIKO: DrumPat = {
   c: "!x",
 };
 const TAIKO_FILL: DrumPat = { tk: "x.x.x.x.xxxxx.x.", wb: "..x...x.........", k: "x.......x.......", zap: "............x.x." };
+/** intensity >= 0.8: the whole festival joins in (fast taiko rolls, shakers, kane) */
+const PERC: DrumPat = { tk: "..x...x...x.x.xx", shk: "xxxxxxxxxxxxxxxx", cow: "..x...x...x...x.", wb: "x...x...x...x..." };
 const MATSURI: DrumPat = {
   tk: "x.xx..x.x.xx..x.",
   wb: "..x...x...x...x.",
@@ -48,11 +50,13 @@ const sections: Record<string, SectionDef> = {
     parts: {
       bass: "@r - r - r - r r'",
       koto: "@0 1 2 1 0 1 2 1",
+      arp: "@0 1 2 3 2 1 0 1 0 1 2 3 2 1 0 1",
       pad: "@x - - - - - - -",
       flute:
         "E6 - - D6 B5 - - - | A5 - - B5 D6 - - - | G6 - - E6 - - D6 E6 | D6 - - - A5 - - - |" +
         "B5 - D6 - E6 - G6 - | A6 - - G6 E6 - - - | F#6 - - - B5 - A5 - | E6 - - - - - - - |",
       drums: TAIKO,
+      perc: PERC,
     },
     fill: TAIKO_FILL,
   },
@@ -69,6 +73,7 @@ const sections: Record<string, SectionDef> = {
         "G6 - - E6 - - D6 E6 | F#6 - - D6 - - A5 - | D#6 - - - F#6 - - - | A6 - - - F#6 - D#6 - |",
       bell: "@. . 3 . . . 4 . | . . 2 . . . 5 .",
       drums: TAIKO,
+      perc: PERC,
     },
     fill: { tk: "x.x.x.x.xxxxxxxx", s: "........xxxxXXXX", up: "x---------------", zap: "x...x...x...x..." },
   },
@@ -85,6 +90,7 @@ const sections: Record<string, SectionDef> = {
         "E6 - G6 - B6 - A6 G6 | G6 - - E6 - - D6 C6 | A6 - G6 F#6 - - D#6 - | E6 - - - - - - - |",
       bell: "@0 . 1 . 2 . 3 . 4 . 3 . 2 . 1 .",
       drums: MATSURI,
+      perc: PERC,
     },
     fill: { ...TAIKO_FILL, up: "x---------------" },
   },
@@ -98,12 +104,13 @@ export const bossBeach: SongDef = {
   delayBeats: 0.75,
   channels: [
     { id: "bass", inst: "bass", vol: 0.62, center: 40, voicing: "root" },
-    { id: "koto", inst: "koto", vol: 1.5, center: 64, rev: 0.25, pan: -0.2 },
+    { id: "koto", inst: "koto", vol: 2.4, center: 64, rev: 0.25, pan: -0.2 },
     { id: "pad", inst: "padSoft", vol: 0.32, center: 60, rev: 0.5 },
     { id: "flute", inst: "chipFlute", vol: 1.25, rev: 0.3, dly: 0.2, pan: 0.05 },
-    { id: "drums", inst: "drums", vol: 0.82 },
-    { id: "arp", inst: "koto", vol: 0.9, center: 76, layer: 0.6, dly: 0.2, pan: 0.3 },
-    { id: "bell", inst: "bell", vol: 1.0, center: 88, layer: 0.8, rev: 0.45, dly: 0.3, pan: -0.3 },
+    { id: "drums", inst: "drums", vol: 0.72 },
+    { id: "arp", inst: "koto", vol: 1.6, center: 76, layer: 0.6, dly: 0.2, pan: 0.3 },
+    { id: "bell", inst: "bell", vol: 1.4, center: 88, layer: 0.8, rev: 0.45, dly: 0.3, pan: -0.3 },
+    { id: "perc", inst: "drums", vol: 0.55, layer: 0.8 },
   ],
   sections,
   order: ["intro", "A", "B", "C", "A", "C"],

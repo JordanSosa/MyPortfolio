@@ -8,7 +8,10 @@ import { audio, audioInternals, type MusicTrack, type SfxId } from "../src/audio
 import {
   analyzeTrack,
   CHAOS_S2,
+  lastRender,
   renderChaos,
+  renderScene,
+  SCENES,
   renderSfx,
   renderSpam,
   renderTrack,
@@ -201,7 +204,12 @@ window.__audioRender = {
     return { ...(await pack(r.buf, true)), played: r.played };
   },
   chaos: async (seconds: number, o?: ChaosOpts) => pack(await renderChaos(seconds, 44100, o), false),
-  track: async (track: Exclude<MusicTrack, "none">, o: TrackRenderOpts) => pack(await renderTrack(track, o), false),
+  scenes: Object.keys(SCENES),
+  scene: async (name: string) => pack(await renderScene(SCENES[name].steps, SCENES[name].seconds), false),
+  track: async (track: Exclude<MusicTrack, "none">, o: TrackRenderOpts) => {
+    const r = await pack(await renderTrack(track, o), false);
+    return { ...r, srcPerSec: lastRender.sources / Math.max(1, lastRender.seconds) };
+  },
   analyze: (track: Exclude<MusicTrack, "none">) => analyzeTrack(track),
   stageBpm: STAGE_BPM,
   chaosS2: CHAOS_S2,
@@ -220,6 +228,9 @@ let liveTap: AnalyserNode | null = null;
       const [k, v] = a.split(":");
       if (k === "music") audio.music(v as MusicTrack, 1);
       else if (k === "int") audio.setIntensity(Number(v));
+      else if (k === "deg") audio.setDegrade?.(Number(v));
+      else if (k === "sfx") audio.sfx(v as SfxId);
+      else if (k === "cut") audio.music("none", 0);
       else if (k === "muffle") audio.setMuffled(v === "1");
       else if (k === "duck") audio.duck(0.65, 1.3);
       else if (k === "suspend") audio.suspend();

@@ -18,6 +18,8 @@ const MARCH: DrumPat = {
   c: "!x",
 };
 const MARCH_FILL: DrumPat = { k: "x.....x...x.....", s: "....x...x.x.xxxx", th: "........x.x.....", tm: "............x.x.", tim: "x..............." };
+/** intensity >= 0.8: 16th hats and tom pickups */
+const PERC: DrumPat = { h: "xxxxxxxxxxxxxxxx", th: "..............x.", tm: "...............x", tamb: "....x.......x..." };
 const DRIVE: DrumPat = {
   k: "x...x...x...x...",
   s: "....x.......x...",
@@ -44,10 +46,12 @@ const sections: Record<string, SectionDef> = {
       bass: "@r r r r r r r r",
       str: "@x - - - - - - -",
       piano: "@x . x . x . x .",
+      arp: "@0 1 2 3 2 1 0 1 0 1 2 3 2 1 0 1",
       lead:
         "D6 - - - G6 - - - | G6 - - F6 Eb6 - - - | Eb6 - - D6 C6 - - G5 | F#6 - - - D6 - - - |" +
         "Bb6 - - A6 G6 - - D6 | G6 - - - Bb6 - - - | A6 - - G6 Eb6 - - C6 | F#6 - - - - - D6 - |",
       drums: MARCH,
+      perc: PERC,
     },
     fill: MARCH_FILL,
   },
@@ -63,6 +67,7 @@ const sections: Record<string, SectionDef> = {
         "G5 . Bb5 . Eb6 - D6 Eb6 | F6 - - Eb6 - - C6 - | D6 . F6 . A6 - G6 F6 | G6 - - - D6 - - - |" +
         "C6 . Eb6 . G6 - F6 Eb6 | F6 - - Eb6 - - C6 A5 | D6 - - C6 Bb5 - - - | A5 - - - C6 - F#6 - |",
       drums: DRIVE,
+      perc: PERC,
     },
     fill: { k: "x...x...x...x...", s: "x.x.x.x.xxxxXXXX", tim: "x...x...", up: "x---------------" },
   },
@@ -79,6 +84,7 @@ const sections: Record<string, SectionDef> = {
         "G6 - - - Bb6 - A6 G6 | F6 - - - C6 - - - | Eb6 - - - G6 - F6 Eb6 | D6 - - - F#6 - - - |" +
         "Bb6 - - - G6 - A6 Bb6 | C7 - - - A6 - - - | G6 - F6 Eb6 D6 - F#6 - | G6 - - - - - - - |",
       drums: { ...DRIVE, k: "x.x.x.x.x.x.x.x.", tim: "x.......x......." },
+      perc: PERC,
     },
     fill: MARCH_FILL,
   },
@@ -104,14 +110,15 @@ export const bossAcademy: SongDef = {
   key: "G minor",
   delayBeats: 0.5,
   channels: [
-    { id: "bass", inst: "bassSaw", vol: 0.55, center: 38, voicing: "root" },
+    { id: "bass", inst: "bassSaw", vol: 0.55, center: 41, voicing: "root" },
     { id: "str", inst: "tremStr", vol: 1.7, center: 62, rev: 0.45 },
     { id: "piano", inst: "piano", vol: 1.3, center: 56, rev: 0.2, pan: -0.15 },
-    { id: "chime", inst: "synthBell", vol: 1.5, rev: 0.45, dly: 0.25, pan: 0.15 },
-    { id: "lead", inst: "leadSaw", vol: 2.1, rev: 0.25, dly: 0.15 },
+    { id: "chime", inst: "synthBell", vol: 2.2, rev: 0.45, dly: 0.25, pan: 0.15 },
+    { id: "lead", inst: "leadSaw", vol: 2.7, rev: 0.25, dly: 0.15 },
     { id: "drums", inst: "drums", vol: 0.75 },
-    { id: "arp", inst: "synthBell", vol: 0.8, center: 86, layer: 0.6, dly: 0.25, rev: 0.25, pan: 0.3 },
+    { id: "arp", inst: "synthBell", vol: 1.3, center: 86, layer: 0.6, dly: 0.25, rev: 0.25, pan: 0.3 },
     { id: "choir", inst: "choir", vol: 1.2, center: 66, layer: 0.8, rev: 0.5, pan: -0.1 },
+    { id: "perc", inst: "drums", vol: 1.0, layer: 0.8 },
   ],
   sections,
   order: ["intro", "A", "B", "C", "brk", "A", "C"],

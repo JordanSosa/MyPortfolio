@@ -39,6 +39,8 @@ const ANTHEM: DrumPat = {
   tim: "x.......x.......",
   c: "!x",
 };
+/** intensity >= 0.8 (and still in budget): 16th hats, crash on every bar */
+const PERC: DrumPat = { h: "xxxxxxxxxxxxxxxx", c: "x", tamb: "....x.......x..." };
 const FILL: DrumPat = { k: "x.......x.......", s: "....x...xxxxXXXX", th: "x.x.", tm: "..x.x...", tim: "x...x...x.x.x.x." };
 
 const CHORDS_A = "Dm7 | C | Bbmaj7 | E | Am | Fmaj7 | Dm7 | E7";
@@ -81,6 +83,7 @@ const epic: Record<string, SectionDef> = {
       choir: "@x - - - - - - -",
       arp: "@0 1 2 3 1 2 3 4 0 1 2 3 1 2 3 4",
       drums: BLAST,
+      perc: PERC,
     },
     fill: FILL,
   },
@@ -96,6 +99,7 @@ const epic: Record<string, SectionDef> = {
       arp: "@3 2 1 0 3 2 1 0 4 3 2 1 4 3 2 1",
       bell: "@. . 3 . . . 4 .",
       drums: BLAST,
+      perc: PERC,
     },
     fill: FILL,
   },
@@ -111,6 +115,7 @@ const epic: Record<string, SectionDef> = {
       arp: "@0 1 2 3 4 3 2 1 0 1 2 3 4 3 2 1",
       bell: "@. 3 . 4 . 5 . 4",
       drums: ANTHEM,
+      perc: PERC,
     },
     fill: { ...FILL, up: "x---------------" },
   },
@@ -223,14 +228,15 @@ export const cancel: SongDef = {
     { id: "str", inst: "strings", vol: 1.45, center: 62, rev: 0.4, deg: LAID_OFF },
     { id: "str2", inst: "pad", vol: 1.0, center: 62, rev: 0.25, deg: CHEAP },
     { id: "choir", inst: "choir", vol: 1.35, center: 67, rev: 0.5, pan: 0.1, deg: LAID_OFF },
-    { id: "brass", inst: "brass", vol: 1.2, center: 60, rev: 0.3, pan: -0.15, deg: LAID_OFF },
-    { id: "lead", inst: "leadSaw", vol: 2.3, rev: 0.25, dly: 0.15, deg: LAID_OFF },
-    { id: "lead2", inst: "lead", vol: 1.0, rev: 0.15, dly: 0.1, deg: CHEAP },
-    { id: "drums", inst: "drums", vol: 0.75 },
-    { id: "arp", inst: "arp", vol: 2.2, center: 79, layer: 0.6, dly: 0.25, pan: 0.3 },
-    { id: "bell", inst: "bell", vol: 1.2, center: 86, layer: 0.8, rev: 0.4, dly: 0.3, pan: -0.3, deg: LAID_OFF },
+    { id: "brass", inst: "brass", vol: 1.7, center: 60, rev: 0.3, pan: -0.15, deg: LAID_OFF },
+    { id: "lead", inst: "leadSaw", vol: 2.9, rev: 0.25, dly: 0.15, deg: LAID_OFF },
+    { id: "lead2", inst: "leadSoft", vol: 0.9, rev: 0.1, dly: 0.05, deg: CHEAP },
+    { id: "drums", inst: "drums", vol: 0.65 },
+    { id: "arp", inst: "arp", vol: 3.2, center: 79, layer: 0.6, dly: 0.25, pan: 0.3 },
+    { id: "bell", inst: "bell", vol: 1.4, center: 86, layer: 0.8, rev: 0.4, dly: 0.3, pan: -0.3, deg: LAID_OFF },
+    { id: "perc", inst: "drums", vol: 0.8, layer: 0.8, deg: LAID_OFF },
     // the hold-music department
-    { id: "organ", inst: "holdOrgan", vol: 1.5, rev: 0.2, pan: 0.05 },
+    { id: "organ", inst: "holdOrgan", vol: 1.8, rev: 0.2, pan: 0.05 },
     { id: "ochord", inst: "holdOrgan", vol: 0.75, center: 62, rev: 0.15, pan: -0.15 },
     { id: "obass", inst: "bassSoft", vol: 0.6, center: 40, voicing: "root" },
     { id: "cheap", inst: "drums", vol: 0.7 },

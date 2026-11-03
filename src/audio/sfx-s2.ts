@@ -526,7 +526,7 @@ export const S2_SFX = {
   },
   fanSmack: {
     // Baka Harisen: a papery "PAH!" with a thud
-    vol: 0.54, gap: 0.06, max: 3, pri: 1, rnd: 1,
+    vol: 0.45, gap: 0.06, max: 3, pri: 1, rnd: 1,
     play(v, p) {
       v.noise({ a: 0.0004, d: 0.05, v: 0.45, bp: 2200 * p, q: 0.6 });
       v.noise({ t: 0.004, a: 0.002, d: 0.12, v: 0.1, bp: 5000, bp2: 1500, bpt: 0.1, q: 1.2 });
@@ -623,7 +623,7 @@ export const S2_SFX = {
   },
   glitch: {
     // Animation Error / Plot Hole: crushed random-frequency blips, a crackle burst and a pitch snap
-    vol: 0.48, gap: 0.1, max: 2, pri: 1, rnd: 2,
+    vol: 0.32, gap: 0.1, max: 2, pri: 1, rnd: 2,
     play(v, p) {
       const cb = shaped(v, "crush", 0.8);
       let t = 0;

@@ -288,7 +288,7 @@ export class Player {
       p.cancelScheduledValues(at);
       p.setTargetAtTime(v, at, tc);
     };
-    set(L.lp.frequency, Math.min(nyq, 18000 * Math.pow(2600 / 18000, k)));
+    set(L.lp.frequency, Math.min(nyq, 18000 * Math.pow(2600 / 18000, Math.pow(k, 0.7))));
     set(L.hp.frequency, 25 + 380 * k * k);
     const cr = k < 0.5 ? 0 : (k - 0.5) * 0.8;
     set(L.crush.gain, cr);
