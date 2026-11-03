@@ -72,7 +72,7 @@ export function heroesPage(hub: Hub): HubPage {
         </button>`;
       })
       .join("");
-    el.innerHTML = `<div class="pg-sub">The Cast · ${fmtInt(p.unlocks.heroes.filter((id) => HEROES.some((d) => d.id === id)).length)} / ${ROSTER.length} recruited</div><div class="cast-grid kscroll">${cards}</div>`;
+    el.innerHTML = `<div class="pg-sub">${fmtInt(p.unlocks.heroes.filter((id) => HEROES.some((d) => d.id === id)).length)} / ${ROSTER.length} recruited · tap a hero for their profile</div><div class="cast-grid kscroll">${cards}</div>`;
     bindActs(el, {
       hero: (b) => {
         app.sfx("cardFlip");
@@ -296,7 +296,7 @@ export function heroPage(hub: Hub, o: PageOpts): HubPage {
             const nodes = tree.nodes.filter((n) => n.branch === br && n.tier === t);
             const need = tierRequirement(t);
             const have = branchPointsBelow(tree, ranks, br, t);
-            return `<div class="tt-tier${have < need ? " gated" : ""}" data-tier="${t}">${have < need ? `<span class="tt-need">${need - have} more</span>` : ""}${nodes.map((n) => talentNodeHtml(n, ranks[n.id] ?? 0, v.unlocked)).join("")}</div>`;
+            return `<div class="tt-tier${have < need ? " gated" : ""}" data-tier="${t}">${have < need ? `<span class="tt-need">${need - have} MORE PTS</span>` : ""}${nodes.map((n) => talentNodeHtml(n, ranks[n.id] ?? 0, v.unlocked)).join("")}</div>`;
           })
           .join("");
         return `<div class="tt-col" style="--b:${br}"><div class="tt-bn"><b>${esc(tree.branches[br])}</b><small>${spent} pts</small></div>${tiers}</div>`;

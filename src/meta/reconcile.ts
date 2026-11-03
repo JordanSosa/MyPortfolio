@@ -88,7 +88,8 @@ export function reconcileProfile(p: Profile, ctx: MetaContent = gameContent()): 
 
   // start content + conditions met earlier
   report.unlocks = evaluateUnlocks(p, ctx).filter((e) => !e.start);
-  for (const h of p.unlocks.heroes) if (ctx.heroById.has(h)) discover(p, "heroes", h);
+  // owned heroes are known to the wiki (no bounty: nothing on screen would explain the gems)
+  for (const h of p.unlocks.heroes) if (ctx.heroById.has(h)) discover(p, "heroes", h, false);
 
   // loadout -> something playable
   const { loadout, issues } = resolveLoadout(p, {}, ctx);

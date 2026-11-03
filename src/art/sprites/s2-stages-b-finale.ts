@@ -18,19 +18,22 @@ const PAPER_PAL: Record<string, string> = {
   "5": "#413267", // paper fibre light
   "6": "#2f2a62", // grid line (faint navy)
   "7": "#4a3a72", // pencil smudge
-  // unfinished sketch paper
-  "8": "#ddd6ee", // pale paper
-  "9": "#cfc6e6", // paper shade
-  S: "#b9aed8", // pencil line (light)
-  T: "#a397c9", // pencil line (dark)
+  // unfinished sketch paper: pale, but kept mid-value so it does not glare next to the dark
+  // paper and plum-outlined actors still pop on it
+  "8": "#a99fcf", // pale paper
+  "9": "#9e94c7", // paper grain / grid
+  S: "#8b80ba", // pencil line (light)
+  T: "#7165a6", // pencil line (dark)
+  U: "#bcb3df", // eraser smudge (highlight)
   // light leak
   V: "#6a4fb0", // crack glow outer
   K: "#b49cf0", // crack glow inner
   // film strip (muted so it never reads as a coin or a bullet)
-  A: "#1f1636", // film base
-  D: "#5a4a7e", // sprocket hole
-  J: "#8a6a58", // frame (dim sepia)
-  L: "#b08a68", // frame light
+  A: "#1a1230", // film base
+  D: "#6a5a90", // sprocket hole
+  J: "#9a7a4e", // frame (dim amber)
+  L: "#c9a462", // frame light
+  N: "#2a2046", // film edge shade
 };
 
 function paper(seed: number, extras = 0): Cv {
@@ -84,48 +87,47 @@ function tileFinale(): Cv[] {
     for (const [x, y] of [[7, 7], [8, 8], [5, 5]] as [number, number][]) c.set(x, y, "w");
     out.push(c);
   }
-  // f5 a film-strip fragment lying on the paper (dark strip, sprocket holes, dim sepia frames)
+  // f5 a film-strip fragment lying on the paper: dark strip, sprocket holes along both edges,
+  // two dim amber frames, a little kink where it bends (muted: never reads as a coin or bullet)
   {
     const c = paper(131, 0);
     c.put(
       `
-.........AA.
-.......AADA.
-.....AAAAAAA
-...AADAJLAAA
-.AAAAAJJJAAD
-AADAJLAAAAA.
-AAAAJJJAADA.
-ADAAAAAAA...
-AAAADA......
-.AA.........`,
+.......AAAAA
+AAAAAAAADADA
+ADADADAAJJLA
+AJJLAAJJJJJA
+AJJJJAJJJJNA
+AJJJJAADADA.
+ADADADANNN..
+ANNNNNNN....`,
       2,
-      3,
+      4,
     );
     out.push(c);
   }
-  // f6 star glints
+  // f6 star glints: soft lavender twinkles (dim enough never to be mistaken for pickups)
   {
     const c = paper(151, 0);
     c.put(
       `
-..j..
-..w..
-jwwwj
-..w..
-..j..`,
+..V..
+..K..
+VKjKV
+..K..
+..V..`,
       3,
       3,
     );
     c.put(
       `
-.j.
-jwj
-.j.`,
+.V.
+VKV
+.V.`,
       10,
       9,
     );
-    c.set(12, 3, "j").set(5, 12, "K");
+    c.set(12, 3, "K").set(5, 12, "V");
     out.push(c);
   }
   // f7 unfinished pencil sketch on pale paper: the same 8px animation grid (so it lines up with
@@ -142,6 +144,8 @@ jwj
       if (n < 0.38) return null;
       return n > 0.72 ? "T" : "S";
     });
+    // a couple of eraser smudges (island stamps)
+    c.put(`UU`, 4, 11).put(`U`, 11, 4);
     out.push(c);
   }
   return out;
@@ -189,43 +193,50 @@ function decoFilmReel(): Cv[] {
   return out;
 }
 
-/** A bush drawn only as lavender pencil lines: lumpy outline, a few inner curls, overshooting strokes. */
+/**
+ * A bush drawn only as lavender pencil lines: a lumpy cloud contour (lit lumps
+ * in the light pencil, the shadow side in the darker one), a few hatching
+ * strokes on the shadow side, a construction circle that overshoots, and a
+ * scratchy ground stroke. Never coloured in: the budget ran out.
+ */
 function decoSketchBush(): Cv[] {
-  const out: Cv[] = [];
-  const lumps: [number, number, number][][] = [
+  const SHAPES: [number, number, number][][] = [
     [
-      [3.5, 6, 2.6],
-      [6, 4.6, 3],
-      [8.6, 6.2, 2.5],
+      [3.4, 6.2, 2.5],
+      [6.2, 4.4, 2.9],
+      [8.9, 6.3, 2.3],
+      [6, 7, 2.4],
     ],
     [
-      [3.2, 6.4, 2.4],
-      [5.6, 5, 2.6],
-      [8.4, 5.4, 2.6],
+      [3, 6.6, 2.2],
+      [5.4, 4.8, 2.5],
+      [8.2, 5, 2.6],
+      [9.4, 7.2, 1.6],
+      [6, 7.2, 2.3],
     ],
   ];
-  lumps.forEach((L, i) => {
+  return SHAPES.map((L, i) => {
     const fill = new Cv(12, 10);
     for (const [x, y, r] of L) fill.disc(x, y, r, "#");
-    fill.rect(1, 7, 10, 2, (x) => (x > 1 && x < 10 ? "#" : null));
+    fill.each((x, y, k) => (k === "#" && y > 8 ? "." : null));
     const c = new Cv(12, 10);
-    // keep only the outline of the lumpy mass: pencil contour
     fill.each((x, y, k) => {
       if (k !== "#") return null;
       const edge = fill.get(x - 1, y) === "." || fill.get(x + 1, y) === "." || fill.get(x, y - 1) === "." || fill.get(x, y + 1) === ".";
-      if (edge) c.set(x, y, y < 4 || x < 3 ? "S" : "T");
+      if (edge) c.set(x, y, x + y < 9 ? "S" : "T");
       return null;
     });
-    // inner curls / scribbles
-    if (i === 0) c.pts([[5, 6], [6, 5], [7, 6]], "K").pts([[3, 7], [4, 6]], "K");
-    else c.pts([[4, 6], [5, 7], [6, 6]], "K").pts([[8, 6], [9, 5]], "K");
-    // overshooting strokes (it was drawn fast)
-    c.set(0, 8, "K").set(11, 8, "K");
-    if (i === 0) c.set(6, 0, "K");
-    else c.set(10, 2, "K");
-    out.push(ground(c));
+    // inner lump divisions (little arcs)
+    if (i === 0) c.pts([[4, 5], [5, 4]], "T").pts([[7, 6], [8, 5]], "T");
+    else c.pts([[4, 6], [5, 5]], "T").pts([[7, 5], [8, 4]], "T");
+    // hatching on the shadow side (bottom-right)
+    for (const [x, y] of i === 0 ? [[8, 8], [9, 7], [7, 8], [10, 6]] : [[8, 7], [9, 6], [7, 8], [8, 8]]) if (fill.get(x, y) === "#" && c.get(x, y) === ".") c.set(x, y, "K");
+    // overshooting stroke + scratchy ground line
+    if (i === 0) c.set(1, 3, "K").set(10, 2, "K");
+    else c.set(11, 3, "K").set(0, 4, "K");
+    for (let x = 0; x < 12; x++) if (x % 4 !== 3) c.set(x, 9, x < 2 || x > 9 ? "K" : c.get(x, 9) === "." ? "K" : c.get(x, 9));
+    return c;
   });
-  return out;
 }
 
 /** Storyboard panel on a little wooden easel; two sets of stick-figure sketches. */
@@ -316,33 +327,34 @@ const GLITCH_PAL: Record<string, string> = {
   "{": "#8f7ae0", // crystal shade
 };
 
-/** Glitch crystal: a pale crystal with magenta/cyan RGB-split edges. f1 = rows pixel-shifted. */
-function glitchCrystal(shiftRows: boolean): Cv {
-  const base = Cv.of(`
-........
-....[...
-...[]{..
-...[]{..
-...[]{..
-.[.[]{..
-.[{[]{..
-.[{[]{..
-.[][]{..
-.[[[]{..
-..[]{...
-........`);
+/**
+ * Glitch crystal: a pale violet crystal pair (tall shard + small shard) with a
+ * plum outline and magenta/cyan RGB-split fringes outside it. f1 = a glitch
+ * band: two rows slide sideways and the split widens.
+ */
+const GLITCH_SHAPE = `
+.[..
+.[]{
+[[]{
+[]]{
+[]]{
+[]]{
+[]]{
+.]{.`;
+function glitchCrystal(shift: boolean): Cv {
+  const base = new Cv(8, 12);
+  base.put(GLITCH_SHAPE, 2, 2);
+  base.outline("1");
+  base.set(3, 3, "w").set(2, 5, "w");
   const c = new Cv(8, 12);
-  // RGB split: a magenta copy 1px left and a cyan copy 1px right, under the crystal
-  c.put(base.clone().map({ "[": "(", "]": "(", "{": "(" }), -1, 0);
-  c.put(base.clone().map({ "[": ")", "]": ")", "{": ")" }), 1, 0);
+  const solid = (k: string) => Object.fromEntries([..."1[]{w"].map((x) => [x, k]));
+  c.put(base.clone().map(solid("(")), shift ? -1 : -1, 0);
+  c.put(base.clone().map(solid(")")), shift ? 2 : 1, 0);
   c.put(base, 0, 0);
-  c.set(4, 3, "w").set(2, 6, "w");
-  if (shiftRows) {
-    // a glitch band: two rows slide sideways
-    const rowsToShift = [4, 8];
-    for (const y of rowsToShift) {
+  if (shift) {
+    for (const y of [4, 5]) {
       const row = Array.from({ length: 8 }, (_, x) => c.get(x, y));
-      for (let x = 0; x < 8; x++) c.set(x, y, row[(x - 2 + 8) % 8] ?? ".");
+      for (let x = 0; x < 8; x++) c.set(x, y, row[x - 1] ?? ".");
     }
   }
   return ground(c);

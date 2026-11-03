@@ -20,28 +20,24 @@
  * Beats run on frame time from update() (headless screenshots crawl but stay
  * in order); counters write text only when the shown integer changes.
  */
-import { HEROES, heroDef } from "../../game/heroes";
-import { PASSIVES } from "../../game/passives";
-import type { Rarity } from "../../game/defs";
-import { RELICS, WEAPONS } from "../../game/registry";
+import { heroDef } from "../../game/heroes";
+import { WEAPONS } from "../../game/registry";
 import type { RunSummary } from "../../game/world";
 import { claimAllAchievements } from "../../meta/achievements/engine";
 import type { PayoutLine } from "../../meta/economy";
 import { gameContent } from "../../meta/content";
 import type { RunReport } from "../../meta/rewards";
-import type { UnlockEvent } from "../../meta/unlocks";
 import type { App, EpisodeInfo, UiScreen } from "../app";
 import { esc, fmtInt, fmtNum, fmtTime, h, hasArt, img, letters } from "../dom";
 import { CurrencyBar } from "../kit/currency";
 import { badge, btn, pbar, pop, setBar, tag } from "../kit/controls";
-import { currencyIcon, money, portrait, RARITY_CLS, relicIcon, trophyIcon, twistIcon } from "../kit/art";
-import { trackOverlay } from "../kit/overlay";
+import { currencyIcon, money, portrait, trophyIcon } from "../kit/art";
 import { reducedMotion } from "../kit/ticker";
-import type { NavLayer } from "../nav";
 import { save } from "../save";
-import { gradeComment, nextTimeLine, UNLOCK_TITLE } from "../hub/copy";
+import { gradeComment, nextTimeLine } from "../hub/copy";
+import { celebrateUnlocks } from "../hub/celebrate";
 import { tbcBanner } from "../stinger";
-import { layer, markBorn, onTap, sparkles } from "./common";
+import { layer, onTap, sparkles } from "./common";
 
 interface Counter {
   el: HTMLElement;
@@ -243,7 +239,7 @@ export function showResults(app: App, s: RunSummary, r: RunReport, ep: EpisodeIn
   const unlocks = r.unlocks.slice();
   if (unlocks.length) {
     at(cursor, () => {
-      if (!skipped) celebrate(app, unlocks);
+      if (!skipped) celebrateUnlocks(app, unlocks);
     });
     cursor += 0.3;
   }
@@ -336,68 +332,4 @@ export function showResults(app: App, s: RunSummary, r: RunReport, ep: EpisodeIn
       }
     },
   };
-}
-
-// ================================================================== NEW UNLOCK celebration
-
-/** Full-screen "NEW WEAPON UNLOCKED!" cards, one per unlock (tap / OK for the next). */
-function celebrate(app: App, list: UnlockEvent[]): void {
-  if (!list.length) return;
-  const ev = list.shift() as UnlockEvent;
-  const el = h("div", "kover unlock-cele");
-  const icon = unlockIcon(ev);
-  el.innerHTML = `
-    <div class="rays"></div>
-    ${sparkles(24)}
-    <div class="uc-card">
-      <div class="uc-t">${letters(UNLOCK_TITLE[ev.kind] ?? "NEW UNLOCK!", "ltr", 0.04)}</div>
-      <div class="uc-ic">${icon}</div>
-      <b class="uc-name">${esc(ev.name)}</b>
-      ${ev.hint ? `<small class="uc-hint">${esc(ev.hint)}</small>` : ""}
-      <small class="uc-narr">${ev.kind === "hero" ? "A new character joins the cast! Ratings are up!" : "New merchandise has been approved!"}</small>
-      <button class="btn gold small" data-nav data-nav-default data-act="ok">${list.length ? "NEXT ▶" : "AMAZING!"}</button>
-    </div>`;
-  app.ui.appendChild(el);
-  app.sfx("unlockFanfare");
-  trackOverlay(1);
-  markBorn();
-  let done = false;
-  const L: NavLayer = { root: el, focus: null, onBack: () => close() };
-  const close = () => {
-    if (done) return;
-    done = true;
-    app.nav.remove(L);
-    el.classList.add("out");
-    setTimeout(() => el.remove(), 220);
-    trackOverlay(-1);
-    app.overlayClosed();
-    if (list.length) setTimeout(() => celebrate(app, list), 120);
-  };
-  app.nav.push(L);
-  app.overlayOpened();
-  onTap(el.querySelector('[data-act="ok"]'), close);
-  el.addEventListener("click", () => close());
-}
-
-function unlockIcon(ev: UnlockEvent): string {
-  switch (ev.kind) {
-    case "hero": {
-      const d = HEROES.find((x) => x.id === ev.id);
-      return portrait(d?.portrait ?? "", 1, "uc-img");
-    }
-    case "weapon":
-      return hasArt(WEAPONS.get(ev.id)?.icon ?? "") ? img(WEAPONS.get(ev.id)?.icon ?? "", "px uc-img") : currencyIcon("coins", true, "uc-img");
-    case "passive": {
-      const ic = PASSIVES.find((x) => x.id === ev.id)?.icon ?? "";
-      return hasArt(ic) ? img(ic, "px uc-img") : trophyIcon("uc-img");
-    }
-    case "relic": {
-      const d = RELICS.get(ev.id);
-      return `<span class="relic-t rf r-${RARITY_CLS[(d?.rarity ?? "N") as Rarity]}">${relicIcon(ev.id, (d?.rarity ?? "N") as Rarity, "uc-img")}</span>`;
-    }
-    case "twist":
-      return twistIcon(ev.id, "uc-img");
-    default:
-      return trophyIcon("uc-img");
-  }
 }

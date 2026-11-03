@@ -86,9 +86,10 @@ src/
     unlocks.ts codex.ts  unlock rules + hints, discoveries + bounties      legacy.ts transfer.ts  save v1 migration, export string
     loadout.ts         loadout -> RunConfig (validation)                   rewards.ts  applyRunToProfile -> RunReport
 
-  ui/                  DOM: app state machine, HUD, screens, modals, save
-    app.ts             App: loop, screens, modals, level-up / chest / game-over flow, settings, run-start stinger,
-                       Back-gesture history guard, AutoQuality feed, WebGL draw throttle under modals
+  ui/                  DOM: app state machine, HUD, the Season 2 hub, screens, modals, save (section 10)
+    app.ts             App: loop, screens (splash / hub / game / results), modals, level-up / chest / game-over flow,
+                       settings, account runs (save.runPlan -> RunConfig) + bankRun, episode card + READY? / GO!,
+                       in-run Plot Point toasts, Back-gesture history guard, AutoQuality feed, WebGL draw throttle
     session.ts         Session = World + WorldView + Feedback (real run or attract mode)
     hud.ts             HUD (XP, level, timer, kills/coins, icons, combo, boss bar, banners + boss letterbox,
                        onboarding hint / bubbles, READY?/GO! stamp); diffed, quantised, WAAPI juice (see 2.1)
@@ -100,8 +101,15 @@ src/
     save.ts            THE storage boundary: save v2 (kko.save.v2 Profile), v1 migration, repair, export / import,
                        runPlan / recordRun, v1-shaped `save.data` view for the pre-hub screens (docs/META.md §2)
     dom.ts             tiny DOM helpers (atlas sprite -> <img>, sprite pre-decode, `Bump` WAAPI one-shots, fmtNum)
-    styles.css         all UI styles (palette CSS variables)
-    screens/*.ts       splash, title, select, levelup, chest, pause, settings, over, results, shop
+    styles.css         HUD / in-run modal styles (palette CSS variables)
+    stinger.ts         run-start "EPISODE N" title card, the TO BE CONTINUED -> arrow banner
+    kit/               hub UI kit: currency bar, buttons, tabs, cards, rows, badges, rarity frames, progress bars,
+                       detail sheet, confirm dialog, toasts, pan / zoom viewport, frame ticker (kit.css)
+    hub/               the hub: hub.ts (page stack + header), home, stages, loadout, board (Training Arc),
+                       heroes (+ hero page), gacha (Merch Machine), wiki, celebrate (unlock cards, boot notices),
+                       parts (stage thumbnails, relic tiles), copy.ts + copy-data.ts (satire bible lines), hub.css
+    screens/*.ts       splash, levelup, chest, pause, settings (+ save data tab), over (TO BE CONTINUED), results
+                       (Episode Results)
 
   debug/
     bot.ts             autoplay bot + `simulate()` headless runner (PURE; used by tests, ?autoplay, ?skip, attract,
@@ -177,29 +185,33 @@ Flow rules around the cut-in and modals (`App.gameFrame`):
   that resumes never casts and Enter never re-clicks the pause button (which is
   `tabindex=-1` and blurred on click); P / START toggle the pause closed.
 
-Android Back / edge-swipe back: every non-title screen pushes one same-URL
-history entry (`{kk: 1}`); `popstate` re-arms it and routes like Esc (settings
-closes, game pauses, pause resumes, level-up / chest / game over ignore it,
-select / shop / results go to the title). Back at the title the guard is
-dropped (`history.back()`, its own popstate ignored), so Back leaves the page.
+Android Back / edge-swipe back: everything except the hub's home page (and the
+splash) keeps one same-URL history entry (`{kk: 1}`, `App.syncHistory`);
+`popstate` re-arms it and routes like Esc: an open sheet / dialog / reveal /
+celebration closes, settings close, a hub page pops, the game pauses, the pause
+menu resumes, level-up / chest / game over ignore it, Results go to the hub.
+At the home page with nothing open the guard is dropped (`history.back()`, its
+own popstate ignored), so Back leaves the page.
 
-Run-start stinger (only GO! on the select screen): READY? with `time.paused`
-for 0.6 s (hero cast pose, HUD flies in via `.hud.intro`), then GO! (light
-shake, uiConfirm), the sim and the touch controls start; input is ignored
-before GO!. Deep links / autoplay / `?skip` / RETRY start without it.
+Run-start stinger: a hub run (START EPISODE / RETRY of one) first shows the
+"EPISODE N" title card (`stinger.ts`, 1.35 s, `narratorSting`), then READY?
+with `time.paused` for 0.6 s (hero cast pose, HUD flies in via `.hud.intro`),
+then GO! (light shake, uiConfirm), the sim and the touch controls start; input
+is ignored before GO!. Deep links / autoplay / `?skip` start without it.
 
 Menus over the attract game (`App.frame`, `Session.camOffX/Y`): the camera is
-offset so the bot's hero runs in open meadow, never under the menu - portrait:
-below the centred menu (80 % height); desktop / wide landscape: left of the
-centred column (22 %, 62 %); compact phone landscape: between the logo and the
-menu (title) or right of the key art (splash).
+offset so the bot's hero runs in open meadow, never under the menu. The hub
+home reports the free window between its profile card and PLAY (portrait) or
+between its columns (landscape) through `HubPage.camAnchor()`; opaque pages
+(everything but home) cover the scene and throttle its redraw like a modal;
+the splash keeps the old rules (right of the key art in compact landscape).
 
 Small-screen layout rules (styles.css): the touch OVERDRIVE button reaches
 ~210 px above the bottom edge, so in touch portrait the onboarding pill sits
 above the hero (25 %); the pause menu and settings fit a 320x568 phone without
 scrolling (`max-height: 620px` portrait rules, six build slots per row under
-360 px); shop cards put the price on its own line under 360 px; Results is a
-two-column panel in phone landscape (stats + buttons left, damage chart right).
+360 px); Episode Results is two columns in landscape (header + payout left, XP /
+mastery / Plot Points / narrator right) with the buttons in a sticky footer.
 The level-up REROLL is disabled when `world.canReroll` is false (only the Heal /
 Star Pouch fallbacks remain), so it is never spent or tapped for nothing.
 
@@ -236,8 +248,7 @@ pixelated`); each step down also lowers the enemy cap and particle budget.
 | State | Track | Where |
 | --- | --- | --- |
 | splash (before the unlock gesture) | none | `App.unlockAudio` picks the track for the current screen |
-| title / select / settings | `title` | `App.goTitle / goSelect` |
-| Dream Shop | `shop` | `App.goShop` |
+| hub pages / settings | `hub` (`gacha` on the Merch Machine page: `HubPage.music`) | `Hub.syncChrome` |
 | run | the stage's `music.battle` + `setIntensity(enemies, combo rank, boss)` | `App.startRun` (`view.stage.music("battle")`), `Feedback.frame` |
 | boss alive | the stage's `music.final` for its final boss (or a boss asking for `final`), else `music.boss` | `feedback.ts bossSpawn` (`StageLook.bossMusic`); back to the battle theme 2 s of **game time** (`world.t`) after a non-final boss dies (frame time is clamped on slow devices, so it is not used); `App.revived` restores the right one |
 | Filler Arc | the battle theme returns 1.2 s after "...IN THE FILLER ARC!" | `relic-fx.ts fillerArc` -> `Feedback.musicBackAt` |
@@ -752,7 +763,9 @@ npm run typecheck
 npm test                       # unit + headless bot runs (all heroes), bosses, ults, determinism, run integrity,
                                # AutoQuality / save validation / fmtNum (tests/quality.test.ts)
                                # (--testTimeout=60000: the full-run sims take 5-9 s on a loaded / CI machine)
-node scripts/e2e.mjs           # desktop + mobile portrait + mobile landscape, screenshots in shots/e2e/
+node scripts/e2e.mjs           # desktop + mobile portrait + mobile landscape: splash -> hub -> PLAY -> episodes -> loadout
+                               # -> START EPISODE -> run -> quit -> Episode Results -> hub; hub pages (board buy, talents,
+                               # pull, wiki, settings export, Android Back); autoplay level-up / chest / pause / results
 node scripts/shot.mjs --path "/?autoplay=1&hero=rin&skip=150" --mobile --wait 5000 --out shots/x.png
 npm run balance                # headless full-run balance probe: 3 heroes x 10 seeds x good + lazy bot (section 6)
 npm run build && npm run build:single   # dist/ (Pages) and dist-single/index.html (standalone, works from file://)
@@ -774,7 +787,8 @@ UI flow / platform regression scripts (Playwright, scratch, `shots/fix-b/`):
 `death-check.mjs`, `intro-check.mjs`, `results-shots.mjs`, `anims.mjs` (running CSS
 animations during play), `perf-*.mjs` (production build in `shots/fix-b/dist`).
 
-Handy URLs: `/?screen=title`, `/?screen=select`, `/?autoplay=1&skip=185&god=1`
+Handy URLs: hub deep links `/?screen=hub|stages|loadout|board|heroes|gacha|wiki|settings`,
+`/?screen=hero&hero=rin&tab=talents`, `/?screen=gacha&tab=exchange`, `/?screen=wiki&tab=plot`; `/?autoplay=1&skip=185&god=1`
 (boss), `/?fps=1`, `/?seed=42&hero=mochi`. Console: `__kk.levelUp()`,
 `__kk.chest(true)`, `__kk.ult()`, `__kk.spawn("shroomie!", 3)`, `__kk.skipTo(170)`,
 `__kk.clearWeapons(); __kk.give("rainbow_cannon")` (isolate a weapon), `__kk.give("twin_charm", 3)`,
@@ -814,3 +828,88 @@ World.summary() --applyRunToProfile(profile, summary)--> RunReport (payout lines
   a spec in `src/meta/board/data.ts` (ids are save keys: never rename, removed ids are
   refunded); numbers go in `src/meta/tuning.ts`.
 - Tests: `tests/meta.*.test.ts`. Economy: `npm run progression`.
+
+---
+
+## 10. Hub UI (Season 2, `src/ui/hub`, `src/ui/kit`)
+
+The title / select / Dream Shop screens are gone: after the splash the App
+shows one `Hub` screen (`ui/hub/hub.ts`), a **navigation stack** of pages over
+the live attract game, under a persistent header (Back, page title, currency
+bar, settings).
+
+```
+splash -> Hub [home] -> stages -> loadout -> START EPISODE -> run -> TO BE CONTINUED / victory -> Episode Results
+                     -> board (Training Arc)                                 results: UPGRADE -> Hub [home, board]
+                     -> heroes -> hero (profile / talents / constellation)             RETRY   -> same plan again
+                     -> gacha (Merch Machine)  -> wiki (codex + Plot Points)           HUB     -> Hub [home]
+```
+
+- **Pages** are `HubPage` objects built by a factory in `PAGES` (`hub.ts`):
+  `{ id, el, title, layer, music?, opaque?, camAnchor?, show?, update?, dispose? }`.
+  `hub.open(id, opts)` slides a page in from the right (the old one slides left
+  and is hidden, keeping its state and scroll); `hub.back()` reverses it and
+  disposes the page; `hub.popTo(id)`. Transitions are transform / opacity
+  only (`.p-in-r` ...). Each page's NavLayer roots at the whole hub, so the
+  header buttons and the visible page share keyboard / gamepad focus; hidden
+  pages drop out (`offsetParent === null`). `show()` runs when a page is on top
+  again (re-read the profile). Deep links: `App.start` maps `?screen=` to a
+  path (`["home", "board"]`), `?hero=` / `?tab=` become `PageOpts`.
+- **Adding a page**: a file exporting `xxxPage(hub, opts): HubPage`, a `PageId`
+  + entry in `PAGES`, a tile / button that calls `hub.open("xxx")`. Mutate the
+  profile only through `src/meta` functions, then `hub.changed()` (saves and
+  counts the currency bar to the new balances with gain pops).
+- **Account runs**: loadout START -> `App.startAccountRun()` ->
+  `save.runPlan()` (repaired loadout -> RunConfig; never throws) ->
+  `startRun(hero, true, config, { account: true })`. The legacy `meta` option
+  is never passed with an account config. `App.bankRun()` banks a finished run
+  exactly once (`save.recordRun` -> `RunReport`), from Results or from the
+  game-over RETRY; RETRY of an account run re-plans (the profile just changed).
+- **Episode Results** (`screens/results.ts`): beats on frame time from
+  `update()` - payout lines (coins, then gems) count up with ticks, totals pop
+  and the currency bar counts; hero XP fills level by level (LEVEL UP!), mastery
+  bars (RANK UP / LIMIT BREAK! / MASTERED!), Plot Point cards (CLAIM ALL),
+  record chips, the NEW UNLOCK celebration per unlock, the narrator's "Next time
+  on..." line, "You can afford: ...". Tapping the show skips to the end; reduced
+  motion shows the end state at once. UPGRADE opens the board centred on the
+  cheapest affordable node.
+- **Boot notices** (`hub/celebrate.ts bootNotices`, once per session, at home):
+  the WELCOME TO SEASON 2 dialog for a migrated v1 save (refund, 10-pull gift,
+  Rin + Mochi), a notice for a set-aside unreadable save, unlock celebrations
+  for content the boot reconciliation unlocked, and Plot Points the profile
+  already qualifies for (one toast pointing at the Wiki).
+- **Copy**: every satire line comes from the content bible through
+  `hub/copy-data.ts` (episode titles, next-time lines, death lines, tips,
+  taglines, grade comments, wiki blurbs, OC bios, gacha lines);
+  `hub/copy.ts pick()` never repeats one of the last 10 picks of a pool.
+- **Art**: Season 2 sprite ids go through `kit/art.ts` (`currencyIcon`,
+  `relicIcon`, `twistIcon`, `portrait`, `rarityBadge` ...): the real pixels as
+  soon as the atlas has them (`hasArt`), a styled CSS stand-in until then (never
+  the magenta placeholder).
+
+### Kit (`src/ui/kit`, styles in `kit.css`)
+
+| Piece | API |
+| --- | --- |
+| Currency bar | `new CurrencyBar(ids?)`, `.set(c)` (jump), `.sync(c, pop)` (count-up + bump + "+120" pop below the pill) |
+| Buttons / chips | `btn(label, { cls: gold\|violet\|cyan\|red\|ghost\|small\|wide, act, icon, sub, badge, def })`, `iconBtn`, `.chip` |
+| Tabs | `new TabBar(tabs, initial, onChange)`, `.select(id)`, `.setBadge(id, html)` (scrolls the active tab into view) |
+| Cards / rows | `card({ art, kicker, title, body, rarity, act })`, `row({ icon, title, sub, right, act })`, `sectionTitle`, `tag` |
+| Badges | `badge(true \| n \| "NEW")` ("!" affordable / new; inside pill buttons it tucks into the curve) |
+| Rarity frames | `.rf.r-n \| r-r \| r-sr \| r-ssr \| r-ur \| r-lr \| r-my` (SSR/LR shine, UR rainbow, MYTHIC glitch-rainbow) |
+| Progress | `pbar(frac, label, colour)`, `setBar(el, frac)` (transform: scaleX only) |
+| Detail sheet | `openSheet(host, { title, kicker, icon, html, foot })` -> `{ body, update(), close() }`: bottom sheet (drag to dismiss) on portrait, side panel in landscape / desktop |
+| Confirm | `await confirmDialog(host, { title, body, ok, cancel, danger, okCls })` (default focus = Cancel) |
+| Toasts | `toast(host, msg, { kind: info\|good\|bad\|ach\|gacha, kicker, sub, reward, icon, inRun })`: queued, two at once, duplicates within 1.2 s dropped; `inRun` = the bottom strip, clear of the hero and the touch buttons |
+| Pan / zoom | `new PanZoom(host, content, { bounds, minZoom, maxZoom, far, near, active })`, `.update(dt)` per frame, `go / zoomBy / ensureVisible / fitZoom`: one-finger drag with inertia, pinch, wheel (zoom at the cursor), + / - keys, gamepad right stick + LB / RB; a drag never clicks |
+| Ticker | `animate(obj)` / `kitTick(dt)` (App.frame) for number animations; `reducedMotion()` |
+
+Rules: every interactive element is a `<button data-nav>` at least 44 CSS px
+tall (board nodes add a 9 px invisible hit ring); overlays push a NavLayer and
+call `host.overlayOpened/Closed()` (Back guard), custom full-screen overlays use
+`trackOverlay(±1)`; animation is transform / opacity (WAAPI one-shots for
+pops / shakes, no forced reflow); pages and cards carry `contain`; every
+`prefers-reduced-motion` user gets end states without glides or count-ups;
+safe-area insets pad the header, pages, sticky footers and sheets. Screenshot
+sweep (desktop, iPhone SE, iPhone 13 portrait + landscape, every hub page):
+`node shots/hub-ui/shots.mjs [--only se,i13] [--scenes home,board]`.

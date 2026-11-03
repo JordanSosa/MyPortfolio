@@ -25,9 +25,16 @@ export function codexBounty(tab: CodexTab): number {
   return TUNING.codex[BOUNTY_KEY[tab]] ?? 0;
 }
 
-/** Mark an entry discovered. Pays (and returns) the gem bounty the first time; 0 if already known. */
-export function discover(p: Profile, tab: CodexTab, id: string): number {
+/**
+ * Mark an entry discovered. Pays (and returns) the gem bounty the first time;
+ * 0 if already known. `pay = false` only marks it: owning content (start
+ * heroes, unlock grants, migrated heroes) makes its entry known without a
+ * bounty, so every bounty gem shows up on a visible line (the Episode Results
+ * "Wiki discoveries" line, a gacha result's codex gems).
+ */
+export function discover(p: Profile, tab: CodexTab, id: string, pay = true): number {
   if (!addId(p.codex[tab], id)) return 0;
+  if (!pay) return 0;
   const gems = codexBounty(tab);
   p.currencies.gems += gems;
   p.lifetime.gemsEarned += gems;

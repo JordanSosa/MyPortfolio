@@ -53,7 +53,7 @@ export function wikiPage(hub: Hub, o: PageOpts): HubPage {
   let cat: AchievementCategory | "all" = "all";
   let sheet: SheetHandle | null = null;
 
-  el.innerHTML = `<div class="wk-head"><b>KIRA KIRA WIKI</b><small>The Free Fan Encyclopedia Anyone Can't Edit</small></div><div class="wk-tabs"></div><div class="wk-body kscroll"></div>`;
+  el.innerHTML = `<div class="wk-head"><small>The Free Fan Encyclopedia Anyone Can't Edit</small></div><div class="wk-tabs"></div><div class="wk-body kscroll"></div>`;
   const body = el.querySelector(".wk-body") as HTMLElement;
   const tabBar = new TabBar(
     TABS.map((t) => ({ id: t, label: TAB_LABEL[t], badge: t === "plot" ? badge(unclaimedCount(save.profile)) : "" })),
@@ -104,7 +104,7 @@ export function wikiPage(hub: Hub, o: PageOpts): HubPage {
     const tiles = ids
       .map((id, i) => {
         const found = isDiscovered(p, t, id);
-        const ic = found ? entryIcon(t, id) : unknownIcon("wk-ic");
+        const ic = found ? entryIcon(t, id) : silhouette(t, id);
         const name = found ? esc(ctx.heroById.get(id)?.name ?? ctx.weapons.get(id)?.name ?? ctx.passives.get(id)?.name ?? ctx.enemies.get(id)?.name ?? ctx.bosses.get(id)?.name ?? RELICS.get(id)?.name ?? ctx.stageById.get(id)?.name ?? id) : "???";
         let extra = "";
         if (found && t === "weapons") {
@@ -118,6 +118,8 @@ export function wikiPage(hub: Hub, o: PageOpts): HubPage {
           extra = `<small class="wk-x">×${fmtInt(k)}</small>`;
         }
         const rar = t === "relics" ? RELICS.get(id)?.rarity : undefined;
+        // undiscovered: the silhouette + its hint ("Defeat 1,000 Puffs.") right on the tile (relics only say "???")
+        if (!found && t !== "relics") extra = `<small class="wk-hint">${esc(hintFor(t, id))}</small>`;
         return `<button class="wk-tile${found ? "" : " stub"}${rar && found ? ` rf r-${RARITY_CLS[rar]}` : ""}" data-nav data-act="entry" data-id="${esc(id)}" style="--i:${Math.min(i, 30)}">${ic}<b>${name}</b>${extra}</button>`;
       })
       .join("");
@@ -146,6 +148,16 @@ export function wikiPage(hub: Hub, o: PageOpts): HubPage {
       case "stages":
         return `<span class="wk-ic st">${stageThumb(ctx.stageById.get(id))}</span>`;
     }
+  };
+
+  /** Undiscovered entry: its real art as a dark silhouette (heroes, weapons, passives, enemies, bosses), else "?". */
+  const silhouette = (t: CodexTab, id: string): string => {
+    let sp = "";
+    if (t === "heroes") sp = ctx.heroById.get(id)?.portrait ?? "";
+    else if (t === "weapons" || t === "passives") sp = ctx.weapons.get(id)?.icon ?? ctx.passives.get(id)?.icon ?? "";
+    else if (t === "enemies") sp = ENEMIES.get(id)?.sprite ?? "";
+    else if (t === "bosses") sp = BOSSES.get(id)?.sprite ?? "";
+    return sp && hasArt(sp) ? img(sp, `px wk-ic sil${t === "enemies" || t === "bosses" ? " spr" : ""}`) : unknownIcon("wk-ic");
   };
 
   const hintFor = (t: CodexTab, id: string): string => {
@@ -205,9 +217,9 @@ export function wikiPage(hub: Hub, o: PageOpts): HubPage {
       html = `<p>${esc(d?.desc ?? "")}</p>
         ${sectionTitle("Mastery")}
         <div class="wk-mast">${pbar(mi.maxed ? 1 : mi.into / mi.need, mi.maxed ? "MASTERED" : `RANK ${mi.rank} · ${fmtInt(mi.into)} / ${fmtInt(mi.need)}`, "gold")}${mi.rank >= 5 ? tag("LIMIT BREAK", "rainbow") : ""}${m.mastered ? tag("MASTERED", "gold") : ""}</div>
-        <p class="dim">+3% damage per rank · rank 5: max level 6 · rank 10: max level 7</p>
+        <p class="muted">+3% damage per rank · rank 5: max level 6 · rank 10: max level 7</p>
         ${sectionTitle("Record")}<p>Defeated <b>${fmtInt(m.kills)}</b> · Damage <b>${fmtInt(m.damage)}</b></p>
-        ${evo ? `${sectionTitle("Evolution")}<div class="wk-evo">${img(d?.icon ?? "", "px")}<span>Lv5 +</span>${img(partner?.icon ?? "", "px")}<span>→</span>${img(evo.icon, "px")}<b>${esc(evo.name)}</b></div><p class="dim">${esc(evo.desc)}</p>` : ""}`;
+        ${evo ? `${sectionTitle("Evolution")}<div class="wk-evo">${img(d?.icon ?? "", "px")}<span>Lv5 +</span>${img(partner?.icon ?? "", "px")}<span>→</span>${img(evo.icon, "px")}<b>${esc(evo.name)}</b></div><p class="muted">${esc(evo.desc)}</p>` : ""}`;
     } else if (t === "passives") {
       const d = PASSIVES.find((x) => x.id === id);
       title = d?.name ?? id;
@@ -217,19 +229,19 @@ export function wikiPage(hub: Hub, o: PageOpts): HubPage {
       title = d?.boss ? d.boss.title : (d?.name ?? id);
       kicker = d?.boss ? d.boss.subtitle.toUpperCase() : kicker;
       const kills = t === "enemies" ? (p.lifetime.killsByEnemy[id] ?? 0) : (p.lifetime.bossKills[id] ?? 0);
-      html = `${blurb(d?.name ?? "") || blurb(title)}<p class="wk-def">Defeated: <b>${fmtInt(kills)}</b></p><p class="dim">${esc(whereIs(id, t === "bosses"))}</p>`;
+      html = `${blurb(d?.name ?? "") || blurb(title)}<p class="wk-def">Defeated: <b>${fmtInt(kills)}</b></p><p class="muted">${esc(whereIs(id, t === "bosses"))}</p>`;
     } else if (t === "relics") {
       const d = RELICS.get(id);
       const st = p.relics[id] ?? 0;
       title = d?.name ?? id;
       kicker = d ? `${d.rarity} MERCH` : kicker;
-      html = d ? `<div class="wk-rel">${rarityBadge(d.rarity)}${starPips(st)}</div><p>${esc(d.desc(st))}</p><p class="wk-triv">“${esc(d.flavor)}”</p>${st < 6 ? `<p class="dim">Next star: ${esc(d.desc(st + 1))}</p>` : ""}` : "";
+      html = d ? `<div class="wk-rel">${rarityBadge(d.rarity)}${starPips(st)}</div><p>${esc(d.desc(st))}</p><p class="wk-triv">“${esc(d.flavor)}”</p>${st < 6 ? `<p class="muted">Next star: ${esc(d.desc(st + 1))}</p>` : ""}` : "";
     } else if (t === "stages") {
       const s = ctx.stageById.get(id);
       title = s?.name ?? id;
       kicker = s?.subtitle.toUpperCase() ?? kicker;
       icon = "";
-      html = `<div class="wk-stage">${stageThumb(s)}</div><p>${esc(s?.blurb ?? "")}</p><div class="ep-recs">${stageRecords(p.records[id], s)}</div><p class="dim">Length ${fmtTime(s?.duration ?? 0)} · Ratings ×${(s?.rewardMul ?? 1).toFixed(1)}</p>`;
+      html = `<div class="wk-stage">${stageThumb(s)}</div><p>${esc(s?.blurb ?? "")}</p><div class="ep-recs">${stageRecords(p.records[id], s)}</div><p class="muted">Length ${fmtTime(s?.duration ?? 0)} · Ratings ×${(s?.rewardMul ?? 1).toFixed(1)}</p>`;
     }
     sheet = openSheet(app, { title, kicker, icon, html, onClose: () => (sheet = null) });
     const s = sheet;
@@ -272,7 +284,7 @@ export function wikiPage(hub: Hub, o: PageOpts): HubPage {
   return {
     id: "wiki",
     el,
-    title: "WIKI",
+    title: "KIRA KIRA WIKI",
     layer,
     opaque: true,
     show() {

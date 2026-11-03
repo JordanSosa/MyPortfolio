@@ -202,12 +202,13 @@ export function grantUnlock(p: Profile, id: string, ctx: MetaContent = gameConte
   const kind = contentKind(id, ctx);
   if (!kind || isUnlocked(p, kind, id)) return null;
   const name = nameOf(kind, id, ctx);
+  // (the unlock is the reward and gets its own celebration: the wiki entry is known, no silent bounty)
   if (kind === "hero") {
     unlockHero(p, id);
-    discover(p, "heroes", id);
+    discover(p, "heroes", id, false);
   } else if (kind === "relic") {
     p.relics[id] = 0;
-    discover(p, "relics", id);
+    discover(p, "relics", id, false);
   } else addId(p.unlocks[LIST[kind]], id);
   return { kind, id, name, hint: "", start: false };
 }

@@ -61,6 +61,18 @@
 .hub-cbar .cbar {
   gap: 0.6em;
 }
+/* narrow phones (iPhone SE): the pills' hanging icons must clear the Back button */
+@media (max-width: 400px) {
+  .hub-cbar .cbar {
+    gap: 0.5em;
+    padding-left: 0.45em;
+  }
+  .hub-cbar .cpill {
+    min-width: 4.4em;
+    padding-right: 0.5em;
+    padding-left: 1.9em;
+  }
+}
 .hub-title {
   grid-area: title;
   text-align: center;
@@ -174,7 +186,7 @@
   border: 2px dashed rgba(221, 198, 255, 0.3);
   background: rgba(20, 12, 34, 0.35);
 }
-.dim {
+.muted {
   color: var(--lav2);
   opacity: 0.85;
 }
@@ -359,7 +371,7 @@
   display: flex;
   flex-direction: column;
   gap: 0.28em;
-  padding-top: 0.55em;
+  padding: 0.55em 0 1.05em;
   min-width: 0;
 }
 .oc-tt {
@@ -467,8 +479,16 @@
 .btn.play .play-ic {
   font-size: 0.9em;
 }
+.btn.play .btxt {
+  min-width: 0;
+  max-width: 100%;
+}
 .btn.play .bsub {
   font-size: max(9px, 0.42em);
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .home-tiles {
   display: grid;
@@ -707,7 +727,7 @@
     height: 5.4em;
     margin-top: 0.4em;
   }
-  .oc-bio:nth-of-type(n + 2) {
+  .oc-bio.b2 {
     display: none;
   }
   .oc-sticker {
@@ -747,7 +767,7 @@
     width: 6em;
     height: 6em;
   }
-  .oc-bio:nth-of-type(n + 2) {
+  .oc-bio.b2 {
     display: none;
   }
   .htile {
@@ -997,6 +1017,11 @@
   bottom: 0.8em;
   font-size: 1.3em;
 }
+/* locked / in-production cards: the blurb never runs under the padlock */
+.ep-card.locked .ep-blurb,
+.ep-card.production .ep-blurb {
+  padding-right: 2em;
+}
 .rchip {
   display: inline-flex;
   align-items: baseline;
@@ -1023,7 +1048,7 @@
 .rchip.cyan {
   border-color: var(--cyan);
 }
-.rchip.dim {
+.rchip.muted {
   opacity: 0.7;
 }
 @media (orientation: landscape) {
@@ -1083,10 +1108,13 @@
   min-height: 0;
   padding: 0.2em calc(12px + var(--sar)) 0 calc(12px + var(--sal));
 }
-.lo-scroll > * {
+/* two columns of sections: stacked on portrait phones, side by side in landscape (see below) */
+.lo-cols {
   max-width: 40em;
-  margin-left: auto;
-  margin-right: auto;
+  margin: 0 auto;
+}
+.lo-col {
+  min-width: 0;
 }
 .lo-stage {
   display: flex;
@@ -1348,19 +1376,18 @@
   gap: 0.35em;
   margin-top: 0.6em;
 }
-.rfx {
-  padding: 0.35em 0.6em;
-  border-radius: 10px;
-  background: rgba(20, 12, 34, 0.45);
-  border: 1px dashed rgba(221, 198, 255, 0.3);
+.relic-fx .kcard {
+  gap: 0.6em;
+  padding: 0.45em 0.65em;
+  border-radius: 14px;
 }
-.rfx b {
-  text-shadow: var(--ol1);
+.relic-fx .kc-art {
+  width: 2.5em;
+  height: 2.5em;
 }
-.rfx small {
-  display: block;
-  font-size: max(10px, 0.82em);
-  color: var(--lav);
+.relic-fx .rico {
+  width: 100%;
+  height: 100%;
 }
 .stars6 {
   display: inline-flex;
@@ -1685,9 +1712,16 @@
   height: 100%;
   border-radius: 14px;
 }
-@media (orientation: landscape) and (min-width: 900px) {
-  .lo-scroll > * {
-    max-width: 46em;
+@media (orientation: landscape) and (min-width: 640px) {
+  .lo-cols {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    column-gap: 1.3em;
+    align-items: start;
+    max-width: 74em;
+  }
+  .lo-col.b > .ksec:first-child {
+    margin-top: 0.1em;
   }
 }
 
@@ -2155,8 +2189,8 @@
 }
 .cc-sel {
   position: absolute;
-  right: 0.5em;
-  top: -0.7em;
+  right: 2.3em;
+  top: -0.75em;
 }
 /* hero page */
 .hero-pg {
@@ -2263,6 +2297,44 @@
   max-width: 42em;
   margin-left: auto;
   margin-right: auto;
+}
+@media (orientation: landscape) {
+  .hero-pg {
+    display: grid;
+    grid-template-columns: minmax(13em, 0.8fr) minmax(0, 2fr);
+    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-areas: "head tabs" "head body";
+    column-gap: 1.1em;
+    max-width: 76em;
+    margin: 0 auto;
+    padding-left: calc(10px + var(--sal));
+    padding-right: calc(10px + var(--sar));
+  }
+  .hp-head {
+    grid-area: head;
+    flex-direction: column;
+    align-items: stretch;
+    align-self: start;
+    max-width: none;
+    padding: 0.2em 0 0.4em;
+  }
+  .hp-head .hp-por {
+    align-self: center;
+    width: 8em;
+    height: 8em;
+  }
+  .hp-tabs {
+    grid-area: tabs;
+    max-width: none;
+    padding: 0;
+  }
+  .hp-body {
+    grid-area: body;
+    padding: 0 0 1em;
+  }
+  .hp-body > * {
+    max-width: none;
+  }
 }
 .oc-bio-card {
   position: relative;
@@ -2421,7 +2493,7 @@
 .tt-col {
   display: flex;
   flex-direction: column;
-  gap: 0.55em;
+  gap: 0.95em;
   padding: 0.45em 0.3em 0.6em;
   border-radius: 14px;
   background: rgba(20, 12, 34, 0.38);
@@ -2455,17 +2527,27 @@
   content: "";
   position: absolute;
   left: 50%;
-  top: -0.6em;
-  height: 0.6em;
+  top: -0.95em;
+  height: 0.95em;
   border-left: 3px solid rgba(221, 198, 255, 0.35);
 }
+/* tier gate: a small lock pill sitting on the connector between two tiers */
 .tt-need {
   position: absolute;
-  top: -1.15em;
-  right: 0.2em;
+  z-index: 1;
+  top: -0.98em;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 0 0.45em;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 184, 220, 0.7);
+  background: #2d1b45;
   font-family: var(--mono);
-  font-size: max(8px, 0.62em);
+  font-size: max(8px, 0.6em);
+  line-height: 1.55;
+  white-space: nowrap;
   color: var(--pinkl);
+  pointer-events: none;
 }
 .tn {
   position: relative;
@@ -2526,14 +2608,27 @@
 .tn.s-idle {
   opacity: 0.55;
 }
+.tn.can {
+  border-color: var(--cyan);
+}
 .tn.can::after {
   content: "";
   position: absolute;
-  inset: -4px;
-  border-radius: 14px;
+  inset: -3px;
+  border-radius: 13px;
   border: 2px solid var(--cyan);
   pointer-events: none;
-  animation: node-pulse 1.4s ease-out infinite;
+  animation: tn-pulse 1.4s ease-out infinite;
+}
+@keyframes tn-pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.9;
+  }
+  100% {
+    transform: scale(1.07, 1.12);
+    opacity: 0;
+  }
 }
 .tn.cap {
   border-width: 3px;
@@ -2543,12 +2638,17 @@
   background: linear-gradient(180deg, #ffe14d, #d9468f);
 }
 @media (orientation: landscape) and (max-height: 520px) {
-  .hp-por {
+  .hp-por,
+  .hp-head .hp-por {
     width: 4.8em;
     height: 4.8em;
   }
   .hp-head {
     padding-bottom: 0.1em;
+  }
+  .hero-pg .hp-btns .btn {
+    min-height: 2.6em;
+    font-size: 1.1em;
   }
 }
 
@@ -2573,6 +2673,37 @@
   max-width: 42em;
   margin-left: auto;
   margin-right: auto;
+}
+/* banner tab: banner card | pity + pull buttons side by side in landscape, so PULL is never below the fold */
+.mm-col {
+  min-width: 0;
+}
+@media (orientation: landscape) and (min-width: 640px) {
+  .mm-body > .mm-cols {
+    max-width: 66em;
+    display: grid;
+    grid-template-columns: minmax(0, 1.05fr) minmax(0, 1fr);
+    column-gap: 1.1em;
+    align-items: start;
+  }
+  .mm-col.b .pity-box {
+    margin-top: 0;
+  }
+}
+@media (orientation: landscape) and (max-height: 520px) {
+  .mm-col.b .pity-note:not(.soft) {
+    display: none;
+  }
+  .mm-col.b .pity-row + .pity-row,
+  .mm-col.b .pity-note.soft + .pity-row {
+    margin-top: 0.45em;
+  }
+  .mm-col.b .pull-row {
+    margin-top: 0.6em;
+  }
+  .mm-col.b .mm-fine {
+    margin-top: 0.3em;
+  }
 }
 .mm-gift {
   margin-bottom: 0.6em;
@@ -2770,6 +2901,13 @@
 .bf-tx b {
   text-shadow: var(--ol1);
 }
+.bf-note {
+  font-style: normal;
+  font-size: max(9px, 0.76em);
+  line-height: 1.2;
+  color: var(--off);
+  text-shadow: var(--ol1);
+}
 .pity-box {
   position: relative;
   margin-top: 0.8em;
@@ -2788,7 +2926,7 @@
 .pity-row .pbar {
   flex: 1;
 }
-.pity-row .pl {
+.pity-row .pity-l {
   flex: none;
   width: 4em;
   font-family: var(--mono);
@@ -3147,10 +3285,17 @@
   grid-template-columns: minmax(0, 13em);
   justify-content: center;
 }
+/* portrait 10-pull: three per row, the tenth centred under the others */
 @media (orientation: portrait) {
-  .rv-cards {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+  .reveal.ten .rv-cards {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
     width: min(26em, 100%);
+  }
+  .reveal.ten .rv-card {
+    flex: 0 0 calc((100% - 1.1em) / 3);
+    min-width: 0;
   }
 }
 .rv-card {
@@ -3333,6 +3478,23 @@
 }
 .wk-ic.st .thumb img {
   transform: scale(0.6);
+}
+/* undiscovered: the entry's own art as a plum silhouette with a lavender rim */
+.wk-ic.sil {
+  filter: brightness(0) drop-shadow(1px 0 0 rgba(221, 198, 255, 0.55)) drop-shadow(-1px 0 0 rgba(221, 198, 255, 0.55)) drop-shadow(0 1px 0 rgba(221, 198, 255, 0.55));
+  opacity: 0.8;
+}
+.wk-hint {
+  max-width: 100%;
+  font-size: max(8px, 0.62em);
+  line-height: 1.15;
+  text-align: center;
+  color: var(--aqua);
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-style: normal;
 }
 .wk-x {
   font-family: var(--mono);
@@ -3694,9 +3856,13 @@
 }
 .er-stat .ktag {
   position: absolute;
-  top: -0.95em;
+  top: -1.25em;
+  right: -0.2em;
   transform: rotate(6deg);
-  font-size: max(8px, 0.56em);
+  font-size: max(8px, 0.52em);
+}
+.er-stats:has(.ktag) {
+  margin-top: 0.5em;
 }
 .er-pay {
   display: grid;
@@ -4039,6 +4205,15 @@
     justify-content: center;
   }
 }
+/* phones: three buttons side by side leave no room for the second line */
+@media (max-width: 560px) {
+  .er-btns .btn .bsub {
+    display: none;
+  }
+  .er-btns .btn {
+    min-height: 3em;
+  }
+}
 @media (orientation: landscape) and (max-height: 520px) {
   .er-ep b {
     font-size: 1.9em;
@@ -4363,4 +4538,40 @@
   .home-menu {
     animation: none !important;
   }
+}
+
+/* ---------------------------------------------------- WELCOME TO SEASON 2 (boot notice in a confirm dialog) */
+.welcome p {
+  margin: 0;
+  line-height: 1.3;
+}
+.wl-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35em;
+  margin-top: 0.65em;
+  text-align: left;
+}
+.wl-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
+  padding: 0.35em 0.65em;
+  border-radius: 10px;
+  background: rgba(20, 12, 34, 0.45);
+  border: 1px solid rgba(221, 198, 255, 0.25);
+}
+.wl-row small {
+  font-size: max(9px, 0.8em);
+  color: var(--lav);
+}
+.wl-cast {
+  color: var(--pinkl);
+  text-shadow: var(--ol1);
+}
+
+/* the home page re-rendered in place (back from a page / profile change): no entry pops */
+.home.settled .oc-card,
+.home.settled .home-menu {
+  animation: none;
 }

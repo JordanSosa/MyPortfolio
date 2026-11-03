@@ -4,103 +4,115 @@
  * Art direction + gameplay tells: docs/content/enemies.md §3.
  *
  * All face RIGHT, feet pivot (w/2, h-1), plum '1' outlines, light from the
- * top-left. Bodies use the directional `ball` shader; faces and details are
- * hand-pixelled on top. Every special frame (tell / attack) is drawn to read
- * at 1x against warm sand.
+ * top-left. Crab, jellyfish bells, melon half and the seed are hand-pixelled
+ * grids; round bodies (seagull, melon, shark) are shaded procedurally with
+ * hand-pixelled faces on top. Every special frame (tell / attack) is drawn to
+ * read at 1x against both dry and wet sand.
  */
 import type { SpriteDef } from "../format";
-import { Cv, spr } from "./s2-stages-b-util";
+import { Cv, spr, part, stack, soften } from "./s2-stages-b-util";
 
 /** Local warm-light keys shared by the beach enemies. */
 const PAL: Record<string, string> = {
+  _: "#6e1840", // crab inner separator (deep crimson)
   "+": "#ff9488", // red lit (warm)
   "=": "#ffd2c8", // red rim / belly light
 };
 
 // ============================================================================ CRAB-KUN
-// Everything is composed in colour first and outlined ONCE, so parts never
-// stack their own outlines; 1px gaps between parts become clean '1' separators.
-// Claw parts are the RIGHT claw ('+' lit, 'r' base, 'R' shade); the left is mirrored.
-const CLAW_SIDE = `
-r.r
-+rr
-+rR
-.R.`;
-const CLAW_UP = `
-r..r
+// Hand-pixelled parts (fills only), each outlined on its own layer and stacked
+// back-to-front: legs -> body -> eye stalks -> claws. Light from the top-left:
+// '+' lit, 'r' base, 'R' shade; '=' is the pale shell glint.
+const CRAB_BODY = `
+...++rrrr...
+.++=++rrrrR.
+++=++rrrrrRR
+++rrrrrrrRRR
+.rrrrrrrRRR.`;
+const CRAB_BODY_SQUASH = `
+..+++rrrrr...
+.++=++rrrrrR.
+++=++rrrrrrRR
+.rrrrrrrrRRR.`;
+/** Left claw, raised, pincer open upward. */
+const CLAW_L = `
+.r.r
 +r.r
 +rrR
-.rR.
-..R.`;
++rRR
+.RR.`;
+/** Right claw: the mirror image, re-lit from the top-left. */
+const CLAW_R = `
++.r.
++.rR
++rrR
++rRR
+.RR.`;
+/** Claw thrust forward (lunge), pincer open to the right. */
 const CLAW_FWD = `
-+rrr
-+r..
-+r..
-+rrR`;
+.++rr
++r...
++r...
++rrrR
+.RRR.`;
+/** 2x2 bead eye: black with a white glint, looking right. */
+const CRAB_EYE = `
+ww
+w0`;
 
 interface CrabPose {
-  dy: number; // body bob
-  legs: 0 | 1 | 2; // leg phase (2 = stretched lunge)
+  by: number; // body top row
+  bx?: number; // body x shift
+  legs: [number, number][]; // leg pixels (fill), drawn behind the body
   claws: "side" | "up" | "fwd";
+  squash?: boolean;
 }
 
 function crab(o: CrabPose): Cv {
-  const c = new Cv(16, 16);
-  const up = o.claws === "up";
-  const fwd = o.claws === "fwd";
-  const bx = 7.5 + (fwd ? 0.5 : 0);
-  const by = 10 + o.dy;
-  const fx = Math.round(bx);
-  const fy = Math.round(by);
-  // legs
-  const LEGS: [number, number][][] = [
-    [[-4, 3], [-5, 4], [3, 3], [4, 4], [-2, 4], [1, 4]],
-    [[-4, 3], [-4, 4], [3, 3], [3, 4], [-3, 4], [2, 4]],
-    [[-4, 3], [-5, 4], [-6, 4], [3, 3], [2, 4], [-2, 4]],
-  ];
-  const legY = Math.round(10); // legs stay planted while the shell bobs
-  for (const [x, y] of LEGS[o.legs]) c.set(fx + x, legY + y - (y === 3 && o.dy < 0 ? 1 : 0), "R");
-  // shell (squashes on the tell)
-  c.ball(bx, by + (up ? 0.5 : 0), up ? 5 : 4.6, up ? 2.8 : 3.3, "Rrr+", { bias: 0.08 });
-  c.each((x, y, k) => (k !== "." && k !== "R" && !c.solid(x, y + 1) && x > bx - 3 && x < bx + 2 ? "=" : null));
-  // eyes on short stalks
-  const ey = fy - (up ? 5 : 6);
-  for (const x of [fx - 3, fx + 1]) {
-    c.set(x + (x < fx ? 1 : 0), ey + 2, "R");
-    c.set(x, ey, "w").set(x + 1, ey, fwd ? "0" : "w");
-    c.set(x, ey + 1, "w").set(x + 1, ey + 1, "0");
+  const W = 16;
+  const bx = 2 + (o.bx ?? 0);
+  const by = o.by;
+  const legs = new Cv(W, W);
+  for (const [x, y] of o.legs) legs.set(x, y, "R");
+  legs.outline("1");
+  const body = part(W, W, o.squash ? CRAB_BODY_SQUASH : CRAB_BODY, o.squash ? bx - 0 : bx, by);
+  // eyes on little stalks
+  const eyeY = o.claws === "up" ? by - 5 : by - 4;
+  const eyes = new Cv(W, W);
+  for (const ex of [bx + 4, bx + 7]) {
+    eyes.put(CRAB_EYE, ex, eyeY);
+    for (let y = eyeY + 2; y < by; y++) eyes.set(ex + (ex < bx + 6 ? 1 : 0), y, "R");
   }
-  // claws
+  eyes.outline("1");
+  const claws = new Cv(W, W);
   if (o.claws === "side") {
-    c.put(CLAW_SIDE, fx + 4, fy - 7);
-    c.put(CLAW_SIDE, fx - 7, fy - 7, { flip: true });
-    c.set(fx + 4, fy - 3, "R").set(fx - 5, fy - 3, "R");
-  } else if (up) {
-    c.put(CLAW_UP, fx + 3, fy - 9);
-    c.put(CLAW_UP, fx - 7, fy - 9, { flip: true });
+    claws.put(CLAW_L, bx - 1, by - 5).set(bx, by, "R").set(bx, by + 1, "R");
+    claws.put(CLAW_R, bx + 9, by - 5).set(bx + 11, by, "R").set(bx + 11, by + 1, "R");
+  } else if (o.claws === "up") {
+    claws.put(CLAW_L, bx - 2, by - 8).set(bx - 1, by - 3, "R").set(bx - 1, by - 2, "R").set(bx, by - 1, "R").set(bx, by, "R");
+    claws.put(CLAW_R, bx + 10, by - 8).set(bx + 12, by - 3, "R").set(bx + 12, by - 2, "R").set(bx + 11, by - 1, "R").set(bx + 11, by, "R");
   } else {
-    c.put(CLAW_FWD, fx + 4, fy - 4);
-    c.put(CLAW_SIDE, fx - 7, fy - 7, { flip: true });
-    c.set(fx - 5, fy - 3, "R");
+    claws.put(CLAW_L, bx - 1, by - 4).set(bx, by + 1, "R");
+    claws.put(CLAW_FWD, bx + 9, by - 2);
   }
-  c.outline("1");
-  // shell glint, tell glints on the pincer tips
-  c.set(fx - 2, fy - 2 + (up ? 1 : 0), "w");
-  if (up) c.set(fx + 3, fy - 9, "w").set(fx - 4, fy - 9, "w");
-  // face: blush + ':3' cat mouth (an open 'o' while lunging)
-  const my = fy + (up ? 1 : 0);
-  c.set(fx - 3, my, "b").set(fx + 3, my, "b");
-  if (fwd) c.set(fx, my, "1").set(fx + 1, my, "1").set(fx, my + 1, "R").set(fx + 1, my + 1, "1");
-  else c.set(fx - 1, my, "1").set(fx, my + 1, "1").set(fx + 1, my, "1");
+  claws.outline("1");
+  const c = soften(stack(W, W, legs, body, eyes, claws), "+rR=", "_");
+  // pincer-tip glints on the tell
+  if (o.claws === "up") c.set(bx - 1, by - 8, "w").set(bx + 13, by - 8, "w");
+  // face on the shell front: blush + ':3' mouth (an 'o' while lunging)
+  const fy = by + 2;
+  c.set(bx + 2, fy, "b").set(bx + 9, fy, "b");
+  if (o.claws === "fwd") c.set(bx + 5, fy, "1").set(bx + 6, fy, "1").set(bx + 5, fy + 1, "0").set(bx + 6, fy + 1, "1");
+  else c.set(bx + 5, fy, "1").set(bx + 6, fy + 1, "1").set(bx + 7, fy, "1");
   return c;
 }
 
 function crabFrames(): Cv[] {
   return [
-    crab({ dy: 0, legs: 0, claws: "side" }),
-    crab({ dy: -1, legs: 1, claws: "side" }),
-    crab({ dy: 0, legs: 0, claws: "up" }),
-    crab({ dy: 0, legs: 2, claws: "fwd" }),
+    crab({ by: 8, legs: [[3, 13], [2, 14], [5, 13], [10, 13], [12, 13], [13, 14]], claws: "side" }),
+    crab({ by: 7, legs: [[4, 12], [4, 13], [3, 14], [6, 12], [6, 13], [9, 12], [9, 13], [11, 12], [12, 13], [12, 14]], claws: "side" }),
+    crab({ by: 9, legs: [[2, 13], [1, 14], [5, 14], [10, 14], [13, 13], [14, 14]], claws: "up", squash: true }),
+    crab({ by: 8, legs: [[3, 13], [2, 14], [1, 14], [6, 13], [11, 13], [12, 14]], claws: "fwd" }),
   ];
 }
 
@@ -204,7 +216,7 @@ function seagull(wing: Wing, tilt: number, bob: number): Cv {
 }
 
 function seagullFrames(): Cv[] {
-  return [seagull("up", 0, 0), seagull("down", 0, 1), seagull("glide", 0, 0), seagull("tuck", 0.55, 0)];
+  return [seagull("up", 0, 0), seagull("down", 0, 1), seagull("glide", 0, 0), seagull("tuck", 0.8, 0)];
 }
 
 // ============================================================================ JELLYFISH
@@ -220,65 +232,71 @@ const JELLY_PAL: Record<string, string> = {
   "!": "#bafff6", // glow rim aqua
 };
 
-function jelly(phase: number, rx: number, ry: number, rim: number, glow: boolean): Cv {
+const BELL_REST = `
+...%%%%%%...
+.%%**%%pp%%.
+%%**%%%pp%%&
+%*%%%%%%%%&&
+%%%%%%%%%%&&
+%%%%%%%%%%&&
+%%%%%%%%%&&&
+&&&&&&&&&&&&
+.&&.&&.&&.&.`;
+const BELL_SQUASH = `
+....%%%%%%....
+.%%**%%%pp%%%.
+%%*%%%%%pp%%%&
+%*%%%%%%%%%%&&
+%%%%%%%%%%%&&&
+%%%%%%%%%%&&&&
+&&&&&&&&&&&&&&
+&.&&.&&.&&.&&.`;
+const BELL_STRETCH = `
+...%%%%...
+.%%*%%pp%.
+.%**%%pp%.
+%*%%%%%%%&
+%%%%%%%%%&
+%%%%%%%%&&
+%%%%%%%&&&
+&&&&&&&&&&
+&.&&.&&.&.`;
+
+function jelly(bell: string, bx: number, by: number, sway: number, spread: number, glow: boolean): Cv {
   const c = new Cv(16, 16);
-  const cx = 7.5;
-  // bell: a tall dome with a softly rounded rim
-  c.each((x, y) => {
-    const dx = (x + 0.5 - (cx + 0.5)) / rx;
-    const dy = (y + 0.5 - (rim + 0.5)) / ry;
-    // frilled skirt: every other pixel under the rim, so the outline scallops it
-    const frill = y === Math.round(rim) + 1 && Math.abs(dx) < 0.9 && (x + Math.round(phase)) % 2 === 0;
-    const inside = y <= rim ? dx * dx + dy * dy <= 1 : frill;
-    if (!inside) return null;
-    if (frill) return "&";
-    const l = -dx * 0.55 - dy * 0.75;
-    if (l > 1.0) return "*";
-    if (dx > 0.62 && dy > -0.75) return "&";
-    return "%";
-  });
-  // pink spots
-  const spots: [number, number][] = [
-    [-0.55, -0.55],
-    [0.05, -0.8],
-    [0.55, -0.45],
-    [-0.15, -0.3],
-  ];
-  for (const [sx, sy] of spots) {
-    const x = Math.round(cx + sx * rx);
-    const y = Math.round(rim + sy * ry);
-    if (c.get(x, y) !== ".") c.set(x, y, "q");
-  }
+  const b = Cv.of(bell);
+  c.put(b, bx, by);
+  const rim = by + b.h - 2; // last solid rim row
   c.outline(glow ? "!" : "1");
-  if (glow) c.each((x, y, k) => (k !== "!" && k !== "." && (c.get(x - 1, y) === "!" || c.get(x + 1, y) === "!" || c.get(x, y - 1) === "!") ? "w" : null));
-  // tentacles: un-outlined coloured strands so they stay delicate
-  const tents = [4.6, 6.6, 8.8, 10.8];
-  const bottom = Math.round(rim) + 2;
-  tents.forEach((tx0, i) => {
-    for (let y = bottom + 1; y <= 15; y++) {
-      const d = y - bottom;
-      const x = tx0 + (tx0 - cx) * 0.1 * d + Math.sin(d * 0.85 + phase + i * 1.9) * 0.85;
-      const k = glow ? (i % 2 ? "!" : "w") : i % 2 ? "i" : "p";
+  if (glow) c.each((x, y, k) => ("%&*".includes(k) && (c.get(x - 1, y) === "!" || c.get(x + 1, y) === "!" || c.get(x, y - 1) === "!") ? "w" : null));
+  // four wavy tentacles hanging from the frill (un-outlined so they stay delicate)
+  const cx = bx + (b.w - 1) / 2;
+  const tents = [-3.5, -1.2, 1.2, 3.5];
+  tents.forEach((off, i) => {
+    for (let y = rim + 3; y <= 15; y++) {
+      const d = y - rim - 2;
+      const x = cx + off * (1 + spread * d * 0.1) + Math.sin(d * 1.2 + sway) * 0.75;
+      const k = glow ? (i % 2 ? "a" : "w") : i % 2 ? "i" : "p";
       if (c.get(Math.round(x), y) === ".") c.set(Math.round(x), y, k);
     }
   });
-  // sleepy face low on the bell, looking right: closed '‿' eyes, blush, tiny mouth
-  const fy = Math.round(rim - 1);
-  const fx = Math.round(cx + 1);
-  for (const ex of [fx - 3, fx + 1]) c.set(ex, fy - 1, "1").set(ex + 1, fy, "1").set(ex + 2, fy - 1, "1");
-  c.set(fx - 3, fy + 1, "b").set(fx + 3, fy + 1, "b");
-  c.set(fx, fy + 1, "1");
+  // sleepy face low on the bell, turned a little right: closed eyes, blush, tiny 'o'
+  const fx = Math.round(cx) + 1;
+  const ey = rim - 3;
+  for (const ex of [fx - 4, fx + 1]) c.set(ex, ey, "1").set(ex + 1, ey + 1, "1").set(ex + 2, ey, "1");
+  c.set(fx - 5, ey + 2, "b").set(fx + 4, ey + 2, "b");
+  c.set(fx - 1, ey + 2, "1");
   // shine
-  c.set(Math.round(cx - rx * 0.55), Math.round(rim - ry * 0.6), "w");
+  c.set(bx + 2, by + 2, "w");
   return c;
 }
 
 function jellyFrames(): Cv[] {
   return [
-    jelly(0, 6, 6, 7.5, false),
-    jelly(1.6, 6.6, 5.2, 8.2, false),
-    jelly(3.2, 5.5, 6.6, 7, false),
-    jelly(0, 6, 6, 7.5, true),
+    jelly(BELL_REST, 2, 1, 0, 0, false),
+    jelly(BELL_SQUASH, 1, 2, 1.6, 1, false),
+    jelly(BELL_STRETCH, 3, 1, 3.2, -0.6, false),
+    jelly(BELL_REST, 2, 1, 0, 0, true),
   ];
 }
 
@@ -293,132 +311,141 @@ const MELON_PAL: Record<string, string> = {
   "{": "#3f9a55", // rind shade
 };
 
-function melonBody(c: Cv, cx: number, cy: number, rx: number, ry: number, axisDeg: number, face: (x: number, y: number) => boolean): void {
-  const a = (axisDeg * Math.PI) / 180;
-  const ax = Math.sin(a);
-  const ay = -Math.cos(a);
+/**
+ * Melon sphere: light rind lit from the top-left with crisp dark zig-zag
+ * stripes along meridians. The stripe mask is built upright, then rotated by
+ * `rot` degrees for the roll frames (the lighting stays screen-fixed).
+ */
+function melonBody(c: Cv, cx: number, cy: number, rx: number, ry: number, rot: number, keep: (x: number, y: number) => boolean): void {
+  const mask = new Cv(16, 16);
+  const LONS = [-1.2, -0.5, 1.25];
+  for (let y = 0; y < 16; y++) {
+    const t = (y + 0.5 - (cy + 0.5)) / (ry + 0.3);
+    if (Math.abs(t) >= 1) continue;
+    const R = (rx + 0.3) * Math.sqrt(1 - t * t);
+    const zig = (y >> 1) & 1 ? 0 : 1;
+    for (const lon of LONS) {
+      const x = Math.round(cx + R * Math.sin(lon) + (lon < 0 ? -zig : zig) * 0.6);
+      mask.set(x, y, "S");
+      if (R * Math.cos(lon) > 3.2) mask.set(x + (lon < 0 ? 1 : -1), y, "S");
+    }
+  }
+  const m = rot ? mask.rotate((rot * Math.PI) / 180, cx, cy) : mask;
   c.ellipse(cx, cy, rx, ry, (x, y) => {
     const nx = (x - cx) / (rx + 0.5);
     const ny = (y - cy) / (ry + 0.5);
     const nz = Math.sqrt(Math.max(0, 1 - nx * nx - ny * ny));
-    const u = nx * -ay + ny * ax; // across the stripe axis
-    const v = nx * ax + ny * ay; // along it
-    const lon = Math.atan2(u, nz);
-    // narrow dark stripes with a little zig-zag wobble, never across the face
-    const stripe = !face(x, y) && Math.cos(lon * 3.4 + 0.9 + Math.sin(v * 9) * 0.3) > 0.5;
     const l = nx * -0.55 + ny * -0.62 + nz * 0.56;
-    if (stripe) return l > 0.45 ? "<" : ">";
-    if (l > 0.3) return "[";
-    return l > -0.15 ? "]" : "{";
+    if (m.get(x, y) === "S" && !keep(x, y)) return l > 0.05 ? "<" : ">";
+    return l > 0.5 ? "[" : l > -0.12 ? "]" : "{";
   });
 }
 
-function strawHat(c: Cv, x: number, y: number, tilt: number): void {
-  // brim + crown + red ribbon; tilt shifts the crown back (to the left)
-  const t = tilt;
-  c.put(
-    `
+const HAT = `
 ....hBBBh....
 ...hBzBBBh...
 ...rrrrrrR...
 .hBBBBBBBBBh.
-hhFFFFFFFFFhh`,
-    x,
-    y,
-    {},
-  );
-  if (t) {
-    // windswept: brim lifted at the front
-    c.set(x + 12, y + 3, "h").set(x + 12, y + 4, ".").set(x + 11, y + 4, "F");
-  }
-}
+hhFFFFFFFFFhh`;
+const HAT_TILT = `
+.....hBBh.....
+...hBzBBBh....
+..rrrrrrR.....
+.hBBBBBBBBhh..
+hFFFFFFFFFFFh.`;
 
 function melon(f: number): Cv {
-  const c = new Cv(16, 16);
   const roll = f >= 2;
   const bob = f === 1 ? -1 : 0;
   const cx = 7.5;
-  const cy = (roll ? 10 : 9.6) + bob;
+  const cy = roll ? 9.5 : 9 + bob;
   const fx = 9;
-  const fy = Math.round(cy) + (roll ? 0 : 0);
-  // feet (waddle)
+  const fy = Math.round(cy);
+  const feet = new Cv(16, 16);
   if (!roll) {
-    const lf = f === 0 ? 0 : -1;
-    const rf = f === 0 ? -1 : 0;
-    c.set(5, 14 + lf - bob, "E").set(6, 14 + lf - bob, "E").set(9, 14 + rf - bob, "E").set(10, 14 + rf - bob, "E");
+    // little waddling feet
+    const l = f === 0 ? 0 : 1;
+    feet.set(5, 14 - l, "E").set(4, 14 - l, "E").set(10, 13 + l, "E").set(11, 13 + l, "E");
+    feet.outline("1");
   }
-  const faceBox = (x: number, y: number) => x >= fx - 3 && x <= fx + 3 && y >= fy - 1 && y <= fy + 2;
-  melonBody(c, cx, cy, roll ? 6.2 : 6, roll ? 4.8 : 5, roll ? (f === 2 ? 45 : 90) : 0, faceBox);
-  // hat on top (lifted and blown back while rolling)
-  const hat = new Cv(16, 16);
-  strawHat(hat, roll ? 0 : 1, roll ? 0 : 1 + bob, roll ? 1 : 0);
-  c.put(hat, 0, 0);
-  c.outline("1");
+  const face = (x: number, y: number) => x >= fx - 3 && x <= fx + 3 && y >= fy - 1 && y <= fy + 2;
+  const body = new Cv(16, 16);
+  melonBody(body, cx, cy, 6, roll ? 5 : 5.4, roll ? (f === 2 ? 40 : 85) : 0, face);
+  body.outline("1");
+  const hat = part(16, 16, roll ? HAT_TILT : HAT, roll ? 0 : 1, roll ? 1 : 1 + bob);
+  const c = stack(16, 16, feet, body, hat);
   if (!roll) {
-    c.set(fx - 2, fy - 1, "0").set(fx - 2, fy, "0").set(fx + 2, fy - 1, "0").set(fx + 2, fy, "0");
-    c.set(fx - 2, fy - 1, "w").set(fx + 2, fy - 1, "w");
+    // happy face: tall shiny eyes, blush, open smile
+    for (const ex of [fx - 2, fx + 2]) c.set(ex, fy - 1, "w").set(ex, fy, "0");
     c.set(fx - 3, fy + 1, "b").set(fx + 3, fy + 1, "b");
-    c.set(fx - 1, fy + 1, "1").set(fx, fy + 2, "R").set(fx + 1, fy + 1, "1").set(fx, fy + 1, "r");
+    c.set(fx - 1, fy + 1, "0").set(fx, fy + 1, "0").set(fx + 1, fy + 1, "0").set(fx, fy + 2, "r");
   } else {
-    c.set(fx - 3, fy - 1, "1").set(fx - 2, fy, "1").set(fx - 3, fy + 1, "1"); // '>'
-    c.set(fx + 3, fy - 1, "1").set(fx + 2, fy, "1").set(fx + 3, fy + 1, "1"); // '<'
-    c.set(fx - 1, fy + 1, "1").set(fx, fy + 1, "1").set(fx + 1, fy + 1, "1").set(fx, fy + 2, "r");
+    // '>w<' wheee
+    c.set(fx - 3, fy - 1, "0").set(fx - 2, fy, "0").set(fx - 3, fy + 1, "0");
+    c.set(fx + 3, fy - 1, "0").set(fx + 2, fy, "0").set(fx + 3, fy + 1, "0");
+    c.set(fx - 1, fy + 1, "0").set(fx, fy + 2, "0").set(fx + 1, fy + 1, "0");
+    // dust kicked up behind
+    const d: [number, number][] = f === 2 ? [[1, 13], [0, 11]] : [[0, 13], [1, 12]];
+    for (const [x, y] of d) if (c.get(x, y) === ".") c.set(x, y, "B");
   }
   return c;
 }
 
-/** Watermelon half: red flesh (seeds up) on a green rind dome, tiny angry face. f1 = airborne. */
+/** Watermelon half: red flesh (seeds up) on a green rind bowl, tiny angry face. f0 squat, f1 hop (stretched). */
+const HALF = `
+..WqrrrW..
+.Wqr0rrrW.
+Wqrrrr0rRW
+Wr0rrRrRRW
+[WWWWWWWW{
+[]]]]]]]]{
+.[]]]]]]{.`;
+const HALF_HOP = `
+..WqrrW..
+.Wq0rrrW.
+Wqrrr0rRW
+Wr0rRrRRW
+[WWWWWWW{
+[]]]]]]]{
+[]]]]]]]{
+.[]]]]]{.`;
 function melonHalf(f: number): Cv {
-  const c = new Cv(12, 10);
-  const up = f === 1 ? 1 : 0;
-  const cy = 3.4 - up;
-  // rind dome (front)
-  c.each((x, y) => {
-    const dx = (x + 0.5 - 6) / 5.2;
-    const dy = (y + 0.5 - (cy + 0.6)) / (f === 1 ? 5.4 : 4.9);
-    if (y + 0.5 < cy + 0.6 || dx * dx + dy * dy > 1) return null;
-    const l = -dx * 0.6 - dy * 0.4;
-    return l > 0.3 ? "[" : l > -0.25 ? "]" : "{";
-  });
-  // white rind line + red flesh disc on top
-  c.ellipse(5.5, cy, 5, 2.2, "W");
-  c.ellipse(5.5, cy, 4, 1.5, (x, y) => (x < 4 && y < cy ? "q" : x > 7 ? "R" : "r"));
-  // seeds
-  for (const [sx, sy] of [
-    [3, 0],
-    [6, -1],
-    [8, 0],
-    [5, 1],
-  ] as [number, number][])
-    c.set(sx, Math.round(cy) + sy, "0");
-  c.outline("1");
-  // tiny angry face on the rind
-  const fy = Math.round(cy) + 4;
-  c.set(6, fy - 1, "1").set(9, fy - 1, "1"); // brows angled in
-  c.set(7, fy, "0").set(9, fy, "0");
-  c.set(8, fy + 1, "1");
+  const hop = f === 1;
+  const c = part(12, 10, hop ? HALF_HOP : HALF, hop ? 2 : 1, hop ? 1 : 2);
+  // tiny angry face on the rind: outer brow pixels slanting in ('\ /'), dot eyes, flat mouth
+  const ey = hop ? 6 : 7;
+  const [l, r] = hop ? [5, 8] : [5, 8];
+  c.set(l - 1, ey - 1, "1").set(r + 1, ey - 1, "1");
+  c.set(l, ey, "0").set(r, ey, "0");
+  c.set(l + 1, ey + 1, "1").set(l + 2, ey + 1, "1");
   return c;
 }
 
 const SEED_PAL: Record<string, string> = {
-  "(": "#ff7ab8a0", // inner halo (pink, translucent)
-  ")": "#ffb8dc60", // outer halo
+  "(": "#ff7ab8", // halo
+  ")": "#ffb8dcb0", // outer halo (translucent)
+  "^": "#5a3a4a", // seed glint (muted, so it never reads as an eye)
 };
 
+/** Teardrop seed (tilted, point up-left) in a hot-pink glow; f1 = brighter pulse. */
+const SEED = [
+  `
+.)(().
+)(0(()
+(0^0((
+(000((
+)(00()
+.)(().`,
+  `
+.(qq(.
+(q0qq(
+q0^0qq
+q000qq
+(q00q(
+.(qq(.`,
+];
 function seed(f: number): Cv {
-  const c = new Cv(6, 6);
-  c.put(
-    `
-.0.
-000
-000
-.0.`,
-    1,
-    1,
-  );
-  c.set(2, 2, "w");
-  c.halo(f === 0 ? ["p", ")"] : ["q", "("]);
-  return c;
+  return Cv.of(SEED[f]);
 }
 
 // ============================================================================ SANDCASTLE GOLEM
@@ -426,10 +453,12 @@ function seed(f: number): Cv {
 // an arched door mouth, a pennant on top and stubby sand legs. Darker, more
 // saturated sand than the ground so it never melts into the beach.
 const CASTLE_PAL: Record<string, string> = {
-  "(": "#ffe7b0", // lit sand
-  ")": "#f2bd66", // sand base
-  "[": "#d99a5a", // sand shade
-  "]": "#a8683f", // deep shade / mortar
+  // packed WET sand: darker and warmer than the dry beach so it never melts into the ground
+  "(": "#f7c983", // lit sand
+  ")": "#e2a160", // sand base
+  "[": "#c07a47", // sand shade
+  "]": "#8c5238", // deep shade / mortar
+  "~": "#f2b874", // trickling grains (no outline)
 };
 
 function sandBlock(c: Cv, x0: number, y0: number, x1: number, y1: number, brick = true): void {
@@ -495,8 +524,8 @@ p..`,
             [19, 17],
             [19, 19],
           ];
-  for (const [x, y] of trick) c.set(x, y + bob, ")");
   c.outline("1");
+  for (const [x, y] of trick) if (c.get(x, y + bob) === ".") c.set(x, y + bob, "~");
   // face: window eyes with glints, shell nose, arched door mouth
   const fy = 11 + bob;
   for (const ex of [8, 14]) {
@@ -569,7 +598,7 @@ const SHARK_PAL: Record<string, string> = {
   ")": "#5aa8ff", // body base
   "[": "#3a78d6", // body shade
   "]": "#e6d2b0", // sand ripple light
-  "{": "#cfa983", // sand ripple shade
+  "{": "#c99a78", // sand ripple shade (reads on dry and wet sand)
 };
 
 function finOnly(f: number): Cv {
@@ -581,11 +610,12 @@ function finOnly(f: number): Cv {
     const d = ((x + 0.5 - cx) / 6) ** 2 + ((y + 0.5 - cy) / 2.1) ** 2;
     if (d > 1 || d < 0.45) return null;
     if ((x + f * 2) % 5 === 0) return null; // broken, moving ripple
-    return y + 0.5 < cy ? "B" : "h";
+    return y + 0.5 < cy ? "B" : "{";
   });
-  // wake trailing behind (left), shifting each frame
+  // bow wave piling up in front of the fin, wake trailing behind (both shift each frame)
+  c.set(14, 8 + f, "B").set(15, 9, "B").set(14, 10 - f, "{");
   const wx = 2 - f;
-  c.set(wx + 1, 8, "B").set(wx, 9, "h").set(wx + 2, 10, "h").set(wx + 1, 11, "B");
+  c.set(wx + 1, 8, "B").set(wx, 9, "{").set(wx + 2, 10, "{").set(wx + 1, 11, "B");
   // dorsal fin: blue triangle with a lit leading edge and a white glint
   const fin = new Cv(16, 12);
   fin.put(
@@ -626,11 +656,6 @@ function sharkHead(chomp: boolean, rise: number): Cv {
     const l = -nx * 0.6 - ny * 0.8;
     return l > 0.45 ? "(" : l > -0.25 ? ")" : "[";
   });
-  if (chomp) {
-    // mouth wide open on the front
-    c.ellipse(11.5, cy + 1.2, 2.6, 2.1, "R");
-    c.ellipse(11.8, cy + 1.6, 1.5, 1.1, "0");
-  }
   // cut off by the sand line while surfacing
   if (rise > 0) c.each((_x, y) => (y >= 11 ? "." : null));
   c.outline("1");
@@ -642,9 +667,18 @@ function sharkHead(chomp: boolean, rise: number): Cv {
   }
   c.set(6, ey + 2, "b").set(13, ey + 2, "b");
   if (chomp) {
-    // three little teeth on the upper jaw
-    const my = Math.round(cy) + 0;
-    c.set(10, my, "w").set(12, my, "w").set(14, my + 1, "w");
+    // CHOMP: the whole front of the face opens: teeth on both jaws, dark gullet, red tongue
+    c.put(
+      `
+.11111
+1w1w10
+100000
+10rrr0
+1w1w10
+.11111`,
+      9,
+      Math.round(cy),
+    );
   } else {
     // smile showing three tiny teeth
     const my = Math.round(cy) + 1;

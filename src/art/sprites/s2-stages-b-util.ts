@@ -156,3 +156,57 @@ export function pixelPerfect(pts: [number, number][]): [number, number][] {
   }
   return out;
 }
+
+/**
+ * Layered composition: stamp a fill-only part on its own w x h canvas, give it
+ * its own outline, and return it, so stacking parts back-to-front leaves a
+ * clean 1px separator line wherever a front part overlaps a back part.
+ */
+export function part(
+  w: number,
+  h: number,
+  grid: string | Cv,
+  x: number,
+  y: number,
+  o: { flip?: boolean; map?: Record<string, string>; ol?: string | false; sel?: Record<string, string> } = {},
+): Cv {
+  const c = new Cv(w, h);
+  c.put(grid, x, y, { flip: o.flip, map: o.map });
+  if (o.ol !== false) {
+    if (o.sel) c.selout(o.sel, o.ol ?? "1");
+    else c.outline(o.ol ?? "1");
+  }
+  return c;
+}
+
+/** Stack canvases back-to-front onto a new canvas. */
+export function stack(w: number, h: number, ...layers: Cv[]): Cv {
+  const c = new Cv(w, h);
+  for (const l of layers) c.put(l, 0, 0);
+  return c;
+}
+
+/** Set a list of [x, y, key] pixels. */
+export function px(c: Cv, list: ReadonlyArray<readonly [number, number, string]>, dx = 0, dy = 0): Cv {
+  for (const [x, y, k] of list) c.set(x + dx, y + dy, k);
+  return c;
+}
+
+/**
+ * Soften interior separator lines: every `from` pixel (default the '1'
+ * outline) that does not touch transparency, and whose other neighbours are
+ * all in `inside`, becomes `to`. Keeps the silhouette plum while lines between
+ * same-material parts turn into a dark shade of that material.
+ */
+export function soften(c: Cv, inside: string, to: string, from = "1"): Cv {
+  const src = c.clone();
+  c.each((x, y, k) => {
+    if (k !== from) return null;
+    const nb = [src.get(x - 1, y), src.get(x + 1, y), src.get(x, y - 1), src.get(x, y + 1)];
+    if (!src.inb(x - 1, y) || !src.inb(x + 1, y) || !src.inb(x, y - 1) || !src.inb(x, y + 1)) return null;
+    if (nb.includes(".")) return null;
+    for (const n of nb) if (n !== from && !inside.includes(n)) return null;
+    return to;
+  });
+  return c;
+}

@@ -25,6 +25,7 @@ import type { NavLayer } from "../nav";
 import { save } from "../save";
 import { markBorn, onTap, sparkles } from "../screens/common";
 import { boardPage } from "./board";
+import { bootNotices } from "./celebrate";
 import { gachaPage } from "./gacha";
 import { heroPage, heroesPage } from "./heroes";
 import { homePage } from "./home";
@@ -121,6 +122,8 @@ export class Hub implements UiScreen {
     if (ids[0] !== "home") ids.unshift("home");
     ids.forEach((id, i) => this.pushNow(PAGES[id](this, i === ids.length - 1 ? opts : {}), i === ids.length - 1));
     this.syncChrome();
+    // first time at home this session: welcome (v1 migration), recovered save, boot unlocks, Plot Points ready
+    if (this.stack.length === 1) bootNotices(this);
   }
 
   /** Stack depth (1 = home). */

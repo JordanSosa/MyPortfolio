@@ -6,6 +6,7 @@
  *   badge()      "!" / count / NEW notification dot on any button
  *   pbar()       progress bar (fill by transform: scaleX, label inside)
  *   row()        list row: icon | title + sub | right side
+ *   card()       generic card (art | kicker + title + body), optional N..MYTHIC rarity frame
  *   TabBar       horizontal tabs (scrolls on phones), keyboard / gamepad via data-nav
  *
  * Every interactive element carries `data-nav` (spatial keyboard / gamepad
@@ -36,7 +37,9 @@ export interface BtnOpts {
 export function btn(label: string, o: BtnOpts = {}): string {
   const sub = o.sub ? `<small class="bsub">${esc(o.sub)}</small>` : "";
   const text = o.sub ? `<span class="btxt"><span class="blab">${label}</span>${sub}</span>` : `<span class="blab">${label}</span>`;
-  return `<button class="btn ${o.cls ?? ""}${o.sub ? " two" : ""}" data-nav${o.def ? " data-nav-default" : ""}${o.act ? ` data-act="${o.act}"` : ""}${o.disabled ? " disabled" : ""}${o.aria ? ` aria-label="${esc(o.aria)}"` : ""} ${o.attrs ?? ""}>${o.icon ?? ""}${text}${o.badge ?? ""}</button>`;
+  const b = `<button class="btn ${o.cls ?? ""}${o.sub ? " two" : ""}" data-nav${o.def ? " data-nav-default" : ""}${o.act ? ` data-act="${o.act}"` : ""}${o.disabled ? " disabled" : ""}${o.aria ? ` aria-label="${esc(o.aria)}"` : ""} ${o.attrs ?? ""}>${o.icon ?? ""}${text}</button>`;
+  // a pill clips its children (its shine sweep): the badge sits on a wrapper so it can hang off the corner
+  return o.badge ? `<span class="bwrap">${b}${o.badge}</span>` : b;
 }
 
 /** Round icon button (glyph or icon markup). */
@@ -89,6 +92,35 @@ export function row(o: RowOpts): string {
     : `<div class="krow ${o.cls ?? ""}" ${o.attrs ?? ""}>${inner}</div>`;
 }
 
+export interface CardOpts {
+  /** Title line (markup). */
+  title?: string;
+  /** Small kicker above the title ("SSR RELIC", "RING 2"). */
+  kicker?: string;
+  /** Body markup. */
+  body?: string;
+  /** Art / icon markup on the left. */
+  art?: string;
+  /** Rarity frame (N..MYTHIC): the card gets `.rf .r-<rarity>`. */
+  rarity?: "n" | "r" | "sr" | "ssr" | "ur" | "lr" | "my";
+  cls?: string;
+  /** Tappable card (a <button> with data-nav). */
+  act?: string;
+  attrs?: string;
+}
+
+/**
+ * Generic card: art | kicker + title + body, optionally in a rarity frame.
+ * Interactive cards are buttons (44 px+, data-nav) so they join keyboard / gamepad focus.
+ */
+export function card(o: CardOpts): string {
+  const frame = o.rarity ? ` rf r-${o.rarity}` : "";
+  const inner = `${o.art ? `<span class="kc-art">${o.art}</span>` : ""}<span class="kc-tx">${o.kicker ? `<small class="kc-k">${esc(o.kicker)}</small>` : ""}${o.title ? `<b class="kc-t">${o.title}</b>` : ""}${o.body ? `<span class="kc-b">${o.body}</span>` : ""}</span>`;
+  return o.act
+    ? `<button class="kcard${frame} ${o.cls ?? ""}" data-nav data-act="${o.act}" ${o.attrs ?? ""}>${inner}</button>`
+    : `<div class="kcard${frame} ${o.cls ?? ""}" ${o.attrs ?? ""}>${inner}</div>`;
+}
+
 /** Section heading inside a page / sheet. */
 export function sectionTitle(text: string, right = ""): string {
   return `<div class="ksec"><span>${text}</span>${right}</div>`;
@@ -124,6 +156,10 @@ export class TabBar {
     this.el.setAttribute("role", "tablist");
     this.current = initial;
     this.render(tabs);
+    // a deep-linked tab past the strip's right edge: scroll it into view once the strip is laid out
+    requestAnimationFrame(() => {
+      if (this.el.isConnected) this.select(this.current);
+    });
   }
 
   render(tabs: readonly TabDef[]): void {

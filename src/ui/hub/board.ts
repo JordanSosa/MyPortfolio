@@ -26,7 +26,13 @@ import { PanZoom } from "../kit/viewport";
 import { save } from "../save";
 import { pageLayer, type Hub, type HubPage, type PageOpts } from "./hub";
 
-const R_MAX = BOARD.radius[BOARD.radius.length - 1] + 70;
+/**
+ * Screen spread of the meta layout (board units -> CSS px at zoom 1): ring 1's
+ * twelve nodes sit 120 units from the centre, which is too tight for 42-48 px
+ * buttons with a rank pill under them, so the UI spreads every position.
+ */
+const K = 1.4;
+const R_MAX = BOARD.radius[BOARD.radius.length - 1] * K + 80;
 const BOUNDS = { x0: -R_MAX, y0: -R_MAX, x1: R_MAX, y1: R_MAX };
 const SIZE: Record<BoardNode["kind"], number> = { center: 76, stat: 42, utility: 48, keystone: 64 };
 
@@ -49,7 +55,7 @@ export function boardPage(hub: Hub, o: PageOpts): HubPage {
 
   // ---- static board markup (built once)
   const svg: string[] = [];
-  for (let r = 1; r <= BOARD.rings; r++) svg.push(`<circle class="ring" data-ring="${r}" cx="0" cy="0" r="${BOARD.radius[r]}"/>`);
+  for (let r = 1; r <= BOARD.rings; r++) svg.push(`<circle class="ring" data-ring="${r}" cx="0" cy="0" r="${BOARD.radius[r] * K}"/>`);
   for (const s of BOARD.sectors) {
     const a = ((s.angle - 30) * Math.PI) / 180;
     svg.push(`<line class="wedge" x1="0" y1="0" x2="${(Math.cos(a) * R_MAX).toFixed(1)}" y2="${(Math.sin(a) * R_MAX).toFixed(1)}"/>`);
@@ -57,12 +63,12 @@ export function boardPage(hub: Hub, o: PageOpts): HubPage {
   for (const [a, b] of BOARD.edges) {
     const na = BOARD.byId.get(a) as BoardNode;
     const nb = BOARD.byId.get(b) as BoardNode;
-    svg.push(`<line class="edge" data-a="${a}" data-b="${b}" x1="${na.x}" y1="${na.y}" x2="${nb.x}" y2="${nb.y}"/>`);
+    svg.push(`<line class="edge" data-a="${a}" data-b="${b}" x1="${na.x * K}" y1="${na.y * K}" x2="${nb.x * K}" y2="${nb.y * K}"/>`);
   }
   const labels = BOARD.sectors
     .map((s) => {
       const a = (s.angle * Math.PI) / 180;
-      const r = BOARD.radius[5] + 118;
+      const r = BOARD.radius[5] * K + 118;
       return `<span class="bd-sec" style="left:${(Math.cos(a) * r - BOUNDS.x0).toFixed(1)}px;top:${(Math.sin(a) * r - BOUNDS.y0).toFixed(1)}px;--sc:${s.color}">${esc(s.name)}</span>`;
     })
     .join("");
@@ -70,7 +76,7 @@ export function boardPage(hub: Hub, o: PageOpts): HubPage {
     .map((n) => {
       const sc = n.sector >= 0 ? BOARD.sectors[n.sector].color : "#ffe14d";
       const glyph = n.kind === "center" ? art("board_center", `<i class="bn-clap">EP.1</i>`, "px") : img(n.icon, "px");
-      return `<button class="bn k-${n.kind}" data-nav data-act="node" data-id="${n.id}" style="left:${(n.x - BOUNDS.x0).toFixed(1)}px;top:${(n.y - BOUNDS.y0).toFixed(1)}px;--sz:${SIZE[n.kind]}px;--sc:${sc}" aria-label="${esc(n.name)}"><span class="bn-ic">${glyph}</span><span class="bn-rk"></span><span class="bn-ap"></span></button>`;
+      return `<button class="bn k-${n.kind}" data-nav data-act="node" data-id="${n.id}" style="left:${(n.x * K - BOUNDS.x0).toFixed(1)}px;top:${(n.y * K - BOUNDS.y0).toFixed(1)}px;--sz:${SIZE[n.kind]}px;--sc:${sc}" aria-label="${esc(n.name)}"><span class="bn-ic">${glyph}</span><span class="bn-rk"></span><span class="bn-ap"></span></button>`;
     })
     .join("");
   el.innerHTML = `
@@ -105,12 +111,12 @@ export function boardPage(hub: Hub, o: PageOpts): HubPage {
 
   const vp = new PanZoom(vpEl, content, {
     bounds: BOUNDS,
-    minZoom: 0.28,
+    minZoom: 0.2,
     maxZoom: 1.8,
     zoom: 0.8,
     cx: 0,
     cy: 0,
-    far: 0.5,
+    far: 0.42,
     active: () => hub.top?.el === el && overlaysOpen() === 0,
   });
 
@@ -296,7 +302,7 @@ export function boardPage(hub: Hub, o: PageOpts): HubPage {
       } else {
         app.sfx("uiConfirm");
         const first = BOARD.byId.get(plan[0].id);
-        if (first) vp.go(first.x, first.y, Math.max(vp.z, 0.7));
+        if (first) vp.go(first.x * K, first.y * K, Math.max(vp.z, 0.7));
       }
       paint();
     },
@@ -329,7 +335,7 @@ export function boardPage(hub: Hub, o: PageOpts): HubPage {
   el.addEventListener("navfocus", (e) => {
     const b = (e.target as HTMLElement).closest<HTMLElement>(".bn");
     const n = b ? BOARD.byId.get(b.dataset.id as string) : undefined;
-    if (n) vp.ensureVisible(n.x, n.y, 90 * vp.z + 40);
+    if (n) vp.ensureVisible(n.x * K, n.y * K, 90 * vp.z + 40);
   });
 
   paint();
@@ -342,8 +348,9 @@ export function boardPage(hub: Hub, o: PageOpts): HubPage {
   const place = () => {
     placed = true;
     vp.measure();
-    const z = Math.max(0.5, Math.min(1.05, Math.min(vp.viewW, vp.viewH) / 600));
-    vp.go(start ? start.x * 0.6 : 0, start ? start.y * 0.6 : 0, z, 0);
+    // fit rings 1-2 (the early game) in the shorter side of the view
+    const z = Math.max(0.42, Math.min(1.05, Math.min(vp.viewW, vp.viewH) / (2 * (BOARD.radius[2] * K + 56))));
+    vp.go(start ? start.x * K * 0.6 : 0, start ? start.y * K * 0.6 : 0, z, 0);
     if (start) setTimeout(() => pop(startEl ?? null, 1.5), 450);
   };
 

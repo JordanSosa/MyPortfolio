@@ -11,7 +11,6 @@
  * bests and the run counter are never lost.
  */
 import { CFG } from "../../game/config";
-import { EVENTS } from "../../game/director/timeline";
 import { heroDef } from "../../game/heroes";
 import { BOSSES } from "../../game/registry";
 import type { World } from "../../game/world";
@@ -37,14 +36,16 @@ function soClose(w: World): string {
     return `<b>${esc(b.def.boss.title)}</b> had only <b>${pct}%</b> HP left!`;
   }
   let next: { at: number; title: string } | null = null;
-  for (const ev of EVENTS) {
+  // this run's stage timeline (Dream Meadow: King Puff 3:00, Nightmare Teddy 6:00, Lady Lunatic 9:00)
+  for (const ev of w.stage.events) {
     if (ev.kind !== "boss") continue;
     const at = ev.at + CFG.bossWarningTime;
     const def = BOSSES.get(ev.enemy ?? "");
     if (at > w.t && def?.boss && (!next || at < next.at)) next = { at, title: def.boss.title };
   }
   const lasted = `you lasted <b>${clock(w.t)}</b>`;
-  const best = save.data.best.time;
+  // the best time on this stage (the account's per-stage record, before this run is banked)
+  const best = save.profile.records[w.stage.id]?.bestTime ?? 0;
   if (next && next.at - w.t <= 60) return `<b>${esc(next.title)}</b> arrives at ${clock(next.at)} — ${lasted}`;
   if (best > w.t + 0.5) return `only <b>${clock(best - w.t)}</b> short of your best!`;
   if (best > 0) return `a new best time — ${lasted}!`;

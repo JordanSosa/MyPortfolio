@@ -26,7 +26,7 @@ const SAND_PAL: Record<string, string> = {
   S: "#ecd2a8", // wet sand light
   T: "#c9f3ea", // aqua sheen
   V: "#f2fffb", // sheen core
-  K: "#d3a88c", // footprint dent (mauve)
+  K: "#dfb996", // footprint dent (soft mauve-tan: texture, not noise)
   // muted shell / starfish tones: ground details must never read as pickups or bullets
   A: "#f6c9c4", // shell pink light
   D: "#e9a5a8", // shell pink
@@ -155,9 +155,8 @@ K.K
 .K.
 .K.`;
     c.put(PRINT, 3, 11);
-    c.put(PRINT, 7, 8);
-    c.put(PRINT, 4, 4);
-    c.put(PRINT, 9, 1);
+    c.put(PRINT, 7, 6);
+    c.put(PRINT, 10, 1);
     out.push(c);
   }
   return out;
@@ -349,56 +348,50 @@ const PARASOL_PAL: Record<string, string> = {
 };
 
 /**
- * Striped beach parasol: a dome of wedge stripes converging on the finial,
- * a scalloped fringe under the rim, a slim pole in a little sand mound.
- * Drawn upright, then sheared so it leans a little to the left.
+ * Striped beach parasol: a dome of five flat-toned wedge panels (stripe /
+ * white alternating, foreshortened toward the edges), a darker rim, a
+ * scalloped fringe, a slim two-tone pole in a little sand mound. Lit from the
+ * top-left (lit tones on the left panels, shade on the right). f1 = fringe flutter.
  */
 function parasol(scheme: "red" | "blue", flutter: boolean): Cv {
   const c = new Cv(24, 24);
-  const CX = 11.5;
-  const AY = 2; // apex
-  const RIM = 9; // rim row
-  const RX = 10.6;
   const col = scheme === "red" ? { lit: "+", base: "r", dark: "R" } : { lit: "=", base: "u", dark: "U" };
   const white = { lit: "w", base: "W", dark: "g" };
-  const WEDGE = 3.05;
-  const stripe = (rimX: number) => (Math.floor((rimX + WEDGE / 2) / WEDGE) % 2 === 0 ? col : white);
-  // pole
+  const CX = 12;
+  const HW = [3.2, 6.4, 8.4, 9.6, 10.3, 10.6, 10.6]; // half width per canopy row
+  const TOP = 2;
+  const RIM = TOP + HW.length - 1;
+  // pole (behind the canopy)
   for (let y = RIM; y <= 21; y++) c.set(11, y, "W").set(12, y, "g");
-  // dome
-  for (let y = AY; y <= RIM; y++)
+  HW.forEach((hw, i) => {
+    const y = TOP + i;
     for (let x = 0; x < 24; x++) {
-      const dx = x + 0.5 - (CX + 0.5);
-      const dy = (RIM + 0.6 - (y + 0.5)) / (RIM + 0.6 - AY);
-      if ((dx / RX) ** 2 + dy * dy > 1) continue;
-      // project the pixel onto the rim along a line from the apex -> wedge stripes
-      const k = (RIM - AY) / Math.max(0.6, y + 0.5 - AY);
-      const rimX = dx * Math.min(k, 6);
-      const s = stripe(rimX);
-      const lit = -dx / RX * 0.8 + dy * 0.5;
-      const cap = y <= AY + 1 ? white : s; // white crown so the wedges never converge into noise
-      c.set(x, y, y === RIM ? cap.dark : lit > 0.45 ? cap.lit : lit < -0.25 ? cap.dark : cap.base);
+      const dx = (x + 0.5 - CX) / hw;
+      if (Math.abs(dx) > 1) continue;
+      const u = (Math.asin(dx) * 2) / Math.PI;
+      const panel = Math.min(4, Math.floor((u + 1) * 2.5));
+      const p = panel % 2 === 0 ? col : white;
+      let k = p.base;
+      if (y === RIM) k = p.dark;
+      else if (u < -0.3 && i < HW.length - 2) k = p.lit;
+      else if (u > 0.62) k = p.dark;
+      c.set(x, y, k);
     }
-  // scalloped fringe: one little drop per stripe
-  for (let i = -3; i <= 3; i++) {
-    const fx = Math.round(CX + i * WEDGE);
-    const s = stripe(i * WEDGE);
-    const d = flutter && (i === -2 || i === 1) ? 1 : 0;
-    c.set(fx, RIM + 1 + d, s.dark);
-    if (Math.abs(i) < 3) c.set(fx + 1, RIM + 1 + d, s.dark);
-    if (flutter && d) c.set(fx, RIM + 1, s.dark);
+  });
+  // scalloped fringe under the rim: 2px drops every 3px, in each panel's dark tone
+  for (let x = 2; x <= 21; x++) {
+    const ph = (x + (flutter ? 1 : 0)) % 3;
+    if (ph === 2) continue;
+    const dx = (x + 0.5 - CX) / 10.6;
+    const u = (Math.asin(Math.max(-1, Math.min(1, dx))) * 2) / Math.PI;
+    const panel = Math.min(4, Math.floor((u + 1) * 2.5));
+    const p = panel % 2 === 0 ? col : white;
+    c.set(x, RIM + 1, p.dark);
+    if (flutter && (x === 5 || x === 15 || x === 16)) c.set(x, RIM + 2, p.dark);
   }
   // finial
-  c.set(11, AY - 1, "y").set(12, AY - 1, "Y");
-  // lean: shear rows left the higher they are
-  const sh = new Cv(24, 24);
-  for (let y = 0; y < 24; y++) {
-    const off = -Math.round((21 - y) * 0.11);
-    for (let x = 0; x < 24; x++) {
-      const k = c.get(x, y);
-      if (k !== ".") sh.set(x + off, y, k);
-    }
-  }
+  c.set(11, TOP - 1, "y").set(12, TOP - 1, "Y");
+  const sh = c;
   // sand mound at the base
   sh.put(
     `
@@ -414,6 +407,15 @@ hFBBFFh`,
 function decoParasol(): Cv[] {
   return [ground(parasol("red", false)), ground(parasol("blue", true))];
 }
+
+/** Packed wet sand (same ramp as the Sandcastle Golem) so the castle separates from the dry ground. */
+const CASTLE_DECO_PAL: Record<string, string> = {
+  B: "#f7c983", // lit
+  F: "#e2a160", // base
+  h: "#c07a47", // shade
+  H: "#8c5238", // deep / outline
+  d: "#5e3428", // door
+};
 
 /** Two crenellated towers, a keep with an arched door, a pink pennant. Lit from the left. */
 function decoMiniSandcastle(): Cv {
@@ -605,22 +607,20 @@ function beachBall(squash: boolean): Cv {
 }
 
 function propCooler(): Cv {
-  const c = Cv.of(`
-..............
-....111111....
-...1g....G1...
+  // white lid with a gold latch, blue tub with a little snowflake, grey carry handle
+  return Cv.of(`
+...11111111...
+..1WwwwwwwW1..
+..1g1....1g1..
 .111111111111.
 1wwwwwwwwwwwW1
-1WwwwwwwwwwWg1
+1WWWWWyYWWWWg1
 1gggggggggggG1
 1vuuuuuuuuuUU1
-1vuupupuuuuUU1
-1vuupppuuuuUU1
-1uuuupuuuuUUn1
+1vuuuwuwuuuUU1
+1vuuuuwuuuuUU1
+1uuuuwuwuuuUn1
 .111111111111.`);
-  // latch
-  c.set(6, 6, "y").set(7, 6, "Y");
-  return c;
 }
 
 void DECO_PAL;
@@ -632,7 +632,7 @@ export const sprites: SpriteDef[] = [
   spr("deco_sand_bucket", 8, 8, decoSandBucket(), "feet", { fps: 1 }),
   spr("deco_beach_rock", 10, 8, decoBeachRock(), "feet", { fps: 1, pal: DECO_PAL }),
   spr("deco_parasol", 24, 24, decoParasol(), "feet", { fps: 1, pal: PARASOL_PAL }),
-  spr("deco_mini_sandcastle", 12, 10, [decoMiniSandcastle()], "feet", { fps: 1 }),
+  spr("deco_mini_sandcastle", 12, 10, [decoMiniSandcastle()], "feet", { fps: 1, pal: CASTLE_DECO_PAL }),
   spr("deco_palm", 32, 40, decoPalm(), "feet", { fps: 2, pal: PALM_PAL }),
   spr("prop_beachball", 12, 12, [beachBall(false), beachBall(true)], "feet", { fps: 4, pal: BALL_PAL }),
   spr("prop_cooler", 14, 12, [propCooler()], "feet", { fps: 1 }),

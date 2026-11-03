@@ -18,11 +18,12 @@ const K_BUMP: Keyframe[] = [
   { transform: "scale(1.16) rotate(-3deg)", offset: 0.35, easing: "ease-out" },
   { transform: "none" },
 ];
+/** The bar lives at the top edge of the screen: gains drop out BELOW the pill (a pop above would be cut off). */
 const K_GAIN: Keyframe[] = [
-  { transform: "translate(-50%, 0.4em) scale(0.6)", opacity: 0, easing: "cubic-bezier(0.2, 1.6, 0.4, 1)" },
-  { transform: "translate(-50%, -0.2em) scale(1.15)", opacity: 1, offset: 0.25 },
-  { transform: "translate(-50%, -0.6em) scale(1)", opacity: 1, offset: 0.7 },
-  { transform: "translate(-50%, -1.6em) scale(0.9)", opacity: 0 },
+  { transform: "translate(-50%, -0.6em) scale(0.6)", opacity: 0, easing: "cubic-bezier(0.2, 1.6, 0.4, 1)" },
+  { transform: "translate(-50%, 0.2em) scale(1.15)", opacity: 1, offset: 0.25 },
+  { transform: "translate(-50%, 0.5em) scale(1)", opacity: 1, offset: 0.7 },
+  { transform: "translate(-50%, 1.4em) scale(0.9)", opacity: 0 },
 ];
 
 class Pill implements Tickable {

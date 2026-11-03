@@ -19,8 +19,8 @@ import { TUNING } from "../../meta/tuning";
 import { isUnlocked, unlockStatus } from "../../meta/unlocks";
 import { RARITIES } from "../../game/defs";
 import { esc, fmtInt, h, img } from "../dom";
-import { heatIcon, portrait, rarityBadge, twistIcon } from "../kit/art";
-import { badge, bindActs, btn, pbar, pop, sectionTitle, shake, tag } from "../kit/controls";
+import { heatIcon, portrait, RARITY_CLS, rarityBadge, relicIcon, twistIcon } from "../kit/art";
+import { badge, bindActs, btn, card, pbar, pop, sectionTitle, shake, tag, type CardOpts } from "../kit/controls";
 import { openSheet, type SheetHandle } from "../kit/overlay";
 import { save } from "../save";
 import { pageLayer, type Hub, type HubPage } from "./hub";
@@ -96,7 +96,8 @@ export function loadoutPage(hub: Hub): HubPage {
     const owned = Object.keys(p.relics).filter((id) => RELICS.has(id)).length;
 
     // ---- twists
-    const twists = [...TWISTS.values()];
+    // unlocked twists first (the "???" teasers for later stages after them)
+    const twists = [...TWISTS.values()].sort((a, b) => Number(isUnlocked(p, "twist", b.id)) - Number(isUnlocked(p, "twist", a.id)));
     const heat = plan.heat;
     const mh = maxHeat();
     const coinMul = 1 + heat * TUNING.payout.heatCoinPer;
@@ -117,12 +118,19 @@ export function loadoutPage(hub: Hub): HubPage {
     const swLevel = plan.board.startWeaponLevel;
     const startWeapons = swLevel > 0 ? ctx.baseWeapons.filter((w) => isUnlocked(p, "weapon", w.id)) : [];
     const ep = p.lifetime.runs + 1;
+    const startWeaponHtml = startWeapons.length
+            ? `${sectionTitle("Prepared Protagonist", `<span class="sec-r">starts at LV${swLevel}</span>`)}
+               <div class="sw-chips kscroll-x">
+                 <button class="chip${!L.startWeapon ? " on" : ""}" data-nav data-act="sw" data-id="">${img(wd?.icon ?? "", "px")} SIGNATURE</button>
+                 ${startWeapons.map((w) => `<button class="chip${L.startWeapon === w.id ? " on" : ""}" data-nav data-act="sw" data-id="${w.id}">${img(w.icon, "px")} ${esc(w.name)}</button>`).join("")}
+               </div>`
+            : "";
 
     el.innerHTML = `
-      <div class="lo-scroll kscroll">
+      <div class="lo-scroll kscroll"><div class="lo-cols"><div class="lo-col a">
         <button class="lo-stage" data-nav data-act="stage" aria-label="Change episode">
           <span class="lo-thumb">${stageThumb(stage)}</span>
-          <span class="lo-st"><small>EPISODE ${fmtInt(ep)} · ${esc(stage?.name ?? "")}</small><b>${esc(stage?.subtitle ?? "")}</b></span>
+          <span class="lo-st"><small>${esc((stage?.name ?? "").toUpperCase())}${stage ? ` · RATINGS ×${stage.rewardMul.toFixed(1)}` : ""}</small><b>${esc(stage?.subtitle ?? "")}</b></span>
           <span class="lo-chg">CHANGE</span>
         </button>
 
@@ -135,12 +143,19 @@ export function loadoutPage(hub: Hub): HubPage {
           <div class="lh-foot"><span>LV ${hv.level.level} · C${hv.constellation}${ctx.talents.has(hd.id) ? ` · ${hv.points.spent}/${hv.points.total} talent pts` : ""}</span>
             <button class="chip" data-nav data-act="talents" data-id="${hd.id}">TALENTS ▸${hv.points.free > 0 && ctx.talents.has(hd.id) ? badge(hv.points.free) : ""}</button></div>
         </div>
+        ${startWeaponHtml}
+        </div><div class="lo-col b">
 
         ${sectionTitle("Merch (Relics)", `<span class="sec-r">${L.relics.length} / ${plan.relicSlots} equipped</span>`)}
         <div class="rslots">${slots.join("")}</div>
         ${
           equipped.length
-            ? `<div class="relic-fx">${equipped.map((d) => `<div class="rfx"><b>${esc(d.name)}</b> ${starPips(p.relics[d.id] ?? 0)}<small>${esc(d.desc(p.relics[d.id] ?? 0))}</small></div>`).join("")}</div>`
+            ? `<div class="relic-fx">${equipped
+                .map((d) => {
+                  const st = p.relics[d.id] ?? 0;
+                  return card({ art: relicIcon(d.id, d.rarity, "rico"), kicker: `${d.rarity} MERCH`, title: `${esc(d.name)} ${starPips(st)}`, body: esc(d.desc(st)), rarity: RARITY_CLS[d.rarity] as CardOpts["rarity"], cls: "rfx" });
+                })
+                .join("")}</div>`
             : `<div class="lo-note">${owned ? "Tap a slot to equip merch from your shelf." : "Your merch shelf is empty. The Merch Machine sells hope (and relics)."}</div>`
         }
 
@@ -166,15 +181,7 @@ export function loadoutPage(hub: Hub): HubPage {
             : ""
         }
 
-        ${
-          startWeapons.length
-            ? `${sectionTitle("Prepared Protagonist", `<span class="sec-r">starts at LV${swLevel}</span>`)}
-               <div class="sw-chips kscroll-x">
-                 <button class="chip${!L.startWeapon ? " on" : ""}" data-nav data-act="sw" data-id="">${img(wd?.icon ?? "", "px")} SIGNATURE</button>
-                 ${startWeapons.map((w) => `<button class="chip${L.startWeapon === w.id ? " on" : ""}" data-nav data-act="sw" data-id="${w.id}">${img(w.icon, "px")} ${esc(w.name)}</button>`).join("")}
-               </div>`
-            : ""
-        }
+        </div></div>
         <div class="lo-pad"></div>
       </div>
       <div class="lo-go">
@@ -282,7 +289,7 @@ export function loadoutPage(hub: Hub): HubPage {
         .filter((d): d is RelicDef => !!d)
         .sort((a, b) => RARITIES.indexOf(b.rarity) - RARITIES.indexOf(a.rarity) || (a.name < b.name ? -1 : 1));
       if (!list.length)
-        return `<div class="empty-shelf"><div class="es-ic">${portrait("", 0, "pimg", true)}</div><p>Your merch shelf is empty.</p><p class="dim">Relics come from the Merch Machine (and the Copium Exchange).</p>${btn("GO TO MERCH MACHINE", { cls: "violet small", act: "shop" })}</div>`;
+        return `<div class="empty-shelf"><div class="es-ic">${portrait("", 0, "pimg", true)}</div><p>Your merch shelf is empty.</p><p class="muted">Relics come from the Merch Machine (and the Copium Exchange).</p>${btn("GO TO MERCH MACHINE", { cls: "violet small", act: "shop" })}</div>`;
       return `<div class="pick-list">${list
         .map((d) => {
           const st = p.relics[d.id] ?? 0;

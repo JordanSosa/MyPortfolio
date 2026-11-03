@@ -36,7 +36,7 @@ export function stageThumb(info: StageInfo | undefined, locked = false): string 
 
 /** Record chips of a stage. */
 export function stageRecords(rec: StageRecord | undefined, info: StageInfo | undefined): string {
-  if (!rec || rec.runs <= 0) return `<span class="rchip dim">NOT AIRED YET</span>`;
+  if (!rec || rec.runs <= 0) return `<span class="rchip muted">NOT AIRED YET</span>`;
   const chips: string[] = [];
   chips.push(`<span class="rchip"><small>BEST</small>${fmtTime(rec.bestTime)}</span>`);
   if (rec.clears > 0) chips.push(`<span class="rchip gold"><small>CLEARS</small>${fmtInt(rec.clears)}</span>`);

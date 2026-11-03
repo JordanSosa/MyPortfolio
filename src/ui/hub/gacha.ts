@@ -98,11 +98,11 @@ export function gachaPage(hub: Hub, o: PageOpts): HubPage {
     const featured = f
       ? `<div class="bc-feat rf r-${RARITY_CLS[f.rarity]}">${itemArt(f, "bf-art")}<span class="bf-tx"><small>FEATURED · 50% RATE-UP</small><b>${esc(f.name)}</b>${rarityBadge(f.rarity)}</span></div>`
       : v.def.feature
-        ? `<div class="bc-feat soon"><span class="bf-tx"><small>FEATURED</small><b>Between seasons</b><span class="dim">The featured item hasn't been produced yet.</span></span></div>`
+        ? `<div class="bc-feat soon"><span class="bf-tx"><small>FEATURED</small><b>Between seasons</b><em class="bf-note">The featured item hasn&apos;t been produced yet.</em></span></div>`
         : "";
     const can1 = v.canPull1;
     const can10 = v.canPull10;
-    return `
+    return `<div class="mm-cols"><div class="mm-col a">
       ${gift}
       <section class="banner-card b-${v.def.id}">
         <div class="bc-art">${machine}${v.def.id === "mythic" ? `<span class="bc-cone">It's coming.</span>` : ""}</div>
@@ -113,12 +113,13 @@ export function gachaPage(hub: Hub, o: PageOpts): HubPage {
           ${featured}
         </div>
       </section>
+      </div><div class="mm-col b">
       <section class="pity-box">
-        <div class="pity-row${soft ? " soft" : ""}"><span class="pl">PITY</span>${pbar(v.pity / G.hardPity, `${v.pity} / ${G.hardPity}`, soft ? "pink" : "violet")}<i class="soft-mark" style="left:${((G.softPityStart / G.hardPity) * 100).toFixed(1)}%"></i></div>
+        <div class="pity-row${soft ? " soft" : ""}"><span class="pity-l">PITY</span>${pbar(v.pity / G.hardPity, `${v.pity} / ${G.hardPity}`, soft ? "pink" : "violet")}<i class="soft-mark" style="left:${((G.softPityStart / G.hardPity) * 100).toFixed(1)}%"></i></div>
         <small class="pity-note${soft ? " soft" : ""}">${esc(pityLine)}</small>
-        <div class="pity-row"><span class="pl">UR</span>${pbar(v.pityUR / G.urPity, `${v.pityUR} / ${G.urPity}`, "cyan")}</div>
+        <div class="pity-row"><span class="pity-l">UR</span>${pbar(v.pityUR / G.urPity, `${v.pityUR} / ${G.urPity}`, "cyan")}</div>
         <small class="pity-note">UR pity (patience is a rarity too)</small>
-        <div class="pity-row${v.sparkReady ? " ready" : ""}"><span class="pl">SPARK</span>${pbar(v.spark / G.spark, `${fmtInt(Math.min(v.spark, G.spark))} / ${fmtInt(G.spark)}`, v.sparkReady ? "rainbow" : "gold")}</div>
+        <div class="pity-row${v.sparkReady ? " ready" : ""}"><span class="pity-l">SPARK</span>${pbar(v.spark / G.spark, `${fmtInt(Math.min(v.spark, G.spark))} / ${fmtInt(G.spark)}`, v.sparkReady ? "rainbow" : "gold")}</div>
         <small class="pity-note">${v.sparkReady ? "SPARK READY! Choose your destiny." : "At 1,000 pulls (any banner) you pick any MYTHIC."}</small>
         ${v.sparkReady ? btn("CLAIM SPARK", { cls: "small", act: "spark" }) : ""}
         ${v.guaranteed && f ? `<div class="ribbon">GUARANTEED featured on the next ${esc(f.rarity)}!</div>` : ""}
@@ -128,7 +129,8 @@ export function gachaPage(hub: Hub, o: PageOpts): HubPage {
         ${btn(`PULL ×10`, { cls: `gold pull${can10 ? "" : " nope"}`, act: "pull10", sub: `${fmtInt(G.tenPullCost)} ♦ · SR+ GUARANTEED`, def: can10 })}
       </section>
       ${!can1 && v.available ? `<div class="mm-poor">Need ${fmtInt(G.pullCost)} ♦ (you have ${fmtInt(p.currencies.gems)} ♦). Play an episode? It pays! ${btn("GO PLAY", { cls: "small ghost", act: "play" })}</div>` : ""}
-      <button class="mm-fine" data-nav data-act="fine">ⓘ Rates &amp; fine print</button>`;
+      <button class="mm-fine" data-nav data-act="fine">ⓘ Rates &amp; fine print</button>
+      </div></div>`;
   };
 
   const doPull = async (n: 1 | 10, b: HTMLElement) => {

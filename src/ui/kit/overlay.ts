@@ -205,7 +205,7 @@ export function confirmDialog(host: KitHost, o: ConfirmOpts): Promise<boolean> {
         <div class="kd-b">${o.body}</div>
         <div class="kd-btns">
           <button class="btn ghost small" data-nav data-nav-default data-act="no">${esc(o.cancel ?? "Cancel")}</button>
-          <button class="btn small ${o.danger ? "danger" : (o.okCls ?? "")}" data-nav data-act="yes">${esc(o.ok ?? "OK")}</button>
+          <button class="btn small ${o.danger ? "red" : (o.okCls ?? "")}" data-nav data-act="yes">${esc(o.ok ?? "OK")}</button>
         </div>
       </section>`;
     host.ui.appendChild(wrap);
@@ -261,10 +261,13 @@ interface QueuedToast {
 }
 
 const MAX_VISIBLE = 2;
+/** In-run toasts: one at a time (the playfield stays readable), the rest wait their turn. */
+const MAX_VISIBLE_RUN = 1;
 let box: HTMLElement | null = null;
 let boxRun: HTMLElement | null = null;
 const queue: QueuedToast[] = [];
 let visible = 0;
+let visibleRun = 0;
 let lastMsg = "";
 let lastAt = 0;
 
@@ -296,8 +299,13 @@ export function toast(host: KitHost, msg: string, o: ToastOpts = {}): void {
 }
 
 function pump(host: KitHost): void {
-  while (visible < MAX_VISIBLE && queue.length) {
-    const t = queue.shift() as QueuedToast;
+  for (let i = 0; i < queue.length && visible < MAX_VISIBLE; ) {
+    const t = queue[i];
+    if (t.o.inRun && visibleRun >= MAX_VISIBLE_RUN) {
+      i++;
+      continue;
+    }
+    queue.splice(i, 1);
     show(host, t);
   }
 }
@@ -309,12 +317,17 @@ function show(host: KitHost, t: QueuedToast): void {
   el.innerHTML = `${o.icon ? `<span class="kt-ic">${o.icon}</span>` : ""}<span class="kt-tx">${o.kicker ? `<small class="kt-k">${esc(o.kicker)}</small>` : ""}<b>${esc(t.msg)}</b>${o.sub ? `<small>${esc(o.sub)}</small>` : ""}</span>${o.reward ? `<span class="kt-rw">${o.reward}</span>` : ""}<i class="kt-shine" aria-hidden="true"></i>`;
   container(host, !!o.inRun).appendChild(el);
   visible++;
+  if (o.inRun) visibleRun++;
   const ms = o.ms ?? (kind === "ach" ? 3400 : 2300);
   setTimeout(() => {
     el.classList.add("out");
     setTimeout(() => {
-      el.remove();
-      visible = Math.max(0, visible - 1);
+      // (clearRunToasts may have dropped it already)
+      if (el.isConnected) {
+        el.remove();
+        visible = Math.max(0, visible - 1);
+        if (o.inRun) visibleRun = Math.max(0, visibleRun - 1);
+      }
       pump(host);
     }, 260);
   }, ms);
@@ -325,6 +338,7 @@ export function clearRunToasts(): void {
   for (let i = queue.length - 1; i >= 0; i--) if (queue[i].o.inRun) queue.splice(i, 1);
   if (boxRun) {
     visible = Math.max(0, visible - boxRun.childElementCount);
+    visibleRun = 0;
     boxRun.replaceChildren();
   }
 }

@@ -40,7 +40,11 @@ export function homePage(hub: Hub): HubPage {
   let anchor: { x: number; y: number } | null = null;
   let anchorDirty = true;
 
+  let rendered = false;
   const render = () => {
+    // re-renders (back from a page, profile changes) must not replay the entry pops
+    if (rendered) el.classList.add("settled");
+    rendered = true;
     const p = save.profile;
     const heroId = HEROES.some((d) => d.id === p.loadout.hero) ? p.loadout.hero : HEROES[0].id;
     const hd = heroDef(heroId);
@@ -50,6 +54,7 @@ export function homePage(hub: Hub): HubPage {
     const ep = p.lifetime.runs + 1;
     const stage = gameContent().stageById.get(p.loadout.stage);
     const cons = Array.from({ length: 6 }, (_, i) => `<i class="${i < hp.constellation ? "on" : ""}"></i>`).join("");
+    const recapText = recap();
     const minis = HEROES.slice(0, 3)
       .map((d, i) => `<span class="mini" style="--i:${i};--hc:${app.heroColor(d.id)}">${portrait(d.portrait, 0, "pimg", !p.unlocks.heroes.includes(d.id))}</span>`)
       .join("");
@@ -69,7 +74,7 @@ export function homePage(hub: Hub): HubPage {
           <span class="oc-tt">${esc(hd.title.toUpperCase())}</span>
           <span class="oc-lv"><b>LV ${li.level}</b>${pbar(li.maxed ? 1 : li.into / li.need, "", "gold")}</span>
           <span class="oc-cons" aria-label="Constellation C${hp.constellation}"><small>C${hp.constellation}</small>${cons}</span>
-          ${bits.lines.map((l) => `<span class="oc-bio">${esc(l)}</span>`).join("")}
+          ${bits.lines.map((l, i) => `<span class="oc-bio b${i + 1}">${esc(l)}</span>`).join("")}
         </span>
         <span class="oc-sticker">DO NOT STEAL!!</span>
         <span class="oc-more">CAST ▸</span>
@@ -86,7 +91,7 @@ export function homePage(hub: Hub): HubPage {
           ${tile("wiki", "KIRA KIRA WIKI", MENU_SUB.wiki, art("icon_codex_unknown", `<i class="emb emb-wiki"></i>`, "px emb-img"), "t-wiki")}
         </div>
       </div>
-      <div class="home-foot"><span class="foot-k">${p.lifetime.runs > 0 ? "PREVIOUSLY ON…" : "TIP"}</span><span class="foot-t">${esc(recap() || tip())}</span></div>`;
+      <div class="home-foot"><span class="foot-k">${recapText ? "PREVIOUSLY ON…" : "TIP"}</span><span class="foot-t">${esc(recapText || tip())}</span></div>`;
     bindActs(el, {
       play: () => {
         app.sfx("uiConfirm");

@@ -8,7 +8,7 @@
  * light fill or bright edge colour that reads on both.
  */
 import type { SpriteDef } from "../format";
-import { Cv, spr } from "./s2-stages-b-util";
+import { Cv, spr, part, stack } from "./s2-stages-b-util";
 
 // ============================================================================ FILLER EPISODE GOON
 // Deliberately low detail: two flat tones, two dot eyes, the upper body is the
@@ -45,7 +45,7 @@ function goon(f: number): Cv {
   ][f];
   c.rect(L[0], 13 - L[1], 2, 2, "[");
   c.rect(L[2], 13 - L[3], 2, 2, ")");
-  c.set(L[0], 14 - L[1], "G").set(L[0] + 1, 14 - L[1], "G").set(L[2], 14 - L[3], "G").set(L[2] + 1, 14 - L[3], "G"); // boots
+  c.set(L[0], 14 - L[1], "2").set(L[0] + 1, 14 - L[1], "2").set(L[2], 14 - L[3], "2").set(L[2] + 1, 14 - L[3], "2"); // boots
   c.put(goonUpper(), 0, 0);
   c.outline("1");
   // two dot eyes looking right, nothing else
@@ -148,170 +148,171 @@ ww.
 }
 
 // ============================================================================ ANIMATION ERROR
-// A cute blob mascot drawn badly on purpose: eyes of different sizes, an arm
-// growing out of its head, a magenta/black missing-texture patch, RGB-split
-// edges (red copy left, cyan copy right). Each frame jitters random rows 1px.
+// A cute chibi mascot drawn badly on purpose: one huge sparkly eye and one
+// dot eye placed too high, the mouth slid onto the cheek, an arm sprouting
+// from the wrong side of the head, legs of different lengths, a
+// magenta/black missing-texture patch where half the face should be, and
+// RGB-split fringes (red copy left, cyan copy right). Each frame a different
+// band of rows slips 1px and the split offsets change: deliberate jitter.
 const ERR_PAL: Record<string, string> = {
-  "(": "#ffd0e4", // body light
-  ")": "#ffa8cd", // body base
-  "[": "#e07fb0", // body shade
   "{": "#ff3b6b", // red split
   "}": "#3bf0ff", // cyan split
   "<": "#ff4fd8", // missing-texture magenta
 };
-
-function errorBody(): Cv {
-  const c = new Cv(16, 16);
-  // lopsided blob body
-  c.ellipse(7.6, 9.6, 4.8, 4.4, (x, y) => ((x - 7.6) + (y - 9.6) < -3 ? "(" : (x - 7.6) * 0.6 + (y - 9.6) > 2.2 ? "[" : ")"));
-  c.ellipse(9.5, 8, 2.6, 2.4, ")");
-  // an arm sprouting from the top of the head (wrong place)
-  c.rect(6, 3, 1, 2, ")");
-  c.set(5, 2, ")").set(7, 2, ")");
-  // one stubby leg on the side instead of below
-  c.rect(12, 11, 2, 1, "[");
-  c.set(4, 14, "[").set(5, 14, "[");
-  // missing-texture checker patch (2px squares)
-  for (let y = 10; y < 14; y++) for (let x = 5; x < 9; x++) c.set(x, y, ((x >> 1) + (y >> 1)) % 2 ? "<" : "0");
-  return c;
-}
+const ERR_BASE = `
+................
+.......pq.......
+.....qqpppp..s..
+....qpppppPP.s..
+...qpppppppPPs..
+...pptpptpPPPs..
+...ptsssssskP...
+...psssssssk....
+...psssssssk....
+....ssssssk.....
+.....WWWWg......
+....WWWWWgg.....
+.....WWWgg......
+.....s...s......
+.....s..........
+................`;
 
 function animationError(f: number): Cv {
-  const body = errorBody();
-  // jitter: a few rows slip sideways by 1px (deterministic per frame)
-  const slips: Record<number, number>[] = [{ 4: 1, 11: -1 }, { 7: -1, 12: 1, 13: 1 }, { 3: -1, 9: 1 }, { 5: 1, 6: 1, 14: -1 }];
-  const j = new Cv(16, 16);
-  body.each((x, y, k) => {
-    if (k !== ".") j.set(x + (slips[f][y] ?? 0), y, k);
+  const base = Cv.of(ERR_BASE);
+  // jitter: a band of rows slips sideways by 1px (different band each frame)
+  const slips: Record<number, number>[] = [{}, { 2: 1, 3: 1, 4: 1 }, { 11: -1, 12: -1, 13: -1, 14: -1 }, { 6: 1, 7: 1 }];
+  const body = new Cv(16, 16);
+  base.each((x, y, k) => {
+    if (k !== ".") body.set(x + (slips[f][y] ?? 0), y, k);
     return null;
   });
+  body.outline("1");
+  // RGB split fringes under the outlined silhouette
+  const red = body.clone().map(Object.fromEntries([..."1pqPtskWgw0<"].map((k) => [k, "{"])));
+  const cyan = body.clone().map(Object.fromEntries([..."1pqPtskWgw0<"].map((k) => [k, "}"])));
+  const rdx = [-1, -1, -2, -1][f];
+  const cdx = [1, 2, 1, 1][f];
+  const rdy = [0, 0, 0, 1][f];
   const c = new Cv(16, 16);
-  // RGB split fringes (offset swaps between frames)
-  const rdx = f % 2 === 0 ? -1 : -1;
-  const cdx = f === 1 ? 1 : f === 3 ? 2 : 1;
-  const rdy = f === 2 ? 1 : 0;
-  c.put(j.clone().map({ "(": "{", ")": "{", "[": "{", "<": "{", "0": "{" }), rdx, rdy);
-  c.put(j.clone().map({ "(": "}", ")": "}", "[": "}", "<": "}", "0": "}" }), cdx, 0);
-  c.put(j, 0, 0);
-  c.outline("1");
-  // face, off-model: one huge eye, one tiny eye, mouth on the cheek
-  const ex = (slips[f][8] ?? 0) + (slips[f][7] ?? 0);
+  c.put(red, rdx, rdy).put(cyan, cdx, 0).put(body, 0, 0);
+  const eo = slips[f][7] ?? 0;
+  // the huge sparkly eye (left) and the tiny dot eye (too high, right)
   c.put(
     `
-0000
-0ww0
-0w00
-0000`,
-    8 + ex,
+000
+0wU
+0uw`,
+    4 + eo,
     6,
   );
-  c.set(5, 8, "0");
-  c.set(11, 11, "1").set(12, 11, "1").set(12, 10, "1");
-  c.set(4, 9, "b");
+  c.set(9 + (slips[f][5] ?? 0), 5, "0");
+  // mouth slid onto the cheek, sideways
+  c.set(10 + eo, 7, "1").set(10 + eo, 8, "R");
+  c.set(4 + eo, 9, "b");
+  // missing-texture checker patch (2px squares) over the right of the face
+  for (let y = 7; y < 11; y++)
+    for (let x = 8; x < 12; x++) {
+      const sx = x + (slips[f][y] ?? 0);
+      if ("stkpPWg".includes(c.get(sx, y))) c.set(sx, y, ((x >> 1) + (y >> 1)) % 2 ? "<" : "0");
+    }
   return c;
 }
 
 // ============================================================================ MINI TRUCK-KUN
-// A tiny, angrier Truck-kun: white cargo box + cab-over cab, RED racing stripe,
-// furious eyes painted in the windshield. f0-1 drive (wheel bolts turn),
-// f2 headlights flash (the lane telegraph), f3 boost (exhaust flame).
+// A tiny, angrier Truck-kun: white cargo box + cab-over cab (outlined as
+// separate layers like the real one), a RED racing stripe, furious eyes
+// painted in the windshield. f0-1 drive (wheel bolts turn, body bobs),
+// f2 headlights flash (the lane telegraph: eyes glare red, headlight burst),
+// f3 boost (exhaust flame + speed puffs).
 const TRUCK_PAL: Record<string, string> = {
-  "(": "#fff7b0", // headlight beam core
-  ")": "#ffe14d80", // beam glow (translucent)
+  "(": "#fff7b0", // flash core
+  ")": "#ffe14dc0", // flash glow (translucent)
+  "~": "#c9d6ff", // windshield glare
 };
-
-function wheel(c: Cv, x: number, y: number, phase: number): void {
-  c.put(
-    `
+const MT_BOX = `
+wwwwwwwwwww
+wWWWWWWWWWg
+wWWqWpWqWWg
+wWWWqpPWWWg
+wWWWWPWWWWg
+wWWWWWWWWWg
+wWWWWWWWWWg
+rrrrrrrrrrr
+RRRRRRRRRRR
+ggggggggggg`;
+const MT_CAB = `
+wwwww..
+wwwwwW.
+waaaav~
+waaaavW
+waaaavW
+waaaavW
+rrrrrry
+RRRRRRY
+gggggGG`;
+const MT_WHEEL = `
 .000.
 0GgG0
 0gWg0
 0GgG0
-.000.`,
-    x,
-    y,
-  );
+.000.`;
+
+function miniTruck(f: number): Cv {
+  const bob = f === 1 ? 1 : 0;
+  const box = part(24, 16, MT_BOX, 3, 2 + bob);
+  const cab = part(24, 16, MT_CAB, 14, 3 + bob);
+  const c = stack(24, 16, box, cab);
+  // bumper
+  c.set(21, 11 + bob, "G").set(22, 11 + bob, "1").set(21, 12 + bob, "1").set(21, 10 + bob, "1");
+  // exhaust pipe stub at the back
+  c.set(2, 11 + bob, "G").set(1, 11 + bob, "1");
+  // furious eyes in the windshield: brows slashing down to the middle ('\ /'), 2x2 eyes with a glint
+  const ey = 5 + bob;
+  const eye = f === 2 ? "r" : "n";
+  const glint = f === 2 ? "z" : "w";
+  c.set(15, ey, "1").set(16, ey + 1, "1").set(19, ey, "1").set(18, ey + 1, "1");
+  for (const ex of [15, 18]) c.set(ex, ey + 2, eye).set(ex + 1, ey + 2, glint).set(ex, ey + 3, eye).set(ex + 1, ey + 3, eye);
+  // wheels (bolt pixel orbits)
   const bolts: [number, number][] = [
     [1, 1],
     [3, 1],
     [3, 3],
     [1, 3],
   ];
-  const [bx, by] = bolts[phase & 3];
-  c.set(x + bx, y + by, "w");
-}
-
-function miniTruck(f: number): Cv {
-  const c = new Cv(24, 16);
-  const bob = f === 1 ? 1 : 0;
-  const body = new Cv(24, 16);
-  // cargo box
-  body.rect(3, 1 + bob, 11, 10, (x, y) => (y === 1 + bob || x === 3 ? "w" : y >= 9 + bob ? "g" : x === 8 ? "g" : "W"));
-  // cab (cab-over, rounded front top), a little lower than the box
-  body.rect(14, 3 + bob, 7, 8, (x, y) => (x >= 20 && y > 4 + bob ? "W" : y >= 9 + bob ? "g" : "w"));
-  body.set(20, 3 + bob, ".");
-  // windshield (tall enough for proper anime eyes)
-  body.rect(15, 4 + bob, 5, 4, "a");
-  body.set(19, 4 + bob, "v").set(19, 7 + bob, "v");
-  // red racing stripe across box and cab
-  for (let x = 3; x <= 20; x++) {
-    if (body.get(x, 8 + bob) !== ".") body.set(x, 8 + bob, "r");
-    if (body.get(x, 9 + bob) !== ".") body.set(x, 9 + bob, "R");
+  const ph = [0, 1, 2, 3][f];
+  for (const [wx, k] of [
+    [4, 0],
+    [15, 1],
+  ] as [number, number][]) {
+    c.put(MT_WHEEL, wx, 11);
+    const [bx, by] = bolts[(ph + k) & 3];
+    c.set(wx + bx, 11 + by, "w");
+    c.set(wx - 1, 12, "1").set(wx + 5, 12, "1");
   }
-  // bumper + headlight
-  body.rect(21, 9 + bob, 1, 2, "G");
-  body.set(20, 7 + bob, f === 2 ? "w" : "y").set(20, 6 + bob, f === 2 ? "z" : "W");
-  // exhaust pipe at the back
-  body.set(2, 10 + bob, "G");
-  // winged heart on the box
-  body.put(
-    `
-q.p.q
-.ppP.
-..P..`,
-    6,
-    3 + bob,
-  );
-  body.outline("1");
-  c.put(body, 0, 0);
-  // furious eyes painted in the windshield: brows slashing down to the middle, 2px eyes
-  const ey = 5 + bob;
-  c.set(15, ey - 1, "1").set(16, ey, "1"); // left brow
-  c.set(19, ey - 1, "1").set(18, ey, "1"); // right brow
-  const eyeK = f === 2 ? "r" : "0";
-  c.set(15, ey + 1, eyeK).set(16, ey + 1, eyeK).set(16, ey + 2, eyeK);
-  c.set(18, ey + 1, eyeK).set(19, ey + 1, eyeK).set(18, ey + 2, eyeK);
-  c.set(16, ey + 1, "w").set(19, ey + 1, "w");
-  // wheels
-  const ph = [0, 2, 3, 1][f];
-  wheel(c, 4, 11, ph);
-  wheel(c, 15, 11, ph + 1);
-  // headlight flash: a fan of light in front (the lane telegraph frame)
   if (f === 2) {
+    // headlight burst: the lane telegraph
+    c.set(20, 9, "w").set(20, 10, "z");
     c.put(
       `
-..)
-.)(
-)((
-.)(
-..)`,
+.).
+)()
+.).`,
       21,
-      4,
+      8,
     );
-    c.set(21, 6, "w");
+    c.set(23, 9, ")").set(22, 7, ")").set(22, 11, ")");
   }
-  // boost: exhaust flame out of the back
   if (f === 3) {
+    // boost: flame out of the exhaust + speed puffs
     c.put(
       `
 .Oo
-oyy
-zyw
-oyy
+oyz
 .Oo`,
       0,
-      8,
+      10,
     );
+    c.set(0, 4, "g").set(1, 4, "g").set(0, 7, "W");
   }
   return c;
 }

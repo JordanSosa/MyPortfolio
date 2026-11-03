@@ -63,7 +63,7 @@ export function openSettings(app: App, onClose: () => void): UiScreen {
         <textarea class="ss-text" data-ta="import" placeholder="KKO2.…" aria-label="Paste a save string"></textarea>
         <div class="ss-row"><button class="btn small violet" data-nav data-act="import">⇩ IMPORT SAVE</button><span class="ss-msg" data-msg="import"></span></div>
         <div class="ss-info"></div>
-        <div class="ss-row"><button class="btn small danger" data-nav data-act="reset">✕ START OVER</button></div>
+        <div class="ss-row"><button class="btn small red" data-nav data-act="reset">✕ START OVER</button></div>
       </div>
       <div class="btn-row" style="margin-top:.6em"><button class="btn small" data-nav data-nav-default data-act="done">✓ DONE</button></div>
     </div>`;

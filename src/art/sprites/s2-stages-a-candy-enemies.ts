@@ -60,15 +60,10 @@ function gummy(i: number): Pix {
   const hx = Math.round(X(5.8));
   const hy = Math.round(Y(4.3));
   p.set(hx, hy, "w").set(hx + 1, hy - 1, "w");
-  // muzzle (pale bump), nose
-  const mx = Math.round(X(10.5));
-  const my = Math.round(Y(7.0));
-  p.set(mx - 1, my, "w").set(mx, my, "w").set(mx + 1, my, "w");
-  p.set(mx, my - 1, "1");
-  // face: dot eyes + blush (looks right)
+  // face: dot eyes + a tiny nose centred below them + blush (looks right)
   const ey = Math.round(Y(5.4));
-  const ex0 = Math.round(X(7.8));
-  const ex1 = Math.round(X(11.6));
+  const ex0 = Math.round(X(7.6));
+  const ex1 = Math.round(X(11.4));
   if (i === 3) {
     // boing: squeezed happy '> <'
     p.set(ex0, ey, "1").set(ex0 - 1, ey - 1, "1").set(ex0 - 1, ey + 1, "1");
@@ -76,25 +71,28 @@ function gummy(i: number): Pix {
   } else {
     p.set(ex0, ey, "0").set(ex1, ey, "0").set(ex0, ey + 1, "0").set(ex1, ey + 1, "0");
   }
+  p.set(Math.round((ex0 + ex1) / 2), ey + 2, "1");
   const by = ey + (i === 3 ? 2 : 2);
   p.set(ex0 - 1, by, "b").set(ex1 + 1, by, "b");
   return p;
 }
 
 // ============================================================================ CANDY CORN SOLDIER
-// A kernel body (yellow base, orange middle, white tip) under a green gumdrop helmet,
-// stubby legs, toothpick spear in the front hand. f0-3 march: legs alternate, spear bobs.
+// A tip-up candy-corn kernel (white tip, orange middle, yellow base) under a
+// little green gumdrop helmet, stubby legs, a toothpick spear in a white-gloved
+// fist. f0-3 march: legs alternate, body + spear bob.
 /** Kernel rows: [y, x0, x1, band] (band: w white tip, o orange middle, y yellow base). */
 const KERNEL: [number, number, number, string][] = [
-  [4, 5, 8, "w"],
-  [5, 4, 9, "w"],
-  [6, 4, 9, "o"],
-  [7, 3, 10, "o"],
-  [8, 3, 10, "o"],
-  [9, 2, 11, "y"],
-  [10, 2, 11, "y"],
-  [11, 2, 11, "y"],
-  [12, 3, 10, "y"],
+  [3, 6, 8, "w"],
+  [4, 5, 9, "w"],
+  [5, 5, 9, "o"],
+  [6, 4, 10, "o"],
+  [7, 4, 10, "o"],
+  [8, 3, 11, "o"],
+  [9, 3, 11, "y"],
+  [10, 3, 11, "y"],
+  [11, 3, 11, "y"],
+  [12, 4, 10, "y"],
 ];
 
 function candyCorn(i: number): Pix {
@@ -104,50 +102,61 @@ function candyCorn(i: number): Pix {
   const legs = new Pix(16, 16);
   const lLift = [1, 0, 0, 0][i];
   const rLift = [0, 0, 1, 0][i];
-  legs.rect(4, 13 - lLift, 2, 2, "2").rect(8, 13 - rLift, 2, 2, "2");
-  legs.set(4, 13 - lLift, "G").set(8, 13 - rLift, "G");
+  legs.rect(5, 13 - lLift, 2, 2, "2").rect(8, 13 - rLift, 2, 2, "2");
+  legs.set(5, 13 - lLift, "G").set(8, 13 - rLift, "G");
   ol(legs);
   p.put(legs, 0, 0);
-  // kernel body
+  // kernel body: lit left edge, shaded right edge, glossy specks
   const body = new Pix(16, 16);
   for (const [y, x0, x1, band] of KERNEL)
     for (let x = x0; x <= x1; x++) {
-      const lit = x === x0;
+      const lit = x === x0 || (x === x0 + 1 && y > 8);
       const shade = x >= x1 - (x1 - x0 > 6 ? 1 : 0);
       let k: string;
       if (band === "w") k = lit ? "w" : shade ? "g" : "W";
-      else if (band === "o") k = shade ? "O" : "o";
+      else if (band === "o") k = lit ? "y" : shade ? "O" : "o";
       else k = lit ? "z" : shade ? "Y" : "y";
       body.set(x, y + bob, k);
     }
-  // glossy specks
-  body.set(3, 10 + bob, "w").set(5, 4 + bob, "w");
+  body.set(4, 10 + bob, "w");
   ol(body);
   p.put(body, 0, 0);
-  // gumdrop helmet (green, sugared), brim over the white tip
-  const helm = new Pix(16, 16);
-  helm.rect(5, 1 + bob, 4, 1, (x) => (x === 5 ? "m" : x === 8 ? "e" : "l"));
-  helm.rect(4, 2 + bob, 6, 1, (x) => (x === 4 ? "l" : x >= 8 ? "e" : "l"));
-  helm.rect(4, 3 + bob, 6, 1, (x) => (x >= 8 ? "E" : "e"));
-  helm.set(6, 1 + bob, "w").set(8, 2 + bob, "m").set(5, 3 + bob, "l");
-  ol(helm);
-  p.put(helm, 0, 0);
-  // face on the orange band: stern brows, big eyes, shout mouth, blush on the yellow
+  // back fist (white glove) peeking out on the left
+  p.put(
+    `
+.11.
+1wW1
+.11.`,
+    0,
+    8 + bob,
+  );
+  // gumdrop helmet: small sugared green dome sitting on the white tip
+  p.put(
+    `
+..111..
+.1mle1.
+1llleE1
+1eeeEE1
+.11111.`,
+    4,
+    -1 + bob,
+  );
+  p.set(6, 0 + bob, "w");
+  // face on the orange band (looks right): lidded, determined eyes + blush + shout
   const fy = 6 + bob;
-  p.set(6, fy - 1, "1").set(7, fy, "1"); // brow (slants down toward the nose)
-  p.set(10, fy - 1, "1").set(9, fy, "1");
-  p.set(7, fy + 1, "0").set(9, fy + 1, "0").set(7, fy + 2, "0").set(9, fy + 2, "0");
-  p.set(8, fy + 3, "1");
-  p.set(5, fy + 3, "b").set(6, fy + 3, "b").set(10, fy + 3, "b");
+  p.set(6, fy, "1").set(7, fy, "1").set(6, fy + 1, "0").set(7, fy + 1, "w");
+  p.set(9, fy, "1").set(10, fy, "1").set(9, fy + 1, "0").set(10, fy + 1, "w");
+  p.set(5, fy + 2, "b").set(11, fy + 2, "b");
+  p.set(8, fy + 3, "R").set(8, fy + 2, "1");
   // toothpick spear in the front hand (bobs opposite to the body)
-  const sb = [0, 1, 0, 1][i];
+  const sb = [1, 0, 1, 0][i];
   const sx = 13;
   const sp = new Pix(16, 16);
-  for (let y = 2 + sb; y <= 14; y++) sp.set(sx, y, "h");
-  sp.set(sx, 1 + sb, "B").set(sx, 0 + sb, "B");
+  for (let y = 2 + sb; y <= 14; y++) sp.set(sx, y, y < 4 + sb ? "B" : "h");
+  sp.set(sx, 1 + sb, "B");
   ol(sp);
   p.put(sp, 0, 0);
-  // little fist gripping the spear
+  // white-gloved fist gripping the spear
   p.put(
     `
 .11.
@@ -155,9 +164,8 @@ function candyCorn(i: number): Pix {
 1Wg1
 .11.`,
     sx - 1,
-    9 + bob,
+    8 + bob,
   );
-  p.set(sx - 2, 10 + bob, "1");
   return p;
 }
 
@@ -380,28 +388,25 @@ function mage(i: number): Pix {
   // arms + staff
   const staffX = 12;
   if (i === 3) {
-    // arms wide: sleeves out both sides, staff held out to the right
+    // heal: both arms flung up and out in a V, sparkles rising from the hands
     p.put(
       `
-1111......1111
-1jii1....1iiI1
-.111......111.`,
+.11..........11.
+1sI1........1Is1
+1iI1........1iI1
+.1ii1......1ii1.
+..1ii1....1ii1..
+...1111..1111...`,
       0,
-      12 + by,
+      6 + by,
     );
-    p.set(0, 13 + by, "1").set(1, 13 + by, "s").set(13, 13 + by, "1").set(12, 13 + by, "s");
-    // staff upright at the right hand
-    for (let y = 6 + by; y <= 15 + by; y++) p.set(14, y, "W");
-    p.put(
-      `
-.111.
-1qpp1
-1pwP1
-1PPQ1
-.111.`,
-      12,
-      2 + by,
-    );
+    for (const [x, y] of [
+      [1, 2],
+      [14, 1],
+      [3, 0],
+    ] as const)
+      p.set(x, y + by, "z");
+    p.set(0, 3 + by, "+").set(15, 3 + by, "+").set(13, 0 + by, "w");
   } else {
     const raise = i === 2;
     const sy = raise ? -3 : 0;
