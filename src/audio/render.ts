@@ -9,7 +9,19 @@ import { SFX } from "./sfx";
 import { INST } from "./music/inst";
 
 export const SFX_IDS = Object.keys(SFX) as SfxId[];
-export const TRACKS: Exclude<MusicTrack, "none">[] = ["title", "battle", "boss", "final", "victory", "gameover", "shop"];
+export const TRACKS: Exclude<MusicTrack, "none">[] = [
+  "title", "battle", "boss", "final", "victory", "gameover", "shop",
+  // Season 2
+  "hub", "gacha", "gacha_mythic", "candy", "academy", "beach", "finale",
+  "boss_candy", "boss_academy", "boss_beach", "boss_finale", "cancel",
+];
+
+/** Stage tempos (docs/content/stages.md, StageDef.bpm): beat-synced weapons expect the battle theme at this bpm. */
+export const STAGE_BPM: Partial<Record<Exclude<MusicTrack, "none">, number>> = { candy: 150, academy: 136, beach: 128, finale: 160 };
+
+/** In-run sfx from the base game and Season 2 used by the chaos mixes. */
+export const CHAOS_BASE: SfxId[] = ["hit", "hit", "hitCrit", "enemyDie", "gem", "gem", "starShot", "slash", "explosion", "orbitHit", "bubblePop", "coin"];
+export const CHAOS_S2: SfxId[] = ["hit", "hit", "hitCrit", "enemyDie", "gem", "gem", "missile", "fanSmack", "teacup", "fireball", "boba", "paperCrane", "crunch", "splash", "sparkleCharm", "glitch"];
 
 /** game defaults (src/ui/save.ts) so renders match what players hear */
 export const DEFAULT_VOLS = { master: 0.8, music: 0.7, sfx: 0.85 };
@@ -106,8 +118,20 @@ export async function renderSpam(id: SfxId, count: number, every: number, second
   return { buf: cut(await ctx.startRendering()), played };
 }
 
-/** Dense combat mix: many sfx over battle music at high intensity (headroom check). */
-export async function renderChaos(seconds = 8, sr = 44100): Promise<AudioBuffer> {
+export interface ChaosOpts {
+  /** music under the fight (default battle) */
+  track?: Exclude<MusicTrack, "none">;
+  /** the spammed pool (default CHAOS_BASE) */
+  ids?: SfxId[];
+  /** Season 2 extras: lightstick on every beat, honk / transform / nani / baka every few seconds */
+  s2?: boolean;
+}
+
+/**
+ * Dense combat mix: many sfx over music at high intensity (headroom check). The
+ * music is scheduled just-in-time like the realtime engine (see renderTrack).
+ */
+export async function renderChaos(seconds = 8, sr = 44100, o: ChaosOpts = {}): Promise<AudioBuffer> {
   const ctx = offline(seconds, sr);
   const eng = new Engine(ctx);
   let vt = 0;
@@ -115,12 +139,14 @@ export async function renderChaos(seconds = 8, sr = 44100): Promise<AudioBuffer>
   eng.setVolumes(DEFAULT_VOLS);
   eng.setIntensity(1);
   vt = PRE;
-  eng.music("battle", 0);
-  const spam: SfxId[] = ["hit", "hit", "hitCrit", "enemyDie", "gem", "gem", "starShot", "slash", "explosion", "orbitHit", "bubblePop", "coin"];
+  const track = o.track ?? "battle";
+  eng.music(track, 0);
+  const spam = o.ids ?? CHAOS_BASE;
+  const beat = 60 / songFor(track).def.bpm;
   let k = 0;
+  let nextBeat = 0;
   for (let s = 0; s < seconds; s += 0.01) {
     vt = PRE + s;
-    eng.tick(vt);
     for (let j = 0; j < 3; j++) {
       const id = spam[(k++ * 7) % spam.length];
       eng.sfx(id, { pitch: (k % 9) * 0.6, pan: Math.sin(k) * 0.7, vol: 0.7 }, vt);
@@ -132,6 +158,33 @@ export async function renderChaos(seconds = 8, sr = 44100): Promise<AudioBuffer>
       eng.duck(0.65, 1.3);
     }
     if (Math.abs(s - 6.2) < 0.005) eng.sfx("ultBlast", {}, vt);
+    if (o.s2) {
+      if (s >= nextBeat) {
+        eng.sfx("lightstick", { vol: 0.8 }, vt);
+        nextBeat += beat;
+      }
+      const at = (x: number) => Math.abs(s % 4 - x) < 0.005;
+      if (at(0.5)) eng.sfx("honk", {}, vt);
+      if (at(0.75)) eng.sfx("honk", { vol: 0.6 }, vt);
+      if (at(1.5)) eng.sfx("transform", {}, vt);
+      if (at(2.5)) eng.sfx("baka", {}, vt);
+      if (Math.abs(s - 4.2) < 0.005) eng.sfx("nani", { vol: 0.7 }, vt);
+    }
+  }
+  // schedule the music just-in-time (suspend / tick / resume), like renderTrack
+  const STEP = 0.1;
+  const total = seconds + PRE;
+  const q = (t: number) => Math.round(t * sr / 128) * 128 / sr;
+  eng.clock = () => vt;
+  vt = PRE;
+  eng.tick(PRE);
+  for (let t = q(PRE + STEP); t < total - STEP; t = q(t + STEP)) {
+    const tt = t;
+    ctx.suspend(tt).then(() => {
+      vt = tt;
+      eng.tick(tt);
+      void ctx.resume();
+    });
   }
   return cut(await ctx.startRendering());
 }
@@ -144,6 +197,10 @@ export interface TrackRenderOpts {
   then?: { at: number; track: MusicTrack; fade?: number };
   /** muffle on/off windows */
   muffle?: [number, boolean][];
+  /** [time, degrade] steps (Engine.setDegrade; omitted = the track's auto mode) */
+  degrade?: [number, number][];
+  /** mix analysis: render only this channel */
+  solo?: string;
   sr?: number;
 }
 
@@ -164,11 +221,13 @@ export async function renderTrack(track: Exclude<MusicTrack, "none">, o: TrackRe
   eng.setVolumes(DEFAULT_VOLS);
   const steps = [...(o.intensity ?? [[0, 1]])].sort((a, b) => a[0] - b[0]);
   const muf = [...(o.muffle ?? [])].sort((a, b) => a[0] - b[0]);
+  const deg = [...(o.degrade ?? [])].sort((a, b) => a[0] - b[0]);
   eng.setIntensity(steps[0]?.[1] ?? 1);
   vt = PRE;
   eng.music(track, 0);
+  if (o.solo) eng.soloChannel(o.solo);
   eng.tick(vt);
-  let si = 1, mi = 0, switched = false;
+  let si = 1, mi = 0, di = 0, switched = false;
   const total = seconds + PRE;
   const at = (t: number) => Math.round(t * sr / 128) * 128 / sr; // suspend times are quantised to render quanta
   const step = (t: number) => {
@@ -176,6 +235,7 @@ export async function renderTrack(track: Exclude<MusicTrack, "none">, o: TrackRe
     const s = t - PRE;
     while (si < steps.length && steps[si][0] <= s) eng.setIntensity(steps[si++][1]);
     while (mi < muf.length && muf[mi][0] <= s) eng.setMuffled(muf[mi++][1]);
+    while (di < deg.length && deg[di][0] <= s) eng.setDegrade(deg[di++][1]);
     if (o.then && !switched && s >= o.then.at) {
       switched = true;
       eng.music(o.then.track, o.then.fade ?? 1);
@@ -248,9 +308,19 @@ export function trimmed(buf: AudioBuffer, audible: number, pad = 0.15): AudioBuf
 export interface HarmonyReport {
   track: string;
   bpm: number;
+  /** declared home key (SongDef.key) and the key estimated from the notes (Krumhansl-Schmuckler) */
+  key: string;
+  detectedKey: string;
+  keyScore: number;
   loopSeconds: number;
   totalSeconds: number;
   sections: { name: string; bars: number; events: number }[];
+  /** degrade tiers (setDegrade): threshold + section names */
+  tiers: { at: number; order: string[] }[];
+  /** intensity layers: channel -> threshold (layered songs only) */
+  layers: Record<string, number>;
+  /** bars (in the main loop) where nothing plays at intensity 0 (would sound like a dropout) */
+  silentBars: string[];
   /** melodic notes landing on beats 1/3 of a bar that are not chord tones */
   strongOff: { channel: string; section: string; beat: number; note: number; chord: string }[];
   strongTotal: number;
@@ -258,6 +328,40 @@ export interface HarmonyReport {
   missingInst: string[];
   /** per channel: lowest / highest MIDI note */
   ranges: Record<string, [number, number]>;
+}
+
+const NOTE_NAMES = ["C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"];
+const MAJOR_PROFILE = [6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88];
+const MINOR_PROFILE = [6.33, 2.68, 3.52, 5.38, 2.6, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17];
+
+/** Krumhansl-Schmuckler key estimate from a duration-weighted pitch-class histogram. */
+export function estimateKey(hist: number[]): { key: string; score: number } {
+  const corr = (a: number[], b: number[]) => {
+    const ma = a.reduce((x, y) => x + y, 0) / 12;
+    const mb = b.reduce((x, y) => x + y, 0) / 12;
+    let n = 0, da = 0, db2 = 0;
+    for (let i = 0; i < 12; i++) {
+      n += (a[i] - ma) * (b[i] - mb);
+      da += (a[i] - ma) ** 2;
+      db2 += (b[i] - mb) ** 2;
+    }
+    return n / Math.sqrt(da * db2 || 1);
+  };
+  let best = { key: "?", score: -2 };
+  for (let r = 0; r < 12; r++) {
+    for (const [prof, q] of [[MAJOR_PROFILE, "major"], [MINOR_PROFILE, "minor"]] as const) {
+      const rot = prof.map((_, i) => prof[(i - r + 12) % 12]);
+      const c = corr(hist, rot);
+      if (c > best.score) best = { key: `${NOTE_NAMES[r]} ${q}`, score: c };
+    }
+  }
+  return best;
+}
+
+/** Channel ids of a track (mix analysis). */
+export function trackChannels(track: Exclude<MusicTrack, "none">): { id: string; layer: number; inst: string }[] {
+  const d = songFor(track).def;
+  return d.channels.map((c) => ({ id: c.id, layer: d.layered ? (c.layer ?? 0) : 0, inst: c.inst }));
 }
 
 export function analyzeTrack(track: Exclude<MusicTrack, "none">): HarmonyReport {
@@ -270,7 +374,10 @@ export function analyzeTrack(track: Exclude<MusicTrack, "none">): HarmonyReport 
   const ranges: Record<string, [number, number]> = {};
   const seen = new Set<string>();
   const sections: HarmonyReport["sections"] = [];
-  for (const sec of song.order) {
+  const hist = new Array(12).fill(0);
+  const mainNames = new Set(song.order.map((s) => s.name));
+  const all = [...song.order, ...song.tiers.flatMap((t) => t.order)];
+  for (const sec of all) {
     if (seen.has(sec.name)) continue;
     seen.add(sec.name);
     sections.push({ name: sec.name, bars: sec.beats / bpb, events: sec.ev.length });
@@ -280,6 +387,7 @@ export function analyzeTrack(track: Exclude<MusicTrack, "none">): HarmonyReport 
       const r = (ranges[ch.id] ??= [999, -1]);
       r[0] = Math.min(r[0], e.m);
       r[1] = Math.max(r[1], e.m);
+      if (mainNames.has(sec.name)) hist[((e.m % 12) + 12) % 12] += e.dur;
       const inBar = e.t % bpb;
       const strong = Math.abs(inBar) < 1e-3 || Math.abs(inBar - bpb / 2) < 1e-3;
       if (!strong || !sec.chords.length) continue;
@@ -289,8 +397,25 @@ export function analyzeTrack(track: Exclude<MusicTrack, "none">): HarmonyReport 
       if (!c.pcs.includes(((e.m % 12) + 12) % 12)) strongOff.push({ channel: ch.id, section: sec.name, beat: e.t, note: e.m, chord: c.sym });
     }
   }
+  // bars with nothing at intensity 0 (layered songs drop channels with layer > 0)
+  const silentBars: string[] = [];
+  const base = (i: number) => !def.layered || (def.channels[i].layer ?? 0) <= 0;
+  for (const sec of song.order) {
+    for (let b = 0; b < sec.beats / bpb; b++) {
+      const on = sec.ev.some((e) => base(e.ch) && e.t < (b + 1) * bpb - 1e-6 && e.t + e.dur > b * bpb + 1e-6);
+      if (!on) silentBars.push(`${sec.name}:${b + 1}`);
+    }
+  }
+  const layers: Record<string, number> = {};
+  if (def.layered) for (const c of def.channels) if ((c.layer ?? 0) > 0) layers[c.id] = c.layer!;
   const missingInst = def.channels.filter((c) => c.inst !== "drums" && !INST[c.inst]).map((c) => c.id);
   const loopBeats = song.order.slice(Math.max(0, song.loopTo)).reduce((a, s) => a + s.beats, 0);
   const totalBeats = song.order.reduce((a, s) => a + s.beats, 0);
-  return { track, bpm: def.bpm, loopSeconds: loopBeats * spb, totalSeconds: totalBeats * spb, sections, strongOff, strongTotal, missingInst, ranges };
+  const k = estimateKey(hist);
+  return {
+    track, bpm: def.bpm, key: def.key ?? "", detectedKey: k.key, keyScore: k.score,
+    loopSeconds: loopBeats * spb, totalSeconds: totalBeats * spb, sections,
+    tiers: song.tiers.map((t) => ({ at: t.at, order: t.order.map((s) => s.name) })),
+    layers, silentBars, strongOff, strongTotal, missingInst, ranges,
+  };
 }

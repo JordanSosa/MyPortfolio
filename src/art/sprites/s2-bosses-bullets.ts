@@ -6,7 +6,7 @@
  * ground (pink frosting, pale stone, warm sand, dark storyboard paper).
  */
 import type { SpriteDef } from "../format";
-import { Pix, bands, glowPal, gridSprite, halo, text } from "./s2-bosses-util";
+import { Pix, glowPal, gridSprite, halo } from "./s2-bosses-util";
 
 const d2 = (x: number, y: number, cx: number, cy: number) => Math.hypot(x - cx, y - cy);
 
@@ -54,21 +54,32 @@ function plum(f: number): Pix {
 }
 
 // ------------------------------------------------------------------ eb_stamp (red "NO" stamp mark)
+/** Paper-white core inked with a red rim and a red "NO" (narrow N) - a rubber-stamp imprint. */
+const STAMP = `
+............
+.**********.
+*RRRRRRRRRR*
+*RwwwwwwwwR*
+*RrrwwwrwwR*
+*RrwrwrwrwR*
+*RrwrwrwrwR*
+*RrwrwwrwwR*
+*RwwwwwwwwR*
+*RRRRRRRRRR*
+.**********.
+............
+`;
 function stamp(f: number): Pix {
-  const p = new Pix(12, 12);
-  for (let y = 1; y <= 10; y++)
-    for (let x = 1; x <= 10; x++) {
-      const corner = (x === 1 || x === 10) && (y === 1 || y === 10);
-      if (corner) continue;
-      const rim = x === 1 || x === 10 || y === 1 || y === 10;
-      const inner = x === 2 || x === 9 || y === 2 || y === 9;
-      p.set(x, y, rim ? "R" : inner ? "q" : "r");
-    }
-  text(p, "NO", 3, 4, "w");
-  // ink texture: the stamp never inks perfectly
-  p.set(8, 8, "R");
-  if (f) p.set(2, 2, "w").set(3, 2, "w").set(2, 3, "w");
-  halo(p, f ? ["=", "+"] : ["*"], false);
+  const p = Pix.of(STAMP);
+  // rounded rim corners + uneven ink (rubber stamps never ink perfectly)
+  for (const [x, y] of [[1, 2], [10, 2], [1, 9], [10, 9]]) p.set(x, y, "r");
+  p.set(9, 8, "q").set(3, 3, "t");
+  if (f) {
+    // pulse: hotter glow, a glint on the paper
+    p.each((x, y, k) => (k === "*" ? "=" : null));
+    for (let x = 2; x <= 9; x++) p.set(x, 0, "+").set(x, 11, "+");
+    p.set(2, 3, "w").set(3, 3, "w");
+  }
   return p;
 }
 
@@ -203,22 +214,21 @@ function rivalStar(f: number): Pix {
 function memo(f: number): Pix {
   const p = new Pix(12, 12);
   const sheet = new Pix(12, 12);
-  sheet.poly([[2, 1], [8, 1], [10, 3], [10, 11], [2, 11]], "w");
-  sheet.each((x, y, k) => (k === "w" ? (y > 8 || x > 8 ? "W" : "w") : null));
-  // ruled lines
-  for (const y of [4, 6, 8]) for (let x = 3; x <= 8; x++) if (sheet.get(x, y) !== ".") sheet.set(x, y, "g");
-  // dog-ear fold
-  sheet.set(8, 1, "g").set(8, 2, "g").set(9, 2, "g").set(8, 3, "G").set(9, 3, "G");
-  // red X
+  // 8x8 sheet with a folded dog-ear at the top-right
+  sheet.poly([[2, 2], [8, 2], [10, 4], [10, 10], [2, 10]], "w");
+  sheet.each((x, y, k) => (k === "w" ? (y >= 9 || x >= 9 ? "W" : "w") : null));
+  for (const y of [4, 6, 8]) for (let x = 3; x <= 8; x++) if (sheet.get(x, y) === "w") sheet.set(x, y, "j");
+  sheet.set(8, 2, "g").set(8, 3, "g").set(9, 3, "G").set(9, 4, "W");
+  // bold red X (2px strokes, darker on the lower-right half)
   for (let i = 0; i < 6; i++) {
-    sheet.set(3 + i, 4 + i * 0.85, i < 3 ? "r" : "R");
-    sheet.set(8 - i, 4 + i * 0.85, i < 3 ? "r" : "R");
+    const k = i < 3 ? "r" : "R";
+    sheet.set(3 + i, 3 + i, k).set(4 + i, 3 + i, k);
+    sheet.set(8 - i, 3 + i, k).set(9 - i, 3 + i, k);
   }
-  sheet.set(4, 4, "r").set(7, 4, "r");
   sheet.outline("1");
   p.put(sheet, 0, 0);
-  // bright outline glow
-  halo(p, f ? ["="] : ["*"], false);
+  // bright gold outline glow
+  halo(p, f ? ["=", "*"] : ["*", "+"], false);
   return p;
 }
 

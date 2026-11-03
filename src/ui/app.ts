@@ -87,7 +87,7 @@ const INTRO_READY = 0.6;
 const INTRO_END = 1.25;
 /** Hub runs: the episode title card holds this long before READY? (s). */
 const INTRO_CARD = 1.35;
-/** In-run Plot Point check interval (real s; AchievementWatch builds a summary each poll). */
+/** In-run Plot Point check interval (real s; each poll refreshes the live RunStats and evaluates the pending Plot Points). */
 const ACH_POLL = 1;
 
 export interface UiScreen {
@@ -320,6 +320,9 @@ export class App implements KitHost {
   }
 
   private releaseHistory(): void {
+    // a release already on its way: history.state only changes when that traversal lands, so a second
+    // back() here would step off the page (Back on Results -> goHub released twice)
+    if (this.selfPops > 0) return;
     try {
       if ((history.state as { kk?: number } | null)?.kk) {
         this.selfPops++;
@@ -406,8 +409,11 @@ export class App implements KitHost {
     this.account = !!opts.account && !!run;
     this.runConfig = run ?? debugRunConfig(this.params);
     this.hero = heroDef(hero).id;
-    save.data.lastHero = this.hero;
-    save.save();
+    // (a debug run's ?hero= may be locked on this account: only account runs touch the saved loadout)
+    if (this.account && save.data.lastHero !== this.hero) {
+      save.data.lastHero = this.hero;
+      save.save();
+    }
     this.endGame();
     this.attract?.dispose();
     this.attract = null;
@@ -443,7 +449,7 @@ export class App implements KitHost {
     // first few runs: how to play (move -> dash -> overdrive)
     this.tut = save.data.runs < 3 && !this.params.autoplay ? new Tutorial(this.hud, this.input, this.game.world) : null;
     // in-run Plot Point toasts (real players only)
-    this.achWatch = this.params.autoplay ? null : new AchievementWatch(save.profile);
+    this.achWatch = this.account && !this.params.autoplay ? new AchievementWatch(save.profile) : null;
     this.achT = 0;
     if (intro && !this.params.autoplay && this.params.skip <= 0) this.beginIntro(this.account);
     else this.tut?.start();
@@ -515,9 +521,15 @@ export class App implements KitHost {
     if (!g) return this.report;
     if (this.banked && this.report) return this.report;
     this.lastSummary = g.world.summary();
-    this.report = save.recordRun(this.lastSummary);
+    // debug / deep-link runs (every pool open, ?god ...) only preview their payout: the account never sees them
+    this.report = this.account ? save.recordRun(this.lastSummary) : save.previewRun(this.lastSummary);
     this.banked = true;
     return this.report;
+  }
+
+  /** The current / last run is a debug or deep-link run (nothing is banked). */
+  get practice(): boolean {
+    return !this.account;
   }
 
   /** End the current run and show the Episode Results (from game over, victory, quit). */
@@ -549,8 +561,9 @@ export class App implements KitHost {
   /** Game over RETRY: bank the run, say what it paid, go again. */
   retryFromGameOver(): void {
     const r = this.bankRun();
+    const practice = this.practice;
     this.retry();
-    if (r) this.toast(`Episode ${fmtInt(r.episode)} banked!`, { kind: "good", reward: `${money("coins", `+${fmtInt(r.coins.total)}`)}${r.gems.total ? money("gems", `+${fmtInt(r.gems.total)}`) : ""}`, inRun: true, ms: 2600 });
+    if (r && !practice) this.toast(`Episode ${fmtInt(r.episode)} banked!`, { kind: "good", reward: `${money("coins", `+${fmtInt(r.coins.total)}`)}${r.gems.total ? money("gems", `+${fmtInt(r.gems.total)}`) : ""}`, inRun: true, ms: 2600 });
   }
 
   // ================================================================ run-start stinger
@@ -825,10 +838,14 @@ export class App implements KitHost {
         this.ended = true;
         this.openModal("over", openGameOver(this, w, false));
         this.music("gameover", 0.8);
+        // nothing can change this run any more (no revive left): bank it now, so closing the app on the
+        // TO BE CONTINUED screen never loses it (Results / RETRY reuse the same report)
+        if (w.revivesLeft <= 0) this.bankRun();
       } else if (w.phase === "victory" && this.endT > 7.2 && !this.modal) {
         // after the dawn celebration (view/bestiary-fx.ts: explosions -> flash at 1.7 s -> sunrise + fireworks)
         this.ended = true;
         this.openModal("over", openGameOver(this, w, true));
+        this.bankRun();
       }
     }
     if (!this.modal && w.phase === "play") {
@@ -844,7 +861,7 @@ export class App implements KitHost {
     this.achT += dt;
     if (this.achT < ACH_POLL) return;
     this.achT = 0;
-    for (const def of watch.poll(w.summary().stats)) {
+    for (const def of watch.poll(w.runStats())) {
       this.sfx("achievement", 0.7);
       this.toast(def.name, { kind: "ach", kicker: "PLOT POINT!", icon: trophyIcon("kt-img"), inRun: true });
     }

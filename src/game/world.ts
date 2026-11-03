@@ -620,7 +620,14 @@ export class World {
     if (!this.difficulty.rerolls) this.rerolls = 0;
     this.ultMeter = Math.max(this.ultMeter, Math.min(CFG.ultMax, CFG.ultStart + Math.max(0, fl.ultStart ?? 0) * CFG.ultMax));
     this.addWeapon(this.startWeapon, this.startWeaponLevel);
-    for (const sw of run.start.weapons) this.addWeapon(sw.id, Math.max(1, Math.floor(sw.level)));
+    for (const sw of run.start.weapons) {
+      // a start weapon the hero already holds (the board's "Prepared Protagonist" on the signature weapon) levels it up
+      const lvl = Math.max(1, Math.floor(sw.level));
+      const held = this.weapons.find((x) => x.def.id === sw.id);
+      if (held) {
+        if (lvl > held.level) this.setWeaponLevel(held, lvl);
+      } else this.addWeapon(sw.id, lvl);
+    }
     // (run modifiers that count weapons - Power of Friendship - see the start build right away)
     if (this.statsDirty) {
       this.statsDirty = false;
@@ -2513,6 +2520,11 @@ export class World {
   }
 
   // ================================================================ summary
+  /** The live RunStats snapshot (the same object every call, refreshed; in-run Plot Point checks poll it ~1x/s). */
+  runStats(): RunStats {
+    return this.collector.finish();
+  }
+
   summary(): RunSummary {
     const weapons = this.weapons.map((w) => ({ id: w.def.id, name: w.def.name, icon: w.def.icon, damage: Math.round(w.damage), kills: w.kills, level: w.level }));
     const ultDef = ULTIMATES.get(this.ultId);

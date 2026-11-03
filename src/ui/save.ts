@@ -194,6 +194,17 @@ export class SaveStore {
     return report;
   }
 
+  /**
+   * What a run WOULD pay, computed on a throwaway copy of the profile: debug /
+   * deep-link runs (`?autoplay`, `?screen=game`, `?god` ...) play with every
+   * pool open and must never bank into the account. Nothing is stored.
+   */
+  previewRun(summary: RunSummary): RunReport {
+    const stats = summary.stats ?? statsFromLegacySummary(summary, summary.stage);
+    const copy = JSON.parse(JSON.stringify(this.profile)) as Profile;
+    return applyRunToProfile(copy, { stats }, undefined, { now: now() });
+  }
+
   /** Base64 save string (settings "export"). */
   exportString(): string {
     return encodeSaveString(this.profile);

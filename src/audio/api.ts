@@ -30,7 +30,9 @@ export type SfxId =
   | "narratorSting" | "nani" | "baka" | "recordScratch" | "toBeContinued"
   // new weapons / heroes / stages
   | "honk" | "missile" | "fanSmack" | "teacup" | "sparkleCharm" | "transform" | "fireball" | "boba" | "paperCrane"
-  | "lightstick" | "snore" | "glitch" | "splash" | "crunch";
+  | "lightstick" | "snore" | "glitch" | "splash" | "crunch"
+  // ---- Season 2 additions from docs/content (satire.md §4 "DROPPED" quit, stages.md schoolBell, enemies.md Hall Monitor)
+  | "cassetteEject" | "schoolChime" | "whistle";
 
 export interface SfxOpts {
   /** 0..1 multiplier (default 1) */
@@ -46,7 +48,9 @@ export type MusicTrack =
   // ---- Season 2: hub + gacha + per-stage battle and boss themes ("cancel" = the series-finale boss)
   | "hub" | "gacha"
   | "candy" | "academy" | "beach" | "finale"
-  | "boss_candy" | "boss_academy" | "boss_beach" | "boss_finale" | "cancel";
+  | "boss_candy" | "boss_academy" | "boss_beach" | "boss_finale" | "cancel"
+  /** gacha.md MYTHIC beat 6: a rainbow fanfare intro, then the regular gacha loop */
+  | "gacha_mythic";
 
 export interface AudioAPI {
   /** Must be called from a user gesture (first tap/click/key). Safe to call repeatedly. */
@@ -58,6 +62,14 @@ export interface AudioAPI {
   music(track: MusicTrack, fade?: number): void;
   /** Battle intensity 0..1 - adds/removes musical layers (drums, arps, lead). */
   setIntensity(x: number): void;
+  /**
+   * OPTIONAL (Season 2): series-finale "budget cuts" 0..1 for the current track. Only tracks with a
+   * degrade arrangement react (`cancel`): 0 = full production, ~0.34 "Ratings Drop" (choir and brass
+   * laid off), ~0.67 "Budget Cuts" (hold-music organ, telephone band, detune), 1 "Rushed Ending"
+   * (bitcrush, tape wow, drop-outs). Changes land on the next bar line. Every track change resets it;
+   * until the first call after a track change, `cancel` degrades on its own over time (auto mode).
+   */
+  setDegrade?(x: number): void;
   /** Muffle music (low-pass) e.g. while paused or picking an upgrade. */
   setMuffled(on: boolean): void;
   /** Duck music by `amount` (0..1) for `seconds` (big hits, ult cut-in). */

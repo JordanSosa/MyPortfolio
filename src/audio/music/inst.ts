@@ -156,6 +156,108 @@ export const INST: Record<string, InstFn> = {
     v.tone({ w: "triangle", f, a: 0.002, d: 0.22, s: 0, v: 0.3 * vel, lp: 2500 });
     v.noise({ a: 0.001, d: 0.012, s: 0, v: 0.05 * vel, bp: f * 3, q: 2 });
   },
+
+  // ---------------------------------------------------------------- Season 2
+  /** glockenspiel: bright bar partials (1, 2.76) + mallet tick (candy lead) */
+  glock(v, m, len, vel) {
+    const f = mtof(m);
+    v.tone({ w: "sine", f, a: 0.001, d: 0.75, s: 0, v: 0.2 * vel });
+    v.fm({ f, ratio: 2.76, idx: 1.1, idx2: 0.04, it: 0.12, a: 0.001, d: 0.35, s: 0, v: 0.08 * vel });
+    v.tone({ w: "sine", f: f * 2.76, a: 0.001, d: 0.09, s: 0, v: 0.035 * vel });
+    v.noise({ a: 0.0008, d: 0.008, s: 0, v: 0.04 * vel, bp: 5000, q: 1.5 });
+  },
+  /** kazoo: buzzy square through a nasal "oo-ah" formant, scooped attack, wide vibrato */
+  kazoo(v, m, len, vel) {
+    const f = mtof(m);
+    const l = Math.max(0.05, len - 0.02);
+    v.formant({
+      f, w: "square", a: 0.012, d: 0.06, s: 0.85, len: l, r: 0.05, v: 0.13 * vel, q: 3.2, vib: 24, vr: 6.4,
+      pc: [[0, -0.6], [0.06, 0], [1, -0.1]],
+      vc: [[0, 520, 1350], [1, 620, 1500]],
+    });
+    v.tone({ w: "soft", f, a: 0.01, d: 0.1, s: 0.7, len: l, r: 0.05, v: 0.05 * vel });
+  },
+  /** tuba: round low brass, the filter opens on the "blat" (candy boss oom-pah) */
+  tuba(v, m, len, vel) {
+    const f = mtof(m);
+    const l = Math.max(0.05, len - 0.03);
+    v.tone({ w: "sawtooth", f, a: 0.02, d: 0.18, s: 0.6, len: l, r: 0.07, v: 0.16 * vel, lp: 350, lp2: 1300, lpt: 0.05, q: 1.6 });
+    v.tone({ w: "sine", f, a: 0.012, d: 0.2, s: 0.8, len: l, r: 0.07, v: 0.22 * vel });
+  },
+  /** acoustic-ish piano: hammer, FM brightness that fades, pitch-dependent decay (academy) */
+  piano(v, m, len, vel) {
+    const f = mtof(m);
+    const d = Math.max(0.5, Math.min(2.4, 2.4 - (m - 48) * 0.045));
+    v.tone({ w: "triangle", f, a: 0.002, d, s: 0, v: 0.17 * vel, lp: 5000, lp2: 1600, lpt: d * 0.5 });
+    v.fm({ f, ratio: 1, idx: 1.5, idx2: 0.1, it: 0.3, a: 0.002, d: d * 0.6, s: 0, v: 0.07 * vel });
+    v.tone({ w: "sine", f: f * 2, det: 3, a: 0.002, d: d * 0.4, s: 0, v: 0.04 * vel });
+    v.noise({ a: 0.0008, d: 0.02, s: 0, v: 0.03 * vel, bp: Math.min(6000, f * 5), q: 1.5 });
+  },
+  /** steel pan: FM with a sweet inharmonic shimmer and a quick pitch settle (beach) */
+  steel(v, m, len, vel) {
+    const f = mtof(m);
+    v.fm({ f: f * 1.006, f2: f, gt: 0.04, ratio: 2, idx: 1.4, idx2: 0.15, it: 0.25, a: 0.002, d: 0.7, s: 0, v: 0.14 * vel });
+    v.fm({ f: f * 2, ratio: 1.5, idx: 0.5, idx2: 0.02, it: 0.1, a: 0.002, d: 0.25, s: 0, v: 0.035 * vel });
+    v.tone({ w: "sine", f, a: 0.003, d: 0.9, s: 0, v: 0.08 * vel });
+  },
+  /** clean electric guitar pluck: saw through a fast-closing low-pass + body (beach arps) */
+  guitar(v, m, len, vel) {
+    const f = mtof(m);
+    v.tone({ w: "sawtooth", f, a: 0.002, d: 0.5, s: 0, v: 0.1 * vel, lp: 4200, lp2: 700, lpt: 0.22, q: 1.2 });
+    v.tone({ w: "triangle", f, a: 0.002, d: 0.6, s: 0, v: 0.08 * vel });
+    v.noise({ a: 0.0008, d: 0.01, s: 0, v: 0.03 * vel, bp: Math.min(7000, f * 6), q: 2 });
+  },
+  /** chiptune flute: triangle + thin pulse, breath, strong delayed vibrato (beach boss festival) */
+  chipFlute(v, m, len, vel) {
+    const f = mtof(m);
+    const l = Math.max(0.05, len - 0.02);
+    v.tone({ w: "triangle", f, a: 0.015, d: 0.15, s: 0.85, len: l, r: 0.08, v: 0.26 * vel, vib: 26, vr: 5.8, vd: 0.16 });
+    v.tone({ w: "p12", f, a: 0.015, d: 0.15, s: 0.6, len: l, r: 0.08, v: 0.035 * vel, lp: 5000, vib: 26, vr: 5.8, vd: 0.16 });
+    v.noise({ a: 0.01, d: 0.07, s: 0, v: 0.025 * vel, bp: f * 2, q: 3 });
+  },
+  /** koto-ish pluck: bright triangle with a tiny upward pitch flick (beach boss) */
+  koto(v, m, len, vel) {
+    const f = mtof(m);
+    v.tone({ w: "triangle", f: f * 0.985, f2: f, gt: 0.03, a: 0.001, d: 0.9, s: 0, v: 0.2 * vel, lp: 6000, lp2: 1800, lpt: 0.4 });
+    v.tone({ w: "p25", f, a: 0.001, d: 0.18, s: 0, v: 0.05 * vel, lp: 4000 });
+  },
+  /** hold-music organ: drawbars + slow "leslie" tremolo, cheesy and mid-heavy (cancel) */
+  holdOrgan(v, m, len, vel) {
+    const f = mtof(m);
+    const l = Math.max(0.05, len - 0.02);
+    v.tone({ w: "organ", f, a: 0.008, d: 0.05, s: 0.95, len: l, r: 0.06, v: 0.2 * vel, trem: 0.3, tr: 5.8, vib: 5, vr: 5.8, vd: 0 });
+    v.tone({ w: "sine", f: f * 3, a: 0.008, d: 0.05, s: 0.9, len: l, r: 0.05, v: 0.03 * vel });
+    v.tone({ w: "square", f, a: 0.001, d: 0.012, s: 0, v: 0.03 * vel, lp: 3000 });
+  },
+  /** distorted "guitar" lead: driven detuned saws, low-passed (rival battle) */
+  leadDist(v, m, len, vel) {
+    const f = mtof(m);
+    const l = Math.max(0.05, len - 0.015);
+    for (const det of [-7, 7]) {
+      v.tone({ w: "sawtooth", f, det, a: 0.004, d: 0.3, s: 0.75, len: l, r: 0.08, v: 0.07 * vel, drive: "drive", lp: 3600, q: 1.1, vib: 22, vr: 6.2, vd: 0.25 });
+    }
+    v.tone({ w: "square", f: f / 2, a: 0.004, d: 0.2, s: 0.5, len: l, r: 0.06, v: 0.04 * vel, lp: 1400 });
+  },
+  /** tremolo strings: tense bowed tremolo (gacha build-up, academy twist) */
+  tremStr(v, m, len, vel) {
+    const f = mtof(m);
+    for (const det of [-8, 8]) {
+      v.tone({ w: "sawtooth", f, det, a: 0.06, d: 0.3, s: 0.85, len, r: 0.25, v: 0.04 * vel, lp: 3200, trem: 0.75, tr: 13 });
+    }
+  },
+  /** round plucked bass with a little finger "thump" (hub city-pop) */
+  bassPluck(v, m, len, vel) {
+    const f = mtof(m);
+    const l = Math.max(0.05, len - 0.03);
+    v.tone({ w: "sine", f, a: 0.003, d: 0.35, s: 0.55, len: l, r: 0.07, v: 0.27 * vel });
+    v.tone({ w: "sawtooth", f, a: 0.002, d: 0.14, s: 0.25, len: l, r: 0.05, v: 0.06 * vel, lp: 1800, lp2: 500, lpt: 0.12 });
+  },
+  /** "synth bell": bright two-op FM bell with a long shimmer (academy) */
+  synthBell(v, m, len, vel) {
+    const f = mtof(m);
+    v.fm({ f, ratio: 4, idx: 2, idx2: 0.1, it: 0.6, a: 0.002, d: 1.2, s: 0, v: 0.12 * vel });
+    v.fm({ f: f * 2, ratio: 1.5, idx: 0.6, idx2: 0.02, it: 0.2, a: 0.002, d: 0.3, s: 0, v: 0.03 * vel });
+  },
 };
 
 export const DRUM: Record<DrumId, DrumFn> = {
@@ -216,6 +318,37 @@ export const DRUM: Record<DrumId, DrumFn> = {
   },
   zap(v, vel) {
     v.tone({ w: "square", f: 2400, f2: 300, gt: 0.08, a: 0.001, d: 0.09, s: 0, v: 0.08 * vel, lp: 6000 });
+  },
+  // ---- Season 2
+  /** taiko "don": big low drum, skin slap + long body */
+  tk(v, vel) {
+    v.tone({ w: "sine", f: 118, f2: 72, gt: 0.12, a: 0.002, d: 0.55, s: 0, v: 0.62 * vel });
+    v.tone({ w: "triangle", f: 240, f2: 120, gt: 0.05, a: 0.001, d: 0.09, s: 0, v: 0.22 * vel });
+    v.noise({ a: 0.001, d: 0.06, s: 0, v: 0.16 * vel, lp: 1400 });
+  },
+  /** woodblock / taiko rim "ka" */
+  wb(v, vel) {
+    v.tone({ w: "sine", f: 1180, f2: 1050, gt: 0.03, a: 0.0008, d: 0.05, s: 0, v: 0.2 * vel });
+    v.noise({ a: 0.0008, d: 0.012, s: 0, v: 0.08 * vel, bp: 2400, q: 3 });
+  },
+  /** cheap preset-organ kick: boxy, no click (hold music) */
+  bk(v, vel) {
+    v.tone({ w: "sine", f: 130, f2: 75, gt: 0.04, a: 0.002, d: 0.14, s: 0, v: 0.5 * vel });
+  },
+  /** vinyl crackle for one beat */
+  vin(v, vel, len) {
+    v.noise({ a: 0.002, d: Math.max(0.05, len), s: 0, v: 0.05 * vel, hp: 2500, crackle: 37 });
+  },
+  /** cowbell: two detuned squares through a band-pass */
+  cow(v, vel) {
+    v.tone({ w: "square", f: 562, a: 0.0008, d: 0.12, s: 0, v: 0.05 * vel, bp: 900, q: 2 });
+    v.tone({ w: "square", f: 845, a: 0.0008, d: 0.1, s: 0, v: 0.04 * vel, bp: 1300, q: 2 });
+  },
+  /** timpani: tuned low boom with a rumble tail */
+  tim(v, vel) {
+    v.tone({ w: "sine", f: 98, f2: 92, gt: 0.3, a: 0.003, d: 0.9, s: 0, v: 0.5 * vel });
+    v.tone({ w: "sine", f: 147, f2: 140, gt: 0.3, a: 0.003, d: 0.45, s: 0, v: 0.14 * vel });
+    v.noise({ a: 0.002, d: 0.25, s: 0, v: 0.12 * vel, lp: 600, pink: true });
   },
 };
 

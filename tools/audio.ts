@@ -7,16 +7,20 @@
 import { audio, audioInternals, type MusicTrack, type SfxId } from "../src/audio/index";
 import {
   analyzeTrack,
+  CHAOS_S2,
   renderChaos,
   renderSfx,
   renderSpam,
   renderTrack,
   SFX_IDS,
+  STAGE_BPM,
   stats,
   toBase64,
+  trackChannels,
   TRACKS,
   trimmed,
   wavBytes,
+  type ChaosOpts,
   type TrackRenderOpts,
 } from "../src/audio/render";
 
@@ -27,6 +31,10 @@ const GROUPS: [string, SfxId[]][] = [
   ["Combat", ["hit", "hitCrit", "enemyDie", "eliteDie", "bossHit", "bossDie", "explosion", "explosionBig", "thunder", "enemyShoot", "telegraph", "freeze", "propBreak"]],
   ["Weapons", ["starShot", "slash", "boomerang", "bell", "candyThrow", "bubblePop", "beam", "beamBig", "meow", "orbitHit"]],
   ["Events", ["warning", "bossRoar", "comboUp", "comboBreak", "rankUp", "waveIncoming", "victory", "gameOver"]],
+  ["S2 Hub", ["hubOpen", "tabSwitch", "nodeBuy", "nodeDeny", "talentUp", "heroLevelUp", "masteryUp", "unlockFanfare", "achievement", "payoutTick", "payoutTotal", "currencyGain", "equip"]],
+  ["S2 Gacha", ["gachaCharge", "gachaMeteor", "gachaReveal", "gachaRevealSR", "gachaRevealSSR", "gachaRevealUR", "gachaMythicGlitch", "gachaMythicBoom", "gachaDupe", "gachaLost5050", "starUp"]],
+  ["S2 Satire", ["narratorSting", "nani", "baka", "recordScratch", "toBeContinued", "cassetteEject", "schoolChime", "whistle"]],
+  ["S2 Weapons", ["honk", "missile", "fanSmack", "teacup", "sparkleCharm", "transform", "fireball", "boba", "paperCrane", "lightstick", "snore", "glitch", "splash", "crunch"]],
 ];
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
@@ -96,6 +104,7 @@ function buildUi(): void {
   }
   bindRange("fade", (v) => v.toFixed(1), () => {});
   bindRange("inten", (v) => v.toFixed(2), (v) => audio.setIntensity(v));
+  bindRange("degr", (v) => v.toFixed(2), (v) => audio.setDegrade?.(v));
   bindRange("pitch", (v) => String(v), () => {});
   bindRange("pan", (v) => v.toFixed(1), () => {});
   bindRange("vol", (v) => v.toFixed(2), () => {});
@@ -166,7 +175,7 @@ function frame(): void {
   }
   const red = engine?.reduction;
   $("status").textContent = ctx
-    ? `ctx ${ctx.state} · ${ctx.sampleRate} Hz · t ${ctx.currentTime.toFixed(1)} s · voices ${engine?.activeVoices ?? 0} · track ${selectedTrack} [${engine?.section ?? ""}] · comp ${red?.comp.toFixed(1)} dB · lim ${red?.limiter.toFixed(1)} dB`
+    ? `ctx ${ctx.state} · ${ctx.sampleRate} Hz · t ${ctx.currentTime.toFixed(1)} s · voices ${engine?.activeVoices ?? 0} · track ${selectedTrack} [${engine?.section ?? ""}] · degrade ${engine?.degrade.toFixed(2)} · comp ${red?.comp.toFixed(1)} dB · lim ${red?.limiter.toFixed(1)} dB`
     : "audio locked (tap the button)";
 }
 
@@ -191,9 +200,12 @@ window.__audioRender = {
     const r = await renderSpam(id, count, every);
     return { ...(await pack(r.buf, true)), played: r.played };
   },
-  chaos: async (seconds: number) => pack(await renderChaos(seconds), false),
+  chaos: async (seconds: number, o?: ChaosOpts) => pack(await renderChaos(seconds, 44100, o), false),
   track: async (track: Exclude<MusicTrack, "none">, o: TrackRenderOpts) => pack(await renderTrack(track, o), false),
   analyze: (track: Exclude<MusicTrack, "none">) => analyzeTrack(track),
+  stageBpm: STAGE_BPM,
+  chaosS2: CHAOS_S2,
+  channels: (track: Exclude<MusicTrack, "none">) => trackChannels(track),
 };
 
 // realtime smoke-test hooks (scripts/audio-render.mjs --live)

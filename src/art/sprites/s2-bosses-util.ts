@@ -8,7 +8,7 @@
  * with `ball`, hair with `strand`.
  */
 import { fill } from "../format";
-import { Pix, ball, gridSprite, hash2, strand, type StrandKeys } from "../sprites/chars-util";
+import { Pix, ball, gridSprite, hash2, strand, type StrandKeys } from "./chars-util";
 
 export { Pix, ball, gridSprite, hash2, strand };
 export type { StrandKeys };

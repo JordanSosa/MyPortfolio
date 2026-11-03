@@ -116,12 +116,14 @@ export function loadoutPage(hub: Hub): HubPage {
 
     // ---- start weapon (board "Prepared Protagonist")
     const swLevel = plan.board.startWeaponLevel;
-    const startWeapons = swLevel > 0 ? ctx.baseWeapons.filter((w) => isUnlocked(p, "weapon", w.id)) : [];
+    // (the hero's own weapon is the SIGNATURE chip: the World levels it to LV2 instead of adding a copy)
+    const startWeapons = swLevel > 0 ? ctx.baseWeapons.filter((w) => isUnlocked(p, "weapon", w.id) && w.id !== hd.weapon) : [];
+    const signature = !L.startWeapon || L.startWeapon === hd.weapon;
     const ep = p.lifetime.runs + 1;
     const startWeaponHtml = startWeapons.length
             ? `${sectionTitle("Prepared Protagonist", `<span class="sec-r">starts at LV${swLevel}</span>`)}
                <div class="sw-chips kscroll-x">
-                 <button class="chip${!L.startWeapon ? " on" : ""}" data-nav data-act="sw" data-id="">${img(wd?.icon ?? "", "px")} SIGNATURE</button>
+                 <button class="chip${signature ? " on" : ""}" data-nav data-act="sw" data-id="">${img(wd?.icon ?? "", "px")} SIGNATURE</button>
                  ${startWeapons.map((w) => `<button class="chip${L.startWeapon === w.id ? " on" : ""}" data-nav data-act="sw" data-id="${w.id}">${img(w.icon, "px")} ${esc(w.name)}</button>`).join("")}
                </div>`
             : "";
@@ -138,7 +140,7 @@ export function loadoutPage(hub: Hub): HubPage {
         <div class="hc-strip kscroll-x">${heroes.join("")}</div>
         <div class="lo-hero" style="--hc:${app.heroColor(hd.id)}">
           <div class="lh-row"><span class="lh-ic">✦</span><span><small>TRAIT</small><b>${esc(hd.trait)}</b></span></div>
-          <div class="lh-row">${img(wd?.icon ?? "", "px lh-img")}<span><small>START WEAPON${swLevel > 0 && !L.startWeapon ? ` · LV${swLevel}` : ""}</small><b>${esc(wd?.name ?? hd.weapon)}</b></span></div>
+          <div class="lh-row">${img(wd?.icon ?? "", "px lh-img")}<span><small>START WEAPON${swLevel > 0 && signature ? ` · LV${swLevel}` : ""}</small><b>${esc(wd?.name ?? hd.weapon)}</b></span></div>
           <div class="lh-row">${portrait(hd.portrait, 1, "lh-img")}<span><small>OVERDRIVE</small><b>${esc(ud?.name ?? hd.ult)}</b></span></div>
           <div class="lh-foot"><span>LV ${hv.level.level} · C${hv.constellation}${ctx.talents.has(hd.id) ? ` · ${hv.points.spent}/${hv.points.total} talent pts` : ""}</span>
             <button class="chip" data-nav data-act="talents" data-id="${hd.id}">TALENTS ▸${hv.points.free > 0 && ctx.talents.has(hd.id) ? badge(hv.points.free) : ""}</button></div>

@@ -130,10 +130,14 @@ tests/                 vitest: core math, xp/cards/chests/meta, headless 3-minut
                        (stat pipeline, pools, Limit Breaks, slots, start bonuses, flags, banish / skip, bot policy),
                        effects.test.ts (hook toolkit, every relic, talent trees, constellations, Plot Twists),
                        endless.test.ts (Filler Arc, RunStats, the view's stage look / stageFx directives)
+                       Season 2 meta: tests/meta.*.test.ts (docs/META.md §10); integration.test.ts (the seams
+                       between meta, sim and banking with the live registries: section 11)
 tools/balance.probe.ts `npm run balance`: full headless runs, every hero x seed, good + lazy bot, pacing report (section 6)
 tools/progression.sim.ts `npm run progression`: consecutive runs with one account (bot + spending policy), hours to
                        every EXPANSION §2 milestone, income / power curves (docs/META.md §9)
 scripts/e2e.mjs        Playwright e2e: desktop / mobile portrait / mobile landscape, screenshots, fails on errors
+scripts/flows.mjs      Playwright account flows (section 11): fresh save -> run -> bank -> buy -> stronger run, v1
+                       migration, Filler Arc clear, Android Back in every state, keyboard-only play; 4 devices
 scripts/peak.mjs       peak-chaos readability shots (adaptive bloom limiter on / off)
 scripts/icons.mjs      regenerates public/icon-192.png + icon-512.png from the atlas
 public/                PWA manifest + icons
@@ -191,7 +195,11 @@ splash) keeps one same-URL history entry (`{kk: 1}`, `App.syncHistory`);
 celebration closes, settings close, a hub page pops, the game pauses, the pause
 menu resumes, level-up / chest / game over ignore it, Results go to the hub.
 At the home page with nothing open the guard is dropped (`history.back()`, its
-own popstate ignored), so Back leaves the page.
+own popstate ignored), so Back leaves the page. A release is issued at most
+once until its traversal lands (`App.selfPops`): `history.state` only changes
+when it does, and a second `history.back()` would step off the page (this is
+what Back on Episode Results -> hub home used to do). The Hub only syncs the
+guard once the App has switched to it (`app.hub === this`).
 
 Run-start stinger: a hub run (START EPISODE / RETRY of one) first shows the
 "EPISODE N" title card (`stinger.ts`, 1.35 s, `narratorSting`), then READY?
@@ -302,6 +310,13 @@ Hitstop / slow-mo are global `time` effects triggered by the feedback bridge.
   Twists scale `world.difficulty` (enemy HP / speed / damage, spawns, cap,
   bullets, elites, boss warning / intro / sequel, food, level heal, rerolls)
   and set `world.look` presentation hints (darken, elite outlines, censored).
+- **RunStats**: `World.summary().stats` at the end of a run; `World.runStats()`
+  refreshes and returns the same live object without building a summary (the
+  in-run Plot Point watcher polls it about once a second). `RunStats.greed`
+  (final Stats.greed) lets the payout apply greed to the coin bonuses.
+- **Start weapons** (`RunConfig.start.weapons`): a weapon the hero already holds
+  is levelled up to the given level (the board's "Prepared Protagonist" on the
+  signature weapon), any other weapon is added at that level.
 - **Endless**: with `run.endless` the final boss's death calls
   `World.startEndless()` instead of `win()` (`stageCleared` either way): the
   director then runs `StageDef.endless` (HP / spawn growth per endless minute,
@@ -616,7 +631,8 @@ hero / profile (medians and [min-max]):
 Env: `HEROES=rin`, `SEEDS=1,2,3`, `T=600`, `BOT=good|lazy|both`, `META=mid|max`
 (Dream Shop ranks), `MAXE=150|250|350` (device enemy cap), `VIEW=phone|land|desktop`,
 `DT=0.0167` (the live game sub-steps at 1/60; the probe defaults to 1/30, which
-gives the same results within noise), `VERBOSE=1` (30 s timeline, build, alive %
+gives the same results within noise), `RUN="stage=...&twists=budget_cuts:3&relics=sakuga_cel:6&flags=..."`
+(any Season 2 RunConfig, the debug URL syntax of `debug/params.ts`), `VERBOSE=1` (30 s timeline, build, alive %
 of cap, damage taken by source per run). The summary reports: win rate + death
 times + final blows, first level-up, level at 1/3/6/9 min (runs still alive),
 XP earned and the share of gem XP actually collected, the level-up interval
@@ -767,7 +783,10 @@ node scripts/e2e.mjs           # desktop + mobile portrait + mobile landscape: s
                                # -> START EPISODE -> run -> quit -> Episode Results -> hub; hub pages (board buy, talents,
                                # pull, wiki, settings export, Android Back); autoplay level-up / chest / pause / results
 node scripts/shot.mjs --path "/?autoplay=1&hero=rin&skip=150" --mobile --wait 5000 --out shots/x.png
+node scripts/flows.mjs         # Season 2 account flows on portrait / landscape / iPhone SE / desktop (section 11):
+                               # --only portrait,se --flow fresh,v1,endless,nav,keys --out shots/flows --keep-going
 npm run balance                # headless full-run balance probe: 3 heroes x 10 seeds x good + lazy bot (section 6)
+npm run progression            # account progression simulator (docs/META.md §9; BOT=weak|mid|strong RUNS=...)
 npm run build && npm run build:single   # dist/ (Pages) and dist-single/index.html (standalone, works from file://)
 ```
 
@@ -845,11 +864,19 @@ splash -> Hub [home] -> stages -> loadout -> START EPISODE -> run -> TO BE CONTI
                      -> gacha (Merch Machine)  -> wiki (codex + Plot Points)           HUB     -> Hub [home]
 ```
 
+- **Settings** from the hub has GAME + SAVE DATA tabs; from the pause menu only
+  GAME (an import / reset mid-run would bank the live run into another profile).
+  After an import / reset the panel re-reads the new profile's settings object.
 - **Pages** are `HubPage` objects built by a factory in `PAGES` (`hub.ts`):
   `{ id, el, title, layer, music?, opaque?, camAnchor?, show?, update?, dispose? }`.
   `hub.open(id, opts)` slides a page in from the right (the old one slides left
   and is hidden, keeping its state and scroll); `hub.back()` reverses it and
-  disposes the page; `hub.popTo(id)`. Transitions are transform / opacity
+  disposes the page; `hub.popTo(id)`. A page's first keyboard / gamepad focus
+  is its `data-nav-default`, else its first item: the header is
+  `data-nav-chrome`, so a gamepad A on a fresh page never presses Back. A page sliding out is `inert` at once:
+  it stays visible for the 300 ms slide but can neither take the keyboard /
+  gamepad focus (`Nav.items` skips `[inert]`) nor a second tap. A confirm press
+  on a focus that went stale refocuses the default instead of clicking it. Transitions are transform / opacity
   only (`.p-in-r` ...). Each page's NavLayer roots at the whole hub, so the
   header buttons and the visible page share keyboard / gamepad focus; hidden
   pages drop out (`offsetParent === null`). `show()` runs when a page is on top
@@ -863,8 +890,14 @@ splash -> Hub [home] -> stages -> loadout -> START EPISODE -> run -> TO BE CONTI
   `save.runPlan()` (repaired loadout -> RunConfig; never throws) ->
   `startRun(hero, true, config, { account: true })`. The legacy `meta` option
   is never passed with an account config. `App.bankRun()` banks a finished run
-  exactly once (`save.recordRun` -> `RunReport`), from Results or from the
-  game-over RETRY; RETRY of an account run re-plans (the profile just changed).
+  exactly once (`save.recordRun` -> `RunReport`): as soon as its outcome is final
+  (the TO BE CONTINUED modal with no revive left, the victory modal; closing the
+  app there loses nothing), else from Results / the game-over RETRY; RETRY of an
+  account run re-plans (the profile just changed). **Practice runs** (deep links / `?autoplay` / `?screen=game`, which play the
+  debug RunConfig with every pool open) never touch the account: `App.practice`,
+  `save.previewRun` (the report on a throwaway copy), a "PRACTICE RUN · NOT
+  SAVED" tag on Results, no CLAIM ALL, no in-run Plot Point toasts, and the
+  saved loadout's hero is left alone.
 - **Episode Results** (`screens/results.ts`): beats on frame time from
   `update()` - payout lines (coins, then gems) count up with ticks, totals pop
   and the currency bar counts; hero XP fills level by level (LEVEL UP!), mastery
@@ -872,7 +905,9 @@ splash -> Hub [home] -> stages -> loadout -> START EPISODE -> run -> TO BE CONTI
   record chips, the NEW UNLOCK celebration per unlock, the narrator's "Next time
   on..." line, "You can afford: ...". Tapping the show skips to the end; reduced
   motion shows the end state at once. UPGRADE opens the board centred on the
-  cheapest affordable node.
+  cheapest affordable node. The NEW ... UNLOCKED! cards are never lost: a skip
+  (or reduced motion) shows them at once, and UPGRADE / RETRY / HUB / Back
+  pressed before their beat show them first, then act.
 - **Boot notices** (`hub/celebrate.ts bootNotices`, once per session, at home):
   the WELCOME TO SEASON 2 dialog for a migrated v1 save (refund, 10-pull gift,
   Rin + Mochi), a notice for a set-aside unreadable save, unlock celebrations
@@ -913,3 +948,69 @@ pops / shakes, no forced reflow); pages and cards carry `contain`; every
 safe-area insets pad the header, pages, sticky footers and sheets. Screenshot
 sweep (desktop, iPhone SE, iPhone 13 portrait + landscape, every hub page):
 `node shots/hub-ui/shots.mjs [--only se,i13] [--scenes home,board]`.
+
+---
+
+## 11. Season 2 integration: the account loop end to end
+
+```
+ ui/save.ts (kko.save.v2) ── Profile ──▶ meta/loadout buildRunConfig ──▶ RunConfig ──▶ game/World (+ bot in tools)
+        ▲                     (repaired loadout, pools,                        │  world.hooks (never muted)
+        │                      board / level mods, mastery,                    ▼
+        │                      relic + talent ids, twists, flags)       RunStatsCollector ─▶ RunStats
+        │                                                                      │  World.summary().stats
+        └── save.recordRun ◀── meta/rewards applyRunToProfile ◀────────────────┘
+                 │                (payout lines, XP, mastery, records, codex, unlocks,
+                 │                 Plot Points, banner rotation, "you can afford")
+                 └─▶ RunReport ─▶ ui/screens/results (Episode Results) ─▶ hub pages (board, heroes, gacha, wiki)
+```
+
+One owner per rule (the other layers only pass ids / numbers through):
+
+| Rule | Owner | The other side |
+| --- | --- | --- |
+| What is playable: heroes, stages, weapon / passive pools, twists, relics owned | `meta/unlocks.ts`, `meta/loadout.ts` | the sim receives plain id lists (`weaponPool`, `passivePool`, `twists`, `relics`) |
+| Stat pipeline order (base -> hero -> legacy shop -> `run.mods` -> relics -> talents -> constellation -> passives -> run modifiers) | `World.recomputeStats` | meta contributes only `mods` (board + hero level) |
+| Relic / talent / constellation stats and behaviour | the sim, from ids (`relics/`, `talents/`, `heroes.ts`) | never in `mods` (would count twice) |
+| Talent tier gating, talent points, relic stars, constellation from copies | `meta/heroes.ts`, `meta/gacha` | the sim trusts the ranks it gets |
+| Heat | `game/registry twistHeat` (sim, `RunStats.heat`) and `meta/loadout twistHeat` (loadout meter) | must agree: pinned by a test |
+| Twist unlock stage | `TwistDef.unlockedBy` (sim data) and `UNLOCK_RULES` (meta table) | must agree: pinned by a test |
+| Payout, hero XP, mastery, records, codex, unlocks, Plot Points, rotation | `meta/rewards.ts applyRunToProfile` | runs once per banked run |
+| Banking | `App.bankRun`: account runs once, as soon as the outcome is final (else Results / game-over RETRY); practice runs only `save.previewRun` | |
+| Storage | `ui/save.ts` | nothing else touches localStorage |
+| Back / focus | `App.onPopState` + `Nav` (sections 2, 10) | pages expose `onBack` through their NavLayer |
+
+**Invariants** (each pinned by `tests/integration.test.ts` and / or `scripts/flows.mjs`):
+
+- fail forward: a fresh account's first death pays for a board node; the node is
+  in the next run's stats and nothing else moves;
+- nothing in the account config is ignored or applied twice (relic / talent /
+  constellation stats, hero level, mastery and Limit Break levels, board slots,
+  start level, flags, Prepared Protagonist on the signature weapon);
+- loadout heat = sim heat = `RunStats.heat` = the payout's heat line;
+- content pools: a run offers only the account's unlocked weapons (+ the
+  signature weapon); a fresh account has Hoshi, Dream Meadow and the 8 + 8
+  originals;
+- every banked run advances the banner rotation once and evaluates Plot Points;
+  greed scales the coin bonuses without double-counting pickups; a Filler Arc
+  run banks as a clear with its endless time and record;
+- debug / deep-link runs never bank; Android Back never leaves the app except
+  at the hub home with nothing open; level-up / game over ignore Back; every hub
+  page takes the keyboard focus on itself.
+
+**Browser flows** (`node scripts/flows.mjs`, real taps / clicks / keys, shots
+in `shots/flows/<device>-<flow>-NN-<step>.png`; devices `portrait` (iPhone 13),
+`landscape`, `se` (iPhone SE), `desktop`; every screenshot also fails the run on
+a horizontal page overflow or a button cut off at the screen edge):
+
+| Flow | Checks |
+| --- | --- |
+| `fresh` | empty profile -> hub -> only Dream Meadow open -> only Hoshi playable -> START -> die -> TO BE CONTINUED -> Results (banked once: coins = payout, XP, record, codex, mastery, rotation, Plot Points) -> UPGRADE -> buy a node from its sheet (paid = coins spent) -> next run measurably stronger -> pause QUIT banks run 2 |
+| `v1` | a seeded `kko.save.v1` migrates: WELCOME dialog (refund, 1,600 gems, Rin + Mochi), balances / heroes / settings / bests / last hero in `kko.save.v2`, Dream Shop refunded not kept, v1 key kept, Rin and Mochi playable, settings on screen, no second migration on reload |
+| `endless` | a cleared profile: FILLER ARC toggle + a twist by tap -> START (endless + heat in the World) -> the final boss falls -> TO BE CONTINUED... JUST KIDDING -> die -> SERIES FINALE?! with Filler Arc + heat lines -> clear, endless record, best heat, rotation banked |
+| `nav` | Android Back: closes a sheet, pops pages, pauses after the episode card, resumes / pauses in-run, ignored by level-up and game over, Results -> hub, leaves the page at home |
+| `keys` | (desktop) keyboard only: focus lands on each hub page, Enter through home -> episodes -> loadout -> START, Escape pause / resume, arrows steer, Enter picks a card, game over -> RESULTS -> UPGRADE -> board -> Escape home |
+
+**Gates for a foundation hand-off**: `npm run typecheck`, `npm test`,
+`npm run build`, `npm run build:single`, `node scripts/e2e.mjs`,
+`node scripts/flows.mjs`, `npm run balance`, `npm run progression`.

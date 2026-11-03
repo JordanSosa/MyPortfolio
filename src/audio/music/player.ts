@@ -8,8 +8,17 @@
  * Intensity layers: channels with `layer > 0` switch on at the next bar line
  * once the (smoothed) intensity crosses their threshold, and fade out slowly
  * (with hysteresis and a minimum hold) when it drops.
+ *
+ * Degrade ("budget cuts", songs with `degrade`): setDegrade(x) takes effect on
+ * the next bar line. It can swap the arrangement (degrade tiers: a new order
+ * starts at that bar), gates `deg`-ranged channels per note, and drives a lo-fi
+ * chain on this player's dry bus:
+ *   dry -> high-pass -> low-pass (telephone band) -> clean + bitcrush mix -> tape-wow delay -> drop-out gate -> out
+ * plus reverb / delay send cuts, flat + jittery per-note detune, and (near 1)
+ * skipped notes and short drop-outs. Without a setDegrade call the song's `auto`
+ * steps drive it.
  */
-import { Voice, type Kit } from "../synth";
+import { curve, Voice, type Kit } from "../synth";
 import { DRUM, INST } from "./inst";
 import type { CSection, CSong } from "./song";
 
@@ -35,6 +44,24 @@ interface Chan {
 const HYST = 0.1;
 const HOLD = 6;
 
+interface Lofi {
+  hp: BiquadFilterNode;
+  lp: BiquadFilterNode;
+  clean: GainNode;
+  crush: GainNode;
+  wow: DelayNode;
+  wowDepth: GainNode;
+  flutDepth: GainNode;
+  gate: GainNode;
+  revCut: GainNode;
+  dlyCut: GainNode;
+  lfos: OscillatorNode[];
+  nodes: AudioNode[];
+}
+
+/** tape-wow delay base (s): the LFO swings the delay time around it */
+const WOW_BASE = 0.012;
+
 export class Player {
   readonly dry: GainNode;
   readonly rev: GainNode;
@@ -54,6 +81,23 @@ export class Player {
   finished = false;
   /** when a non-looping song's last section ends */
   doneAt = Infinity;
+  /** the arrangement being played (the song's order, or a degrade tier's) */
+  private ord: CSection[];
+  private loopTo: number;
+  private tier = 0;
+  /** pending arrangement switch (bar-aligned) */
+  private pend: { at: number; tier: number } | null = null;
+  /** degrade value changes [time, value] (ascending) and the last value scheduled */
+  private degSteps: { t: number; v: number }[] = [];
+  private degLast = 0;
+  private manual = false;
+  private auto: { t: number; v: number }[] = [];
+  private ai = 0;
+  private lofi: Lofi | null = null;
+  private readonly lofiAmt: number;
+  private gateNext: number;
+  /** deterministic pseudo-random state (note skips, detune jitter, drop-outs) */
+  private seed = 0x6d2b79f5;
 
   constructor(
     private readonly kit: Kit,
@@ -65,10 +109,16 @@ export class Player {
   ) {
     const ctx = kit.ctx;
     this.song = song;
+    this.ord = song.order;
+    this.loopTo = song.loopTo;
     this.spb = 60 / song.def.bpm;
     this.barSec = this.spb * song.bpb;
     this.secStart = start;
+    this.gateNext = start;
     this.lastNow = start;
+    const dg = song.def.degrade;
+    this.lofiAmt = Math.max(0, Math.min(1, dg?.lofi ?? 1));
+    if (dg?.auto) this.auto = dg.auto.map(([bars, v]) => ({ t: start + bars * this.barSec, v })).sort((a, b) => a.t - b.t);
     this.target = this.smooth = intensity;
     const vol = song.def.vol ?? 1;
     const mk = (dest: AudioNode, g: number) => {
@@ -80,9 +130,16 @@ export class Player {
       n.connect(dest);
       return n;
     };
-    this.dry = mk(dests.dry, vol);
-    this.rev = mk(dests.rev, vol);
-    this.dly = mk(dests.dly, vol);
+    if (dg) {
+      this.lofi = this.buildLofi(dests, start);
+      this.dry = mk(this.lofi.hp, vol);
+      this.rev = mk(this.lofi.revCut, vol);
+      this.dly = mk(this.lofi.dlyCut, vol);
+    } else {
+      this.dry = mk(dests.dry, vol);
+      this.rev = mk(dests.rev, vol);
+      this.dly = mk(dests.dly, vol);
+    }
     const layered = !!song.def.layered;
     for (const c of song.def.channels) {
       const input = ctx.createGain();
@@ -126,6 +183,144 @@ export class Player {
     this.target = Math.max(0, Math.min(1, x));
   }
 
+  /** Debug / mix analysis: scale one channel's level (0 = mute). Not used by the game. */
+  setChannelGain(id: string, g: number): void {
+    const i = this.song.def.channels.findIndex((c) => c.id === id);
+    const c = this.chans[i];
+    if (c) c.input.gain.value = (this.song.def.channels[i].vol ?? 1) * Math.max(0, g);
+  }
+
+  /** Channel ids of this song (debug / mix analysis). */
+  get channelIds(): string[] {
+    return this.song.def.channels.map((c) => c.id);
+  }
+
+  /** Budget cuts 0..1 (songs with `degrade` only): lands on the next bar line; ends auto mode. */
+  setDegrade(x: number, now: number): void {
+    if (!this.song.def.degrade) return;
+    this.manual = true;
+    this.applyDegrade(x, this.nextBar(Math.max(now, this.secStart) + 0.2));
+  }
+
+  /** The degrade value in effect at time t. */
+  degAt(t: number): number {
+    const st = this.degSteps;
+    for (let i = st.length - 1; i >= 0; i--) if (st[i].t <= t + 1e-4) return st[i].v;
+    return 0;
+  }
+
+  private rnd(): number {
+    this.seed = (Math.imul(this.seed, 1664525) + 1013904223) >>> 0;
+    return this.seed / 4294967296;
+  }
+
+  private tierFor(x: number): number {
+    let k = 0;
+    this.song.tiers.forEach((t, i) => {
+      if (x >= t.at - 1e-6) k = i + 1;
+    });
+    return k;
+  }
+
+  private applyDegrade(x: number, at: number): void {
+    x = Math.max(0, Math.min(1, Number.isFinite(x) ? x : 0));
+    if (Math.abs(x - this.degLast) < 1e-4) return;
+    this.degLast = x;
+    // keep the list short: drop steps superseded before `at`
+    while (this.degSteps.length > 1 && this.degSteps[1].t <= at - 2) this.degSteps.shift();
+    while (this.degSteps.length && this.degSteps[this.degSteps.length - 1].t >= at - 1e-4) this.degSteps.pop();
+    this.degSteps.push({ t: at, v: x });
+    const tier = this.tierFor(x);
+    if (tier !== (this.pend?.tier ?? this.tier)) this.pend = tier === this.tier ? null : { at, tier };
+    this.lofiAt(x * this.lofiAmt, at);
+  }
+
+  private buildLofi(dests: MusicDests, start: number): Lofi {
+    const ctx = this.kit.ctx;
+    const nyq = ctx.sampleRate * 0.45;
+    const hp = ctx.createBiquadFilter();
+    hp.type = "highpass";
+    hp.frequency.value = 25;
+    hp.Q.value = 0.7;
+    const lp = ctx.createBiquadFilter();
+    lp.type = "lowpass";
+    lp.frequency.value = Math.min(18000, nyq);
+    lp.Q.value = 0.9;
+    const clean = ctx.createGain();
+    const crushWs = ctx.createWaveShaper();
+    crushWs.curve = curve(this.kit, "lofi");
+    const crush = ctx.createGain();
+    crush.gain.value = 0;
+    const wow = ctx.createDelay(0.05);
+    wow.delayTime.value = WOW_BASE;
+    const gate = ctx.createGain();
+    const revCut = ctx.createGain();
+    const dlyCut = ctx.createGain();
+    hp.connect(lp);
+    lp.connect(clean).connect(wow);
+    lp.connect(crushWs).connect(crush).connect(wow);
+    wow.connect(gate).connect(dests.dry);
+    revCut.connect(dests.rev);
+    dlyCut.connect(dests.dly);
+    // tape wow (slow) + flutter (fast) modulate the delay time = pitch warble
+    const lfos: OscillatorNode[] = [];
+    const mod = (rate: number): GainNode => {
+      const o = ctx.createOscillator();
+      o.frequency.value = rate;
+      const g = ctx.createGain();
+      g.gain.value = 0;
+      o.connect(g).connect(wow.delayTime);
+      o.start(start);
+      lfos.push(o);
+      return g;
+    };
+    const wowDepth = mod(0.55);
+    const flutDepth = mod(6.3);
+    return { hp, lp, clean, crush, wow, wowDepth, flutDepth, gate, revCut, dlyCut, lfos, nodes: [hp, lp, clean, crushWs, crush, wow, wowDepth, flutDepth, gate, revCut, dlyCut] };
+  }
+
+  /** Lo-fi chain targets for amount k (0..1) from time `at`. */
+  private lofiAt(k: number, at: number): void {
+    const L = this.lofi;
+    if (!L) return;
+    const nyq = this.kit.ctx.sampleRate * 0.45;
+    const set = (p: AudioParam, v: number, tc = 0.03) => {
+      p.cancelScheduledValues(at);
+      p.setTargetAtTime(v, at, tc);
+    };
+    set(L.lp.frequency, Math.min(nyq, 18000 * Math.pow(2600 / 18000, k)));
+    set(L.hp.frequency, 25 + 380 * k * k);
+    const cr = k < 0.5 ? 0 : (k - 0.5) * 0.8;
+    set(L.crush.gain, cr);
+    set(L.clean.gain, 1 - cr * 0.6);
+    set(L.wowDepth.gain, 0.0042 * k * k, 0.4);
+    set(L.flutDepth.gain, 0.00016 * k, 0.4);
+    set(L.revCut.gain, 1 - 0.75 * k, 0.1);
+    set(L.dlyCut.gain, 1 - 0.8 * k, 0.1);
+  }
+
+  /** Rushed-ending drop-outs: a few short gaps per bar while the lo-fi amount is near 1. */
+  private gates(h: number): void {
+    const L = this.lofi;
+    if (!L) return;
+    while (this.gateNext < h + 0.3) {
+      const t = this.gateNext;
+      this.gateNext += this.barSec;
+      if (this.degAt(t) * this.lofiAmt < 0.85) continue;
+      const g = L.gate.gain;
+      const step = this.spb / 2;
+      for (let k = 1; k < 8; k++) {
+        if (this.rnd() > 0.1) continue;
+        const a = t + k * step;
+        const b = a + step * (this.rnd() < 0.5 ? 0.5 : 1);
+        g.setValueAtTime(1, a);
+        g.linearRampToValueAtTime(0.0, a + 0.006);
+        g.setValueAtTime(0.0, b - 0.006);
+        g.linearRampToValueAtTime(1, b);
+      }
+    }
+  }
+
   /** Fade everything out over `sec` and stop scheduling afterwards. */
   fadeOut(now: number, sec: number): void {
     const end = now + Math.max(0.02, sec);
@@ -138,7 +333,7 @@ export class Player {
   }
 
   private section(): CSection | null {
-    return this.song.order[this.oi] ?? null;
+    return this.ord[this.oi] ?? null;
   }
 
   private nextBar(t: number): number {
@@ -182,6 +377,12 @@ export class Player {
     if (this.finished) return;
     this.updateLayers(now);
     const h = Math.min(horizon, this.stopAt);
+    while (!this.manual && this.ai < this.auto.length && this.auto[this.ai].t < h + 0.25) {
+      const s = this.auto[this.ai++];
+      this.applyDegrade(s.v, s.t);
+    }
+    this.gates(h);
+    const chDefs = this.song.def.channels;
     for (let guard = 0; guard < 64; guard++) {
       const sec = this.section();
       if (!sec) {
@@ -190,34 +391,62 @@ export class Player {
         return;
       }
       const ev = sec.ev;
+      const p = this.pend;
       while (this.ei < ev.length) {
         const e = ev[this.ei];
         const at = this.secStart + e.t * this.spb;
+        if (p && at >= p.at - 1e-4) break; // the arrangement switches first
         if (at >= h) return;
         this.ei++;
         if (at < now - 0.03) continue; // fell behind (stalled thread): skip, never burst
         const c = this.chans[e.ch];
         if (c.on ? at < c.since - 1e-4 : at >= c.offAt) continue;
+        const dr = chDefs[e.ch].deg;
+        if (dr) {
+          const x = this.degAt(at);
+          if (x < dr[0] - 1e-6 || x >= dr[1] - 1e-6) continue;
+        }
         this.play(e.ch, e.m, e.d, at, e.dur * this.spb, e.v, c);
       }
       const end = this.secStart + sec.beats * this.spb;
+      if (p && p.at < end - 1e-4) {
+        // budget cuts: the new arrangement starts at the switch bar
+        if (p.at >= h) return;
+        this.pend = null;
+        this.tier = p.tier;
+        const t = p.tier > 0 ? this.song.tiers[p.tier - 1] : null;
+        this.ord = t ? t.order : this.song.order;
+        this.loopTo = t ? t.loopTo : this.song.loopTo;
+        this.oi = 0;
+        this.ei = 0;
+        this.secStart = p.at;
+        continue;
+      }
       if (end >= h) return;
       this.secStart = end;
       this.ei = 0;
       this.oi++;
-      if (this.oi >= this.song.order.length) {
-        if (this.song.loopTo < 0) {
+      if (this.oi >= this.ord.length) {
+        if (this.loopTo < 0) {
           this.finished = true;
           this.doneAt = end;
           return;
         }
-        this.oi = this.song.loopTo;
+        this.oi = this.loopTo;
       }
     }
   }
 
   private play(ch: number, m: number, d: string | undefined, at: number, len: number, vel: number, c: Chan): void {
     const def = this.song.def.channels[ch];
+    if (this.lofi && !d) {
+      // budget cuts: everything drifts flat and out of tune; near 1 some notes simply don't get animated
+      const k = this.degAt(at) * this.lofiAmt;
+      if (k > 0) {
+        if (k >= 0.85 && this.rnd() < 0.12) return;
+        m += -0.3 * k + (this.rnd() - 0.5) * 0.32 * k;
+      }
+    }
     const v = new Voice(this.kit, c.input, at);
     if (d) DRUM[d as keyof typeof DRUM]?.(v, vel, len);
     else INST[def.inst]?.(v, m, len, vel);
@@ -229,6 +458,18 @@ export class Player {
   }
 
   dispose(): void {
+    if (this.lofi) {
+      for (const o of this.lofi.lfos) {
+        try {
+          o.stop();
+        } catch {
+          /* already stopped */
+        }
+        o.disconnect();
+      }
+      for (const n of this.lofi.nodes) n.disconnect();
+      this.lofi = null;
+    }
     for (const c of this.chans) for (const n of c.nodes) n.disconnect();
     this.dry.disconnect();
     this.rev.disconnect();

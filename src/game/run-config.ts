@@ -133,6 +133,11 @@ export interface RunStats {
   gemFind?: number;
   /** Final Stats.curse. */
   curse?: number;
+  /**
+   * Final Stats.greed (coin multiplier). Coins picked up in the run already
+   * include it; src/meta applies it to the end-of-run coin bonuses too.
+   */
+  greed?: number;
   /** Run time (s) of the first dash, -1 = never dashed ("survive 3:00 without dashing"). */
   firstDashAt?: number;
   /** Longest stretch (s) in which no weapon dealt damage ("Pacifist?"). */

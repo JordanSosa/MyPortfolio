@@ -4,6 +4,9 @@
  * elements by the `[data-nav]` attribute inside a root element; arrows /
  * d-pad / stick move focus spatially, confirm clicks, back calls onBack.
  * The focus ring is only shown while navigating with keys/gamepad.
+ * Default focus: `[data-nav-default]`, else the first item outside
+ * `[data-nav-chrome]` (shared headers), else the first item. Items inside an
+ * `[inert]` subtree (a hub page sliding away) never take focus.
  */
 import type { Input } from "../core/input";
 
@@ -46,7 +49,8 @@ export class Nav {
   }
 
   private items(l: NavLayer): HTMLElement[] {
-    return Array.from(l.root.querySelectorAll<HTMLElement>("[data-nav]")).filter((e) => !e.hasAttribute("disabled") && e.offsetParent !== null);
+    // (inert = a hub page sliding out: still visible for 300 ms, but never focusable)
+    return Array.from(l.root.querySelectorAll<HTMLElement>("[data-nav]")).filter((e) => !e.hasAttribute("disabled") && e.offsetParent !== null && !e.closest("[inert]"));
   }
 
   /**
@@ -63,7 +67,10 @@ export class Nav {
   private ensureFocus(l: NavLayer): void {
     const items = this.items(l);
     if (!items.length) return;
-    if (!l.focus || !items.includes(l.focus)) this.setFocus(l, (items.find((e) => e.hasAttribute("data-nav-default")) ?? items[0]) as HTMLElement);
+    // the layer's default, else its first item outside shared chrome (the hub header's Back / settings: a
+    // gamepad A on a fresh page must not pop it), else the first item
+    if (!l.focus || !items.includes(l.focus))
+      this.setFocus(l, (items.find((e) => e.hasAttribute("data-nav-default")) ?? items.find((e) => !e.closest("[data-nav-chrome]")) ?? items[0]) as HTMLElement);
     else l.focus.classList.add("nav-focus");
   }
 
@@ -110,12 +117,13 @@ export class Nav {
         this.ensureFocus(l);
         return;
       }
-      if (l.focus) {
+      // a focus that went stale (its page slid away, a re-render) never clicks: refocus the default instead
+      if (l.focus && this.items(l).includes(l.focus)) {
         input.consume("confirm");
         input.consume("dash");
         input.consume("ult");
         l.focus.click();
-      }
+      } else this.ensureFocus(l);
       return;
     }
     if (input.pressed("back") && l.onBack) {

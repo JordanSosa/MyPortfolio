@@ -68,7 +68,8 @@ export function narratorLine(moment: keyof typeof NARRATOR | string, f: Fill): s
 }
 
 export function tip(): string {
-  return pick("tip", TIPS);
+  // (the bible's lines start with "Tip:"; the home footer already labels them TIP)
+  return pick("tip", TIPS).replace(/^Tip:\s*/i, "");
 }
 
 /** One tagline per boot. */

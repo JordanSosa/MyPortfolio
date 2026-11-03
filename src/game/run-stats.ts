@@ -51,6 +51,7 @@ export class RunStatsCollector {
       twistRanks: { ...w.twistRanks },
       gemFind: 1,
       curse: 0,
+      greed: 1,
       firstDashAt: -1,
       pacifistBest: 0,
       rerollsUsed: 0,
@@ -203,6 +204,7 @@ export class RunStatsCollector {
     s.gemFind = w.stats.gemFind;
     s.plotArmorSaves = w.plotArmorSaves;
     s.curse = w.stats.curse;
+    s.greed = w.stats.greed;
     s.outcome = w.phase === "victory" ? "victory" : w.phase === "dead" ? "dead" : "quit";
     s.killedBy = w.phase === "dead" ? w.killedBy : "";
     s.ultReadyAtDeath = w.phase === "dead" && w.ultMeter >= CFG.ultMax && !w.ult;

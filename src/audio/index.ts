@@ -214,6 +214,14 @@ class RealtimeAudio implements AudioAPI {
     this.engine?.setIntensity(x);
   }
 
+  setDegrade(x: number): void {
+    try {
+      this.engine?.setDegrade(x);
+    } catch {
+      /* ignore */
+    }
+  }
+
   setMuffled(on: boolean): void {
     this.muffled = on;
     try {

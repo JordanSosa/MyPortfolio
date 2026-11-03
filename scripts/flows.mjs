@@ -10,6 +10,16 @@
 //        -> WELCOME TO SEASON 2 dialog (refund + gift + Rin and Mochi) -> balances / unlocks / settings /
 //        records checked in `kko.save.v2` -> loadout shows Rin and Mochi playable -> settings screen
 //        shows the kept values; `kko.save.v1` is still there.
+// ENDLESS a progressed profile (Dream Meadow cleared): loadout -> Filler Arc toggle + a Plot Twist by tap ->
+//        START -> the final boss falls -> TO BE CONTINUED... JUST KIDDING (Filler Arc) -> die -> Episode
+//        Results ("SERIES FINALE?!", Filler Arc line, heat line) -> the clear, endless record, heat and banner
+//        rotation are banked.
+// NAV    Android Back (history) in every state: a sheet over the loadout, hub pages, the episode card
+//        (pause opens after GO!), in-run pause / resume, level-up / game over (ignored), Results -> hub, and
+//        at the hub home Back leaves the page.
+// KEYS   (desktop) keyboard only: splash -> home -> episodes -> loadout -> run -> pause / resume -> level-up
+//        -> game over -> Results -> UPGRADE -> Training Arc -> Escape back home; the default focus is
+//        checked on every screen.
 // Every step is checked against the stored profile (localStorage) and screenshotted to
 // <out>/<device>-<flow>-<n>-<step>.png. Exit 1 on any failed check, page error or console.error.
 import { parseArgs, startServer, launchBrowser, ensureDir } from "./lib.mjs";
@@ -28,7 +38,7 @@ const { devices } = pw;
 const args = parseArgs();
 const outDir = args.out && args.out !== true ? args.out : "shots/flows";
 const only = args.only && args.only !== true ? String(args.only).split(",") : ["portrait", "desktop", "landscape"];
-const flows = args.flow && args.flow !== true ? String(args.flow).split(",") : ["fresh", "v1"];
+const flows = args.flow && args.flow !== true ? String(args.flow).split(",") : ["fresh", "v1", "endless", "nav", "keys"];
 const strip = (d) => {
   const c = { ...d };
   delete c.defaultBrowserType;
@@ -55,6 +65,19 @@ const V1 = {
 };
 /** Old Dream Shop refund for V1.meta (frozen v1 prices: round(base x 1.6^rank / 5) x 5). */
 const V1_REFUND = 60 + 95 + 50 + 70 + 100; // might 60 + 95, vitality 50, greed 70, reroll 100
+/** A save v2 profile that cleared Dream Meadow once (Plot Twists and the Filler Arc are open). */
+const CLEARED = {
+  version: 2,
+  currencies: { coins: 900, gems: 200, copium: 0 },
+  unlocks: { heroes: ["hoshi", "rin", "mochi"], weapons: [], passives: [], stages: ["dream_meadow"], twists: ["budget_cuts", "filler_overload", "rushed_production", "censored", "cliffhanger", "power_creep"], relicSlots: 0 },
+  heroes: { hoshi: { xp: 2400, level: 1, talents: {}, constellation: 0, runs: 7, clears: 1, kills: 30000, time: 2600, bestTime: 640, talentRespecs: 0 } },
+  loadout: { stage: "dream_meadow", hero: "hoshi", relics: [], twists: {}, endless: false, startWeapon: null },
+  records: { dream_meadow: { runs: 7, clears: 1, bestTime: 640, bestHeat: 0, bestEndless: 0, bestKills: 26000, bestLevel: 58, bestCombo: 900, firstClear: 7 } },
+  lifetime: { runs: 7, clears: 1, deaths: 6, time: 2600, kills: 30000, bossKills: { king_puff: 5, nightmare_teddy: 2, lady_lunatic: 1 } },
+  codex: { heroes: ["hoshi"], stages: ["dream_meadow"], enemies: [], bosses: ["king_puff", "nightmare_teddy", "lady_lunatic"], weapons: ["star_shot"], passives: [], relics: [] },
+  flags: { s2Welcome: 1 },
+  settings: { master: 0.8, music: 0.7, sfx: 0.85, shake: 1, reduceFlashing: false, damageNumbers: true, quality: "auto", haptics: true, showFps: false },
+};
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 let failed = false;
@@ -78,9 +101,19 @@ async function waitFor(page, fn, arg, timeout = 20000, label = "condition") {
 
 for (const dev of DEVICES) {
   for (const flow of flows) {
+    if (flow === "keys" && dev.mobile) continue;
     const rec = { device: dev.name, flow, steps: [], shots: [], notes: [] };
     report.push(rec);
     const context = await browser.newContext(dev.ctx);
+    if (flow === "endless") {
+      await context.addInitScript((seed) => {
+        try {
+          if (!localStorage.getItem("kko.save.v2")) localStorage.setItem("kko.save.v2", JSON.stringify(seed));
+        } catch {
+          /* ignore */
+        }
+      }, CLEARED);
+    }
     if (flow === "v1") {
       // seed the v1 save before the app's first boot only (later reloads keep the migrated v2 profile)
       await context.addInitScript((v1) => {
@@ -103,6 +136,24 @@ for (const dev of DEVICES) {
       ensureDir(file);
       await page.screenshot({ path: file });
       rec.shots.push(file);
+      // layout: no horizontal page overflow; no button cut off at the screen edge (scrolling strips / the board excepted)
+      const ov = await page
+        .evaluate(() => {
+          const vw = window.innerWidth;
+          const doc = (document.scrollingElement?.scrollWidth ?? 0) > vw + 1;
+          const cut = [];
+          for (const b of document.querySelectorAll("button")) {
+            if (b.offsetParent === null || b.closest(".kscroll-x, .season-strip, .tabbar, .kvp, .levelup, .hud, .touch, [inert], .out, .p-out-l, .p-out-r")) continue;
+            const r = b.getBoundingClientRect();
+            if (r.width > 0 && (r.left < -1 || r.right > vw + 1)) cut.push(`${b.dataset.act ?? b.className.split(" ")[0]}@${Math.round(r.left)}..${Math.round(r.right)}`);
+          }
+          return { doc, cut: cut.slice(0, 6) };
+        })
+        .catch(() => ({ doc: false, cut: [] }));
+      if (ov.doc || ov.cut.length) {
+        rec.notes.push(`LAYOUT ${name}: ${ov.doc ? "page overflows horizontally; " : ""}${ov.cut.join(" ")}`);
+        failed = true;
+      }
     };
     const step = async (name, fn) => {
       const t0 = Date.now();
@@ -128,6 +179,22 @@ for (const dev of DEVICES) {
       else await loc.click({ timeout, force });
     };
     const profile = () => page.evaluate(() => JSON.parse(localStorage.getItem("kko.save.v2") || "null"));
+    /**
+     * Tap until `cond` holds: modal buttons ignore taps for their first 0.5 s of FRAME time (ghost-tap guard),
+     * and headless SwiftShader runs a few frames per second, so one early tap can be dropped on purpose.
+     */
+    const tapUntil = async (sel, cond, label, tries = 6) => {
+      for (let i = 0; i < tries; i++) {
+        await tap(sel).catch(() => {});
+        try {
+          await waitFor(page, cond, null, 3000, label);
+          return;
+        } catch {
+          /* tap again */
+        }
+      }
+      throw new Error(`timeout waiting for ${label}`);
+    };
     const waitPage = (id) =>
       waitFor(page, (x) => window.__kk?.screen === "hub" && document.querySelector(".hub")?.dataset.page === x && !document.querySelector(".hpage.p-in-r, .hpage.p-in-l"), id, 15000, `hub page ${id}`);
     /** Close unlock celebrations / dialogs (Later) until nothing shows for 1.5 s. */
@@ -277,8 +344,7 @@ for (const dev of DEVICES) {
           await shot("tbc");
         });
         await step("RESULTS: payout banked once", async () => {
-          await tap('.modal [data-act="results"]');
-          await waitFor(page, () => window.__kk.screen === "results", null, 15000, "results screen");
+          await tapUntil('.modal [data-act="results"]', () => window.__kk.screen === "results", "results screen");
           await sleep(800);
           // tap the show to skip to the end state
           const vp = page.viewportSize();
@@ -294,6 +360,9 @@ for (const dev of DEVICES) {
           check(tot > 0 && p1.currencies.coins === tot, `coins = payout (${p1.currencies.coins} vs ${tot})`);
           check(p1.heroes.hoshi && p1.heroes.hoshi.xp > 0, "hero XP banked");
           check(p1.records.dream_meadow && p1.records.dream_meadow.runs === 1, "stage record banked");
+          check(p1.rotation.runsLeft === 2, `banner rotation advanced once (runsLeft ${p1.rotation.runsLeft})`);
+          check(Object.keys(p1.achievements.progress).length + Object.keys(p1.achievements.done).length > 0, "Plot Points evaluated");
+          check(!(await page.evaluate(() => !!document.querySelector(".er-practice"))), "an account run is not a practice run");
           check(p1.codex.heroes.includes("hoshi") && p1.codex.stages.includes("dream_meadow"), "codex discoveries");
           check(Object.keys(p1.mastery).length > 0, "weapon mastery banked");
           coinsAfter1 = p1.currencies.coins;
@@ -357,6 +426,7 @@ for (const dev of DEVICES) {
           await waitFor(page, () => window.__kk.screen === "results", null, 15000, "results after quit");
           const p = await profile();
           check(p.lifetime.runs === 2, `quit run banked (runs ${p.lifetime.runs})`);
+          check(p.rotation.runsLeft === 1, `banner rotation (runsLeft ${p.rotation.runsLeft})`);
           await sleep(600);
           await shot("results-quit");
           await tap('.results [data-act="hub"]');
@@ -365,7 +435,7 @@ for (const dev of DEVICES) {
           await dismiss();
           await shot("home-after");
         });
-      } else {
+      } else if (flow === "v1") {
         let pv;
         await step("v1 migrated: WELCOME TO SEASON 2", async () => {
           await waitFor(page, () => !!document.querySelector(".kdialog-wrap:not(.out) .welcome"), null, 15000, "welcome dialog");
@@ -435,6 +505,268 @@ for (const dev of DEVICES) {
           await sleep(1500);
           const p2 = await profile();
           check(p2.currencies.coins === pv.currencies.coins && p2.currencies.gems === pv.currencies.gems, "balances unchanged after reload (no double refund / gift)");
+        });
+      } else if (flow === "endless") {
+        await step("home (a profile that cleared Dream Meadow)", async () => {
+          await dismiss();
+          const p = await profile();
+          check(p.records.dream_meadow.clears === 1 && p.unlocks.twists.includes("budget_cuts"), "seeded clear + twists");
+        });
+        await step("loadout: Filler Arc on + Budget Cuts rank 1 (by tap)", async () => {
+          await tap('.home [data-act="play"]');
+          await waitPage("stages");
+          await tap(".ep-card.open");
+          await waitPage("loadout");
+          await sleep(500);
+          await tap('.loadout [data-act="endless"]');
+          await waitFor(page, () => JSON.parse(localStorage.getItem("kko.save.v2")).loadout.endless === true, null, 5000, "endless saved");
+          await tap('.loadout [data-act="tw+"][data-id="budget_cuts"]');
+          await waitFor(page, () => JSON.parse(localStorage.getItem("kko.save.v2")).loadout.twists.budget_cuts === 1, null, 5000, "twist saved");
+          await sleep(500);
+          const heat = await page.evaluate(() => document.querySelector(".heat-n b")?.textContent ?? "");
+          check(heat === "1", `heat meter shows 1 (got "${heat}")`);
+          await page.evaluate(() => document.querySelector(".lo-toggle")?.scrollIntoView({ block: "center" }));
+          await sleep(300);
+          await shot("loadout");
+        });
+        await step("START: the Filler Arc and the heat reach the run", async () => {
+          await tap('.loadout [data-act="go"]');
+          await waitFor(page, () => window.__kk.screen === "game" && window.__kk.world && window.__kk.world.t > 0.2, null, 30000, "run started");
+          const r = await page.evaluate(() => {
+            const w = window.__kk.world;
+            return { endless: w.run.endless, heat: w.heat, twists: w.twistIds.join(","), acct: !window.__kk.app.practice };
+          });
+          rec.notes.push(`run: ${JSON.stringify(r)}`);
+          check(r.endless === true && r.heat === 1 && r.twists === "budget_cuts" && r.acct, "endless + heat 1 + account run");
+        });
+        await step("the final boss falls -> TO BE CONTINUED... JUST KIDDING (Filler Arc)", async () => {
+          await page.evaluate(() => window.__kk.god(true));
+          await page.evaluate(() => window.__kk.skipTo(546));
+          await resolveModals();
+          for (let i = 0; i < 20; i++) {
+            if (await page.evaluate(() => window.__kk.world.boss?.def.id === "lady_lunatic" && !window.__kk.world.boss.dead)) break;
+            await page.evaluate(() => window.__kk.skipTo(window.__kk.world.t + 3));
+            await resolveModals();
+          }
+          check(await page.evaluate(() => window.__kk.world.boss?.def.id === "lady_lunatic"), "Lady Lunatic is on stage");
+          await page.evaluate(() => {
+            const w = window.__kk.world;
+            w.killEnemy(w.boss, null);
+          });
+          await waitFor(page, () => window.__kk.world.endlessOn === true, null, 40000, "Filler Arc started");
+          await sleep(2500);
+          await shot("filler-tbc");
+          await waitFor(page, () => window.__kk.world.t > window.__kk.world.endlessFrom + 4, null, 60000, "Filler Arc plays on");
+          await shot("filler-arc");
+        });
+        await step("Filler Arc -> die -> Results: SERIES FINALE?! + Filler Arc line", async () => {
+          await page.evaluate(() => window.__kk.skipTo(window.__kk.world.t + 25));
+          await resolveModals();
+          await page.evaluate(() => window.__kk.god(false));
+          await fightAndDie(0);
+          await tapUntil('.modal [data-act="results"]', () => window.__kk.screen === "results", "results screen");
+          await sleep(800);
+          await page.evaluate(() => document.querySelector(".er-scroll")?.dispatchEvent(new MouseEvent("click", { bubbles: true })));
+          await waitFor(page, () => !!document.querySelector(".ep-res.done"), null, 15000, "results done");
+          await dismiss();
+          const ui = await page.evaluate(() => ({
+            finale: document.querySelector(".er-finale")?.textContent?.replace(/\s+/g, " ").trim() ?? "",
+            lines: [...document.querySelectorAll(".pay-col.c-coins .pl .pl-l b")].map((b) => b.textContent),
+          }));
+          rec.notes.push(`results: ${ui.finale} | ${ui.lines.join(", ")}`);
+          check(/SERIES FINALE/.test(ui.finale), "SERIES FINALE?! stinger");
+          check(ui.lines.includes("Filler Arc bonus") && ui.lines.some((l) => /^Heat 1$/.test(l)), "Filler Arc + heat payout lines");
+          const p = await profile();
+          const r = p.records.dream_meadow;
+          rec.notes.push(`record: clears ${r.clears} bestEndless ${r.bestEndless.toFixed(1)} bestHeat ${r.bestHeat}; runs ${p.lifetime.runs}; rotation ${p.rotation.runsLeft}`);
+          check(r.clears === 2 && r.bestEndless > 20 && r.bestHeat === 1, "clear + endless record + heat banked");
+          check(p.lifetime.runs === 8 && p.rotation.runsLeft === 2, "run counted, rotation advanced");
+          await shot("results");
+          await tap('.results [data-act="hub"]');
+          await waitPage("home");
+        });
+      } else if (flow === "nav") {
+        await step("hub: Back closes a sheet, then pops pages", async () => {
+          await dismiss();
+          await tap('.home [data-act="play"]');
+          await waitPage("stages");
+          await tap(".ep-card.open");
+          await waitPage("loadout");
+          await sleep(500);
+          await tap('.rslot[data-act="slot"]');
+          await waitFor(page, () => !!document.querySelector(".ksheet-wrap:not(.out)"), null, 8000, "relic sheet");
+          await sleep(500);
+          await page.goBack();
+          await waitFor(page, () => !document.querySelector(".ksheet-wrap:not(.out)"), null, 8000, "sheet closed by Back");
+          check(await page.evaluate(() => document.querySelector(".hub")?.dataset.page === "loadout"), "still on the loadout");
+          await sleep(400);
+          await page.goBack();
+          await waitPage("stages");
+          await page.goBack();
+          await waitPage("home");
+          check(page.url().startsWith(url), "still in the app");
+        });
+        await step("episode card: Back during the stinger pauses right after GO!", async () => {
+          await tap('.home [data-act="play"]');
+          await waitPage("stages");
+          await tap(".ep-card.open");
+          await waitPage("loadout");
+          await tap('.loadout [data-act="go"]');
+          await waitFor(page, () => window.__kk.screen === "game" && !!document.querySelector(".ep-title"), null, 15000, "episode card");
+          await page.goBack();
+          await sleep(300);
+          check(await page.evaluate(() => window.__kk.modal === ""), "no pause over the episode card");
+          await waitFor(page, () => window.__kk.modal === "pause", null, 30000, "pause after GO!");
+          await sleep(500);
+          await shot("pause-after-card");
+        });
+        await step("in-run: Back resumes, pauses, resumes", async () => {
+          await page.goBack();
+          await waitFor(page, () => window.__kk.modal === "", null, 8000, "resumed");
+          await sleep(700);
+          await page.goBack();
+          await waitFor(page, () => window.__kk.modal === "pause", null, 8000, "Back pauses");
+          await sleep(500);
+          await page.goBack();
+          await waitFor(page, () => window.__kk.modal === "", null, 8000, "Back resumes");
+          check(page.url().startsWith(url), "still in the app");
+        });
+        await step("level-up: Back is ignored (a card is required)", async () => {
+          await page.evaluate(() => window.__kk.levelUp());
+          await waitFor(page, () => window.__kk.modal === "levelup", null, 20000, "level-up");
+          await sleep(700);
+          await page.goBack();
+          await sleep(900);
+          check(await page.evaluate(() => window.__kk.modal === "levelup"), "level-up still open");
+          check(page.url().startsWith(url), "still in the app");
+          await tap(".levelup .card");
+          await waitFor(page, () => window.__kk.modal === "", null, 8000, "card picked");
+        });
+        await step("game over: Back is ignored; Results: Back goes to the hub", async () => {
+          await fightAndDie(0);
+          await page.goBack();
+          await sleep(900);
+          check(await page.evaluate(() => window.__kk.modal === "over"), "game over still open");
+          await tapUntil('.modal [data-act="results"]', () => window.__kk.screen === "results", "results");
+          await sleep(900);
+          await page.goBack();
+          for (let i = 0; i < 8 && !(await page.evaluate(() => window.__kk.screen === "hub")); i++) {
+            await sleep(600);
+            // (an unlock celebration the Back brought forward closes first)
+            if (await page.evaluate(() => !!document.querySelector(".unlock-cele:not(.out)"))) await page.goBack();
+          }
+          await waitPage("home");
+          const p = await profile();
+          check(p.lifetime.runs === 1, `the run was banked once (runs ${p.lifetime.runs})`);
+        });
+        await step("hub home: Back leaves the page", async () => {
+          await dismiss();
+          await sleep(500);
+          await page.goBack().catch(() => {});
+          await sleep(1200);
+          check(!page.url().startsWith(url), `left the app (url ${page.url()})`);
+        });
+      } else if (flow === "keys") {
+        const focused = () =>
+          page.evaluate(() => {
+            const f = document.querySelector(".nav-focus");
+            return f ? f.dataset.act ?? f.dataset.id ?? "" : "";
+          });
+        // (headless SwiftShader draws the hub at a few frames per second: a key edge is read on the App's next
+        // frame, so wait for frames to pass before the next key, or presses pile up into one frame)
+        const frames = (n = 3) => page.evaluate((k) => new Promise((r) => { const f = (i) => (i <= 0 ? r() : requestAnimationFrame(() => f(i - 1))); f(k); }), n);
+        const key = async (k, wait = 260) => {
+          await page.keyboard.press(k);
+          await frames();
+          await sleep(wait);
+        };
+        const expectFocus = async (act, where) => {
+          let f = "";
+          for (let i = 0; i < 15 && f !== act; i++) {
+            f = await focused();
+            if (f !== act) await sleep(200);
+          }
+          check(f === act, `${where}: default focus "${act}" (got "${f}")`);
+        };
+        await step("every hub page takes the keyboard focus on itself (never on a page sliding away)", async () => {
+          await dismiss();
+          await key("ArrowDown"); // keyboard mode on: the ring shows on home's default (PLAY), and stays on it
+          for (const id of ["board", "heroes", "gacha", "wiki", "stages"]) {
+            await page.evaluate((x) => document.querySelector(`.home [data-act="${x === "stages" ? "play" : x}"]`)?.click(), id);
+            await waitPage(id);
+            await key("ArrowDown", 350);
+            const f = await page.evaluate((x) => {
+              const el = document.querySelector(".nav-focus");
+              if (!el) return "none";
+              const r = el.getBoundingClientRect();
+              // (the first focus lands on the page itself, never on the header's Back: a gamepad A must not pop it)
+              const inPage = !!el.closest(`.hub[data-page="${x}"] .hpage:not([hidden]):not([inert])`);
+              const onScreen = r.bottom > 0 && r.top < innerHeight && r.right > 0 && r.left < innerWidth;
+              return inPage && onScreen ? "ok" : `${el.dataset.act ?? el.className} (in page ${inPage}, on screen ${onScreen})`;
+            }, id);
+            check(f === "ok", `${id}: focus ${f}`);
+            await key("Escape", 500);
+            await waitPage("home");
+            await sleep(300);
+          }
+        });
+        await step("home -> episodes -> loadout -> START with Enter only", async () => {
+          await dismiss();
+          if (!(await focused())) await key("ArrowDown"); // the first arrow shows the ring on the default
+          await expectFocus("play", "home (focus kept on PLAY after every page popped)");
+          await key("Enter", 500);
+          await waitPage("stages");
+          await expectFocus("ep", "episodes");
+          await key("Enter", 500);
+          await waitPage("loadout");
+          await expectFocus("go", "loadout");
+          await shot("loadout-focus");
+          await key("Enter");
+          await waitFor(page, () => window.__kk.screen === "game" && window.__kk.world && window.__kk.world.t > 0.3, null, 30000, "run started by Enter");
+        });
+        await step("in-run: Escape pauses (RESUME focused), Escape resumes; arrows steer", async () => {
+          await page.keyboard.down("ArrowRight");
+          await sleep(900);
+          await page.keyboard.up("ArrowRight");
+          const moved = await page.evaluate(() => window.__kk.world.player.x);
+          check(moved > 1, `arrows move the hero (x ${moved.toFixed(1)})`);
+          await key("Escape", 600);
+          await waitFor(page, () => window.__kk.modal === "pause", null, 8000, "pause");
+          await expectFocus("resume", "pause");
+          await key("Escape", 600);
+          await waitFor(page, () => window.__kk.modal === "", null, 8000, "resumed");
+        });
+        await step("level-up: Enter picks the focused card", async () => {
+          await page.evaluate(() => window.__kk.levelUp());
+          await waitFor(page, () => window.__kk.modal === "levelup", null, 20000, "level-up");
+          await sleep(900);
+          const lv = await page.evaluate(() => window.__kk.world.buildVersion);
+          await key("ArrowRight");
+          await key("Enter", 600);
+          await waitFor(page, () => window.__kk.modal === "", null, 8000, "card picked by Enter");
+          check((await page.evaluate(() => window.__kk.world.buildVersion)) !== lv, "the build changed");
+        });
+        await step("game over -> RESULTS -> UPGRADE -> Training Arc -> Escape home, by keys", async () => {
+          await fightAndDie(20);
+          await expectFocus("retry", "game over");
+          await key("ArrowRight");
+          check((await focused()) === "results", `RESULTS reachable (focus "${await focused()}")`);
+          await key("Enter", 800);
+          await waitFor(page, () => window.__kk.screen === "results", null, 15000, "results");
+          await sleep(600);
+          await key("ArrowDown");
+          await dismiss();
+          const p = await profile();
+          const def = p.currencies.coins >= 25 ? "upgrade" : "retry";
+          await expectFocus(def, "results");
+          if (def === "upgrade") {
+            await key("Enter", 800);
+            await waitPage("board");
+            await sleep(600);
+            await shot("board-keys");
+            await key("Escape", 800);
+            await waitPage("home");
+          }
         });
       }
     } catch {

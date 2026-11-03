@@ -75,6 +75,9 @@ export interface Payout {
   gems: PayoutPart;
 }
 
+/** 12,361 (payout detail lines; locale-independent so results read the same everywhere). */
+const grouped = (n: number): string => String(Math.max(0, Math.floor(n))).replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+
 const fmtMin = (sec: number): string => {
   const s = Math.max(0, Math.floor(sec));
   return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")}`;
@@ -88,6 +91,14 @@ class Ledger {
     const a = Math.max(0, Math.round(amount));
     if (a <= 0) return;
     this.lines.push({ id, label, amount: a, detail });
+    this.total += a;
+  }
+  /** A multiplier on part of the running total (`base`): adds base x (m - 1), shown as "xm". */
+  scale(id: string, label: string, base: number, m: number, detail?: string): void {
+    if (!(m > 0) || Math.abs(m - 1) < 1e-9 || base <= 0) return;
+    const a = Math.round(base * (m - 1));
+    if (a === 0 || this.total + a < 0) return;
+    this.lines.push({ id, label, amount: a, mul: Math.round(m * 100) / 100, detail });
     this.total += a;
   }
   mul(id: string, label: string, m: number, detail?: string): void {
@@ -137,13 +148,16 @@ export function computePayout(inp: PayoutInput): Payout {
   const c = new Ledger();
   c.add("picked", "Coins picked up", s.coins);
   c.add("time", "Time bonus", (s.time / 60) * P.coinsPerMinute, `${fmtMin(s.time)} survived`);
-  c.add("kills", "Kill bonus", kills * P.coinsPerKill + s.eliteKills * P.coinsPerElite, `${kills} kills${s.eliteKills ? `, ${s.eliteKills} elites` : ""}`);
+  c.add("kills", "Kill bonus", kills * P.coinsPerKill + s.eliteKills * P.coinsPerElite, `${grouped(kills)} kill${kills === 1 ? "" : "s"}${s.eliteKills ? `, ${grouped(s.eliteKills)} elite${s.eliteKills === 1 ? "" : "s"}` : ""}`);
   for (let i = 0; i < s.bossKills.length; i++) {
     const b = s.bossKills[i];
     c.add(`boss:${b}:${i}`, name(b), bossCoins(inp.stage, b), b === final ? "Final boss" : "Boss");
   }
   if (s.stageCleared) c.add("clear", "Stage clear", P.clearCoins, inp.stage?.name);
   if (s.endlessTime > 0) c.add("endless", "Filler Arc bonus", (s.endlessTime / 60) * P.endlessCoinsPerMinute, `${fmtMin(s.endlessTime)} of filler`);
+  // greed (board / passives / relics): the coins picked up already include it, the bonuses get it here
+  const picked = c.lines.length && c.lines[0].id === "picked" ? c.lines[0].amount : 0;
+  c.scale("greed", "Greed", c.total - picked, Math.max(1, s.greed ?? 1), "Coin bonuses");
   c.mul("grade", `Rank ${inp.grade}`, gradeMul(inp.grade));
   c.mul("heat", `Heat ${s.heat}`, heatMul(s.heat, P.heatCoinPer), "Plot Twists");
   c.mul("curse", "Curse", heatMul(curse, P.curseRewardPer), "More enemies, more rewards");

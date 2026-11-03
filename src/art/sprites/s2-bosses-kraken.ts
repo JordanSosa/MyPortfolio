@@ -11,7 +11,7 @@
  * hat with a navy ribbon, 6 stubby curled tentacles. Docs: enemies.md §5.5.
  */
 import type { SpriteDef } from "../format";
-import { Pix, ball, capsule, gridSprite, hash2, layer, range, sparkle, strand } from "./s2-bosses-util";
+import { Pix, ball, gridSprite, hash2, layer, range, sparkle, strand } from "./s2-bosses-util";
 
 type P2 = [number, number];
 /** local coral ramp (shadows lean magenta, lights lean peach) */
@@ -136,13 +136,19 @@ function body(f: number, o: { dy: number; puff: number; face: Face["kind"]; tPha
     // lighter spots (bath-toy freckles), more on the lit side
     const spots: [number, number, number][] = [
       [cx - 12, cy - 9, 2.6],
-      [cx - 5, cy - 14, 1.8],
-      [cx - 17, cy - 1, 1.6],
-      [cx + 10, cy - 13, 1.5],
-      [cx + 16, cy - 6, 1.3],
-      [cx - 8, cy - 4, 1.2],
+      [cx - 4, cy - 15, 1.8],
+      [cx - 18, cy - 1, 1.7],
+      [cx + 11, cy - 13, 1.9],
+      [cx + 18, cy - 4, 1.5],
+      [cx - 7, cy - 5, 1.3],
+      [cx + 4, cy - 9, 1.1],
     ];
-    for (const [sx, sy, r] of spots) l.ellipse(sx, sy, r, r * 0.9, (x, y) => (l.get(x, y) === "4" ? "5" : l.get(x, y) === "." ? null : "7"));
+    // each spot is one ramp step off its surroundings so it reads on the bright highlight too
+    const SPOT: Record<string, string> = { "4": "5", "5": "6", "6": "7", "7": "6", "8": "6" };
+    for (const [sx, sy, r] of spots) {
+      const src = l.clone();
+      l.ellipse(sx, sy, r, r * 0.9, (x, y) => SPOT[src.get(x, y)] ?? null);
+    }
   });
   // face (turned slightly right)
   const fx = cx + 3;
@@ -168,9 +174,9 @@ function body(f: number, o: { dy: number; puff: number; face: Face["kind"]; tPha
     p.put(`
 .111.
 1I0I1
-1000 1
+10001
 .111.
-`.replace(" ", "1"), fx - 2, fy + 7);
+`, fx - 2, fy + 7);
     p.set(fx, fy + 11, "I").set(fx, fy + 12, "2").set(fx + 1, fy + 11, "I");
   } else if (o.face === "rise") {
     p.put(`

@@ -263,7 +263,8 @@ for (let di = 0; di < DEVICES.length; di++) {
     if (!mobile)
       await step("keyboard: arrows + Enter open a page, Escape pops it", async () => {
         await page.keyboard.press("ArrowDown"); // first arrow: shows the focus ring on the default (PLAY)
-        await sleep(250);
+        // (the key edge is read on the App's next frame: headless SwiftShader may take a while to draw one)
+        await waitFor(page, () => !!document.querySelector(".nav-focus"), null, 8000, "focus ring").catch(() => {});
         const f = await page.evaluate(() => document.querySelector(".nav-focus")?.dataset.act ?? "");
         if (f !== "play") throw new Error(`default focus is "${f}", expected PLAY`);
         await page.keyboard.press("Enter");

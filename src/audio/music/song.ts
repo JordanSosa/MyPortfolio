@@ -21,11 +21,20 @@
  * Drum lines (one per drum voice): x hit, X accent, o ghost, . rest. A bar without
  * spaces is split per character ("x...x...x...x...").
  * Chords line: chord symbols with the same bar division (`Am F | C G`), `-` ties.
+ *
+ * DEGRADE ("budget cuts", Season 2 `cancel`): a song with `degrade` reacts to
+ * Engine.setDegrade(0..1). Its `tiers` swap the whole arrangement (each tier has
+ * its own order) on the next bar line once the value reaches the tier's `at`;
+ * channels with `deg: [lo, hi]` only play while lo <= degrade < hi; and the
+ * player's lo-fi chain (telephone band, bitcrush, tape wow, detune, drop-outs)
+ * follows the value continuously (see player.ts).
  */
 import { bassNote, parseChord, parseNote, voice, type Chord } from "./theory";
 
 export type DrumId =
-  | "k" | "s" | "cl" | "h" | "o" | "c" | "rim" | "shk" | "tl" | "tm" | "th" | "up" | "sn" | "sub" | "tamb" | "zap";
+  | "k" | "s" | "cl" | "h" | "o" | "c" | "rim" | "shk" | "tl" | "tm" | "th" | "up" | "sn" | "sub" | "tamb" | "zap"
+  // Season 2: taiko "don", woodblock / taiko rim "ka", cheap preset-organ kick, vinyl crackle, cowbell, timpani
+  | "tk" | "wb" | "bk" | "vin" | "cow" | "tim";
 
 export type DrumPat = Partial<Record<DrumId, string>>;
 
@@ -45,6 +54,8 @@ export interface ChannelDef {
   voicing?: "close" | "root";
   /** transpose (semitones) for literal notes */
   tr?: number;
+  /** degrade songs only: the channel plays while lo <= degrade < hi (budget cuts lay it off / hire it) */
+  deg?: [number, number];
 }
 
 export interface SectionDef {
@@ -74,6 +85,19 @@ export interface SongDef {
   order: string[];
   /** order index to loop back to; -1 = stop after the last section */
   loopTo?: number;
+  /** "budget cuts" behaviour (Engine.setDegrade) - see the header */
+  degrade?: DegradeDef;
+  /** documentation / analysis: the home key, e.g. "A major" (scripts/audio-render.mjs checks it) */
+  key?: string;
+}
+
+export interface DegradeDef {
+  /** Extra arrangements: the highest tier with `at` <= degrade plays (below the first one: the song's own order). */
+  tiers?: { at: number; order: string[]; loopTo?: number }[];
+  /** Auto mode until the first setDegrade call: [bars from the song start, degrade] steps. */
+  auto?: [number, number][];
+  /** Lo-fi processing amount at degrade 1 (0..1, default 1). */
+  lofi?: number;
 }
 
 export interface NoteEv {
@@ -101,6 +125,8 @@ export interface CSong {
   bpb: number;
   order: CSection[];
   loopTo: number;
+  /** degrade tiers (ascending `at`), each with its compiled order */
+  tiers: { at: number; order: CSection[]; loopTo: number }[];
 }
 
 const HIT = /^[xXo.\-_]+$/;
@@ -310,13 +336,18 @@ export function compileSong(def: SongDef): CSong {
       .map((g) => ({ t: g.t, end: g.end, sym: g.c!.sym, pcs: g.c!.iv.map((i) => (g.c!.root + i + tr + 120) % 12) }));
     return { name, beats: sec.bars * bpb, ev, chords };
   };
-  const order = def.order.map((n) => {
-    let c = cache.get(n);
-    if (!c) {
-      c = compileSection(n);
-      cache.set(n, c);
-    }
-    return c;
-  });
-  return { def, bpb, order, loopTo: def.loopTo ?? 0 };
+  const compileOrder = (names: string[]) =>
+    names.map((n) => {
+      let c = cache.get(n);
+      if (!c) {
+        c = compileSection(n);
+        cache.set(n, c);
+      }
+      return c;
+    });
+  const order = compileOrder(def.order);
+  const tiers = [...(def.degrade?.tiers ?? [])]
+    .sort((a, b) => a.at - b.at)
+    .map((t) => ({ at: t.at, order: compileOrder(t.order), loopTo: t.loopTo ?? 0 }));
+  return { def, bpb, order, loopTo: def.loopTo ?? 0, tiers };
 }

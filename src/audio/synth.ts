@@ -143,7 +143,7 @@ export function periodic(kit: Kit, name: WaveName): PeriodicWave | null {
 }
 
 /** Shared wave-shaper curves. */
-export function curve(kit: Kit, name: "soft" | "drive" | "crush" | "clip"): Float32Array<ArrayBuffer> {
+export function curve(kit: Kit, name: "soft" | "drive" | "crush" | "clip" | "lofi"): Float32Array<ArrayBuffer> {
   let c = kit.curves.get(name);
   if (c) return c;
   const n = 2048;
@@ -160,6 +160,11 @@ export function curve(kit: Kit, name: "soft" | "drive" | "crush" | "clip"): Floa
       case "crush": {
         const s = Math.tanh(x * 6) / Math.tanh(6);
         c[i] = Math.round(s * 7) / 7;
+        break;
+      }
+      case "lofi": {
+        // "budget" bitcrush: ~4-bit staircase, no extra drive (cancel's degrade chain, glitch sfx)
+        c[i] = Math.round(x * 10) / 10;
         break;
       }
       case "clip": {
@@ -275,7 +280,7 @@ export interface FilterOpts {
   bpt?: number;
   q?: number;
   /** wave-shaper drive after the source */
-  drive?: "soft" | "drive" | "crush";
+  drive?: "soft" | "drive" | "crush" | "lofi";
 }
 
 export interface ToneOpts extends EnvOpts, FilterOpts {

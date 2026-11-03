@@ -15,21 +15,28 @@ import { Cv, GLOW, hash, inHeart, inStar, rgba, spr } from "../sprites/s2-items-
 
 /** Chunky 4x6 display glyphs (x = ink): brush-lettered, heavy left downstrokes. */
 const DISPLAY: Record<string, string[]> = {
-  B: ["xxx.", "xx.x", "xxx.", "xx.x", "xx.x", "xxx."],
-  A: [".xx.", "xx.x", "xx.x", "xxxx", "xx.x", "xx.x"],
-  K: ["xx.x", "xx.x", "xxx.", "xxx.", "xx.x", "xx.x"],
+  B: ["xxx.", "x..x", "xxx.", "x..x", "x..x", "xxx."],
+  A: [".xx.", "x..x", "x..x", "xxxx", "x..x", "x..x"],
+  K: ["x..x", "x.x.", "xx..", "xx..", "x.x.", "x..x"],
   N: ["x..x", "xx.x", "xxxx", "x.xx", "x..x", "x..x"],
-  I: ["xxx", ".x.", ".x.", ".x.", ".x.", "xxx"],
-  H: ["xx.x", "xx.x", "xxxx", "xx.x", "xx.x", "xx.x"],
-  O: [".xx.", "xx.x", "xx.x", "xx.x", "xx.x", ".xx."],
-  "?": ["xxx.", "..xx", ".xx.", ".x..", "....", ".x.."],
+  I: ["x", "x", "x", "x", "x", "x"],
+  H: ["x..x", "x..x", "xxxx", "x..x", "x..x", "x..x"],
+  O: [".xx.", "x..x", "x..x", "x..x", "x..x", ".xx."],
+  "?": [".xx.", "x..x", "..x.", ".x..", "....", ".x.."],
+  "!": ["x", "x", "x", "x", ".", "x"],
+};
+/** Narrow 3x6 capitals for BAKA! (leaves room for the anger vein in 24 px). */
+const NARROW: Record<string, string[]> = {
+  B: ["xx.", "x.x", "xx.", "x.x", "x.x", "xx."],
+  A: [".x.", "x.x", "x.x", "xxx", "x.x", "x.x"],
+  K: ["x.x", "x.x", "xx.", "xx.", "x.x", "x.x"],
   "!": ["x", "x", "x", "x", ".", "x"],
 };
 /** Small lowercase 3x4 glyphs for the "...baka" whisper. */
 const SMALL: Record<string, string[]> = {
-  b: ["x..", "xx.", "x.x", "xx."],
-  a: [".x.", "..x", "xxx", "xxx"],
-  k: ["x..", "x.x", "xx.", "x.x"],
+  b: ["x..", "x..", "xx.", "x.x", "xx."],
+  a: ["...", ".xx", "x.x", "x.x", ".xx"],
+  k: ["x..", "x.x", "xx.", "x.x", "x.x"],
 };
 
 function letter(c: Cv, g: string[], x: number, y: number, k: string): number {
@@ -69,18 +76,16 @@ rr.rr
 function fxBaka(f: number): Cv {
   const c = new Cv(24, 10);
   if (f === 0) {
-    word(c, "BAKA!", 2, 2, "r", [1, 0, 1, 0, -1]);
-    // a darker lower half on each letter (hand-inked weight)
-    c.each((x, y, k) => (k === "r" && y >= 6 ? "R" : null));
+    word(c, "BAKA!", 2, 2, "r", [1, 0, 1, 0, -1], NARROW);
     popOutline(c, "w");
     c.put(ANGER, 19, 0);
     c.each((x, y, k) => (k === "r" && x >= 19 && y <= 4 ? "r" : null));
   } else {
     // whispered: "..baka" + a heart, small and pink
     c.set(1, 7, "p").set(3, 7, "p");
-    word(c, "baka", 5, 4, "p", [0, 0, 0, 0], SMALL);
-    c.shape((x, y) => inHeart(x, y, 20, 5.2, 2.6), "p");
-    c.set(19, 4, "q");
+    word(c, "baka", 5, 3, "p", [0, 0, 0, 0], SMALL);
+    c.shape((x, y) => inHeart(x, y, 21.6, 4.6, 2.2), "p");
+    c.set(20, 3, "q");
     c.selout({}, "W");
     c.outline("1");
   }
@@ -89,9 +94,7 @@ function fxBaka(f: number): Cv {
 
 function fxNani(f: number): Cv {
   const c = new Cv(28, 12);
-  word(c, "NANI?!", 1, 3 + f, "r", f === 0 ? [0, -1, 0, 1, -1, 0] : [-1, 0, 0, 0, -1, -1]);
-  // red top / dark red base for weight
-  c.each((x, y, k) => (k === "r" && y >= 7 ? "R" : null));
+  word(c, "NANI?!", 3, 3 + f, "r", f === 0 ? [0, -1, 0, 1, -1, 0] : [-1, 0, 0, 0, -1, -1]);
   c.selout({}, "w");
   c.outline("1");
   // shock lines radiating from the corners
@@ -104,8 +107,8 @@ function fxHonk(f: number): Cv {
   const c = new Cv(24, 10);
   const dx = f === 1 ? -1 : 0;
   word(c, "HONK", 4 + dx, 2, "y", f === 0 ? [0, 0, 0, 0] : [1, 0, 1, 0]);
-  c.each((x, y, k) => (k === "y" && y >= 6 ? "Y" : y <= 2 && k === "y" ? "z" : null));
-  c.selout({}, "O");
+  c.each((x, y, k) => (k === "y" ? "O" : null));
+  c.selout({}, "z");
   c.outline("1");
   // sound lines: a "(" on the left, little blast ticks off the top-right / bottom-right
   const L: [number, number][] = [[1, 2], [0, 3], [0, 4], [0, 5], [0, 6], [1, 7]];

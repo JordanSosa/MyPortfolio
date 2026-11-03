@@ -190,11 +190,11 @@ interface Pose {
 }
 
 const POSES: Pose[] = [
-  { bob: 0, head: [25, 21], arms: "idle0", legs: "dangle0", tutu: 0, face: "haughty" },
-  { bob: -2, head: [25, 21], arms: "idle1", legs: "dangle1", tutu: 1, face: "haughty" },
-  { bob: -1, head: [24, 21], arms: "cast", legs: "dangle1", tutu: 0, face: "cast" },
-  { bob: -1, head: [24, 21], arms: "fifth", legs: "passe", tutu: "blur", face: "spin" },
-  { bob: 0, head: [25, 21], arms: "laugh", legs: "dangle0", tutu: 1, face: "laugh" },
+  { bob: 0, head: [25, 23], arms: "idle0", legs: "dangle0", tutu: 0, face: "haughty" },
+  { bob: -1, head: [25, 23], arms: "idle1", legs: "dangle1", tutu: 1, face: "haughty" },
+  { bob: -1, head: [24, 23], arms: "cast", legs: "dangle1", tutu: 0, face: "cast" },
+  { bob: -1, head: [24, 23], arms: "fifth", legs: "passe", tutu: "blur", face: "spin" },
+  { bob: 0, head: [25, 23], arms: "laugh", legs: "dangle0", tutu: 1, face: "laugh" },
 ];
 
 /** Lollipop scepter: gold shaft (a->b), swirl lollipop head at b. */
@@ -216,7 +216,7 @@ function scepter(p: Pix, a: P2, b: P2, glow: boolean): void {
   });
   if (glow) {
     sparkle(p, hx - 6, hy - 5, 2);
-    sparkle(p, hx + 5, hy - 6, 1);
+    sparkle(p, hx + 4, hy - 6, 0);
     sparkle(p, hx + 6, hy + 4, 0);
   } else p.set(hx - 2, hy - 2, "w");
 }
@@ -279,7 +279,7 @@ function tyrant(f: number): Pix {
   crown(p, hx - 1, hy - 18 + (pose.arms === "fifth" ? 0 : 0), pose.face === "laugh" ? 1 : 0);
   // ---- front arm + scepter
   if (pose.arms === "cast") {
-    scepter(p, [41, bodTop + 6], [44, 9 + by], true);
+    scepter(p, [40, bodTop + 6], [42, 12 + by], true);
     arm(p, [shR, [sx + 10, bodTop - 3], [41, bodTop - 10]]);
   } else if (pose.arms === "fifth") {
     arm(p, [shL, [sx - 10, bodTop - 6], [sx - 7, hy - 14]]);
@@ -354,4 +354,6 @@ function crashed(): Pix {
   return p;
 }
 
-export const sprites: SpriteDef[] = [gridSprite("boss_sugarplum", 48, 64, range(6).map(tyrant), "feet", { fps: 5 })];
+const frame = (f: number): Pix => tyrant(f);
+
+export const sprites: SpriteDef[] = [gridSprite("boss_sugarplum", 48, 64, range(6).map(frame), "feet", { fps: 5 })];

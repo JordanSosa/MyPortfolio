@@ -54,135 +54,143 @@ function head(f: number): Pix {
   const P = POSES[f];
   const p = new Pix(72, 48);
   const dy = P.dy;
-  const sk: P2 = [24, 22 + dy]; // skull centre
+  const sk: P2 = [27, 25 + dy]; // skull centre
   const sn = P.snout;
-  // ---- mane: paper tassels fluttering behind (left), alternating gold/orange
-  layer(p, (l) => {
-    for (let i = 0; i < 7; i++) {
-      const a = Math.PI * (0.93 + i * 0.085);
-      const len = 15 + (i % 2) * 4 + P.mane * 1.5;
-      const x0 = sk[0] + Math.cos(a) * 9;
-      const y0 = sk[1] + Math.sin(a) * 9 + 2;
-      const wob = Math.sin(i * 1.7 + f * 1.3) * 2;
-      const x1 = x0 + Math.cos(a) * len;
-      const y1 = y0 + Math.sin(a) * len * 0.8 + wob;
-      capsule(l, x0, y0, x1, y1, 2.4 - (i % 2) * 0.4, i % 2 ? "o" : "y");
-      // notched paper tip
-      l.set(x1, y1, ".");
-    }
-    l.each((x, y, k) => (k === "y" && x + y > sk[0] + sk[1] - 6 ? "Y" : k === "o" && x + y > sk[0] + sk[1] - 6 ? "O" : null));
-  });
-  // ---- horns: gold paper, swept back
-  layer(p, (l) => {
-    l.poly([[sk[0] + 2, sk[1] - 10], [sk[0] - 9, sk[1] - 21 - P.mane], [sk[0] - 4, sk[1] - 20 - P.mane], [sk[0] + 7, sk[1] - 11]], "y");
-    l.poly([[sk[0] + 9, sk[1] - 10], [sk[0] + 4, sk[1] - 23 - P.mane], [sk[0] + 8, sk[1] - 21 - P.mane], [sk[0] + 13, sk[1] - 10]], "y");
-    l.each((x, y, k) => (k === "y" && (x - sk[0]) * 0.6 + (y - sk[1]) * -0.3 > 4 ? "Y" : k === "y" && y < sk[1] - 18 ? "z" : null));
-  });
-  // ---- lower jaw (opens by P.jaw)
-  const jx0 = sk[0] + 7;
-  const jy = sk[1] + 6 + sn * 0.5;
-  layer(p, (l) => {
-    const open = P.jaw;
-    l.poly([[jx0, jy], [jx0 + 27, jy + open * 0.55 + 3], [jx0 + 26, jy + open * 0.55 + 8], [jx0 + 3, jy + 10]], "r");
-    paperFill(l, 4, 1);
-    if (open > 3) {
-      // mouth interior + tongue
-      l.poly([[jx0 + 4, jy], [jx0 + 25, jy + open * 0.5 + 1], [jx0 + 24, jy + open * 0.55 + 2], [jx0 + 5, jy + 3]], "0");
-      l.poly([[jx0 + 9, jy + 2], [jx0 + 20, jy + open * 0.45 + 1], [jx0 + 14, jy + open * 0.45 + 2]], "P");
-    }
-    // lower teeth
-    for (let i = 0; i < 4; i++) {
-      const tx = jx0 + 9 + i * 4;
-      const ty = jy + open * 0.5 * ((tx - jx0) / 27) + 1;
-      l.set(tx, ty, "w").set(tx + 1, ty, "W").set(tx, ty - 1, "w");
-    }
-  });
-  // ---- skull (lantern ball) + snout
-  const snY = sk[1] - 4 + sn;
-  layer(p, (l) => {
-    l.ellipse(sk[0], sk[1], 16 + P.puff * 2, 14 + P.puff, "r");
-    // snout block (rounded): short and chunky
-    rrect(l, sk[0] + 6, snY - 2, sk[0] + 35, snY + 11 - (P.jaw > 8 ? 2 : 0), "r", { tl: 0, tr: 5, br: 3, bl: 0 });
-    // big nose bulb
-    l.ellipse(sk[0] + 34, snY + 1, 5, 4.4, "r");
-    if (P.puff) l.ellipse(sk[0] + 14, sk[1] + 5, 7, 5, "r");
-    paperFill(l, 5, 0);
-  });
-  // gold trim along the snout ridge and jaw line
-  for (let x = sk[0] + 10; x <= sk[0] + 33; x++) {
-    if (p.get(x, snY - 1) !== "." && p.get(x, snY - 1) !== "1") p.set(x, snY - 1, x % 3 ? "y" : "z");
-    const by = snY + 10 - (P.jaw > 8 ? 2 : 0);
-    if (p.get(x, by) === "R" || p.get(x, by) === "Q" || p.get(x, by) === "r") p.set(x, by, "Y");
-  }
-  // upper teeth (paper zig-zag) when the jaw is open
-  if (P.jaw > 1) {
-    const by = snY + 11 - (P.jaw > 8 ? 2 : 0);
-    for (let x = sk[0] + 13; x < sk[0] + 34; x += 4) p.set(x, by, "w").set(x + 1, by, "W").set(x, by + 1, "w");
-  }
-  // nostril + gold cheek swirl
-  p.set(sk[0] + 36, snY, "0").set(sk[0] + 37, snY, "0").set(sk[0] + 36, snY - 1, "1").set(sk[0] + 37, snY + 1, "1");
-  // gold crest ring on the cheek (lantern mon)
-  layer(p, (l) => {
-    l.ellipse(sk[0] - 1, sk[1] + 5, 4.2, 4.2, "y");
-    l.ellipse(sk[0] - 1, sk[1] + 5, 2.2, 2.2, "r");
-    l.set(sk[0] - 1, sk[1] + 5, "z").set(sk[0] - 3, sk[1] + 3, "z");
-    l.each((x, y, k) => (k === "y" && x + y > sk[0] + sk[1] + 6 ? "Y" : null));
-  }, "R");
-  // brow ridge (gold) over the eye
-  layer(p, (l) => {
-    l.poly([[sk[0] + 4, sk[1] - 10], [sk[0] + 18, sk[1] - 11], [sk[0] + 20, sk[1] - 7], [sk[0] + 6, sk[1] - 7]], "y");
-    l.each((x, y, k) => (k === "y" && y >= sk[1] - 8 ? "Y" : null));
-  });
-  // ---- googly lantern eye: glowing paper ball + loose pupil
-  const ex = sk[0] + 13;
-  const ey = sk[1] - 5;
-  layer(p, (l) => {
-    ball(l, ex, ey, 5.4, 5.4, ["y", "z", "z", "w"], { spec: "w" });
-  });
-  layer(p, (l) => l.ellipse(ex + P.pupil[0] * 1.2 + 0.5, ey + P.pupil[1] * 1.2 + 0.5, 2.3, 2.3, "0"), null);
-  p.set(ex + P.pupil[0] + 0, ey + P.pupil[1] - 1, "w");
-  // eye ring (gold)
-  // ---- firework-fuse whiskers from the snout, sparks at the tips
-  /** Firework-fuse whisker: a cord streaming BACK from the lip along a wavy arc, burning tip. */
-  const fuse = (pts: P2[]) => {
-    layer(p, (l) => {
-      for (let i = 0; i + 1 < pts.length; i++) {
-        l.line(pts[i][0], pts[i][1], pts[i + 1][0], pts[i + 1][1], "G");
-        l.line(pts[i][0], pts[i][1] - 1, pts[i + 1][0], pts[i + 1][1] - 1, i % 3 === 1 ? "o" : "g");
-      }
-    });
-    const [tx, ty] = pts[pts.length - 1];
-    return [Math.round(tx), Math.round(ty)] as P2;
-  };
-  const wv = (t: number, ph: number) => Math.sin(t * 6 + ph + P.whisk * 1.3) * 1.6;
+  const snY = sk[1] - 3 + sn;
+  const jx0 = sk[0] + 5;
+  const jy = sk[1] + 5 + sn * 0.5;
+  const shut = P.jaw > 8 ? 2 : 0;
+  const wv = (t: number, ph: number) => Math.sin(t * 6 + ph + P.whisk * 1.3) * 1.4;
   const arc = (x0: number, y0: number, x1: number, y1: number, bend: number, ph: number) => {
     const pts: P2[] = [];
     for (let i = 0; i <= 12; i++) {
       const t = i / 12;
-      pts.push([x0 + (x1 - x0) * t, y0 + (y1 - y0) * t - Math.sin(t * Math.PI) * bend + wv(t, ph) * t]);
+      pts.push([x0 + (x1 - x0) * t - Math.sin(t * Math.PI) * bend * 0.4, y0 + (y1 - y0) * t - Math.sin(t * Math.PI) * bend + wv(t, ph) * t]);
     }
     return pts;
   };
-  // upper whisker arcs up and back over the snout; lower one sweeps back under the jaw
-  const t1 = fuse(arc(sk[0] + 33, snY - 2, sk[0] + 20 - P.whisk, snY - 17 - P.whisk, 4, 0));
-  const t2 = fuse(arc(sk[0] + 30, snY + 9 + P.jaw * 0.4, sk[0] + 6 - P.whisk, jy + 16, -3, 2));
+  /** Firework-fuse whisker: a twisted cord (grey with orange flecks), returns its burning tip. */
+  const fuse = (pts: P2[]) => {
+    layer(p, (l) => {
+      for (let i = 0; i + 1 < pts.length; i++) l.line(pts[i][0] + 1, pts[i][1] + 1, pts[i + 1][0] + 1, pts[i + 1][1] + 1, "G");
+      for (let i = 0; i + 1 < pts.length; i++) l.line(pts[i][0], pts[i][1], pts[i + 1][0], pts[i + 1][1], i % 3 === 1 ? "o" : "g");
+    });
+    const [tx, ty] = pts[pts.length - 1];
+    return [Math.round(tx), Math.round(ty)] as P2;
+  };
+  // ---- mane: paper tassels fluttering behind (left), alternating gold/orange
+  layer(p, (l) => {
+    for (let i = 0; i < 7; i++) {
+      const a = Math.PI * (0.86 + i * 0.09);
+      const len = 9 + (i % 2) * 3 + P.mane;
+      const x0 = sk[0] + Math.cos(a) * 8;
+      const y0 = sk[1] + Math.sin(a) * 8 + 1;
+      const wob = Math.sin(i * 1.7 + f * 1.3) * 1.5;
+      const x1 = x0 + Math.cos(a) * len;
+      const y1 = y0 + Math.sin(a) * len * 0.8 + wob;
+      capsule(l, x0, y0, x1, y1, 2.1 - (i % 2) * 0.4, i % 2 ? "o" : "y");
+      l.set(x1, y1, ".");
+    }
+    l.each((x, y, k) => (k === "y" && x + y > sk[0] + sk[1] - 6 ? "Y" : k === "o" && x + y > sk[0] + sk[1] - 6 ? "O" : null));
+  });
+  // ---- lower whisker: a barbel fuse from behind the mouth corner, trailing down and back
+  const t2 = fuse(arc(sk[0] + 7, sk[1] + 7, sk[0] - 7 - P.whisk, sk[1] + 17 - P.whisk * 0.5 + (f === 5 ? -3 : 0), -2, 2));
+  // ---- horns: gold paper, swept back
+  layer(p, (l) => {
+    const m = P.mane;
+    l.poly([[sk[0] + 1, sk[1] - 8], [sk[0] - 7, sk[1] - 17 - m], [sk[0] - 3, sk[1] - 16 - m], [sk[0] + 5, sk[1] - 9]], "y");
+    l.poly([[sk[0] + 7, sk[1] - 8], [sk[0] + 3, sk[1] - 18 - m], [sk[0] + 6, sk[1] - 17 - m], [sk[0] + 10, sk[1] - 8]], "y");
+    l.each((x, y, k) => (k === "y" && (x - sk[0]) * 0.6 + (y - sk[1]) * -0.3 > 3 ? "Y" : k === "y" && y < sk[1] - 14 ? "z" : null));
+  });
+  // ---- lower jaw (opens by P.jaw)
+  layer(p, (l) => {
+    const open = P.jaw;
+    l.poly([[jx0, jy], [jx0 + 22, jy + open * 0.5 + 2], [jx0 + 21, jy + open * 0.5 + 6], [jx0 + 2, jy + 8]], "r");
+    paperFill(l, 4, 1);
+    if (open > 3) {
+      l.poly([[jx0 + 3, jy], [jx0 + 20, jy + open * 0.45 + 1], [jx0 + 19, jy + open * 0.5 + 2], [jx0 + 4, jy + 2]], "0");
+      l.poly([[jx0 + 7, jy + 2], [jx0 + 16, jy + open * 0.4 + 1], [jx0 + 11, jy + open * 0.4 + 2]], "P");
+    }
+    for (let i = 0; i < 3; i++) {
+      const tx = jx0 + 8 + i * 4;
+      const ty = jy + open * 0.5 * ((tx - jx0) / 22) + 1;
+      l.set(tx, ty, "w").set(tx + 1, ty, "W").set(tx, ty - 1, "w");
+    }
+  });
+  // ---- skull (lantern ball) + snout
+  layer(p, (l) => {
+    l.ellipse(sk[0], sk[1], 12 + P.puff * 1.5, 11 + P.puff, "r");
+    rrect(l, sk[0] + 4, snY - 2, sk[0] + 28, snY + 9 - shut, "r", { tl: 0, tr: 4, br: 3, bl: 0 });
+    l.ellipse(sk[0] + 28, snY + 1, 4, 3.6, "r");
+    if (P.puff) l.ellipse(sk[0] + 11, sk[1] + 4, 5.5, 4, "r");
+    paperFill(l, 4, 0);
+  });
+  // gold trim along the snout ridge and the lip line
+  for (let x = sk[0] + 8; x <= sk[0] + 27; x++) {
+    if (p.get(x, snY - 1) !== "." && p.get(x, snY - 1) !== "1") p.set(x, snY - 1, x % 3 ? "y" : "z");
+    const by = snY + 8 - shut;
+    if (p.get(x, by) === "R" || p.get(x, by) === "Q" || p.get(x, by) === "r" || p.get(x, by) === "o") p.set(x, by, "Y");
+  }
+  // upper teeth (paper zig-zag) when the jaw is open
+  if (P.jaw > 1) {
+    const by = snY + 10 - shut;
+    for (let x = sk[0] + 10; x < sk[0] + 27; x += 4) p.set(x, by, "w").set(x + 1, by, "W").set(x, by + 1, "w");
+  }
+  // nostril
+  p.set(sk[0] + 30, snY, "0").set(sk[0] + 30, snY - 1, "1").set(sk[0] + 31, snY + 1, "1");
+  // gold crest on the cheek (lantern mon)
+  layer(p, (l) => {
+    l.ellipse(sk[0] - 1, sk[1] + 4, 3.4, 3.4, "y");
+    l.ellipse(sk[0] - 1, sk[1] + 4, 1.6, 1.6, "r");
+    l.set(sk[0] - 1, sk[1] + 4, "z").set(sk[0] - 3, sk[1] + 2, "z");
+    l.each((x, y, k) => (k === "y" && x + y > sk[0] + sk[1] + 5 ? "Y" : null));
+  }, "R");
+  // brow ridge (gold) over the eye
+  layer(p, (l) => {
+    l.poly([[sk[0] + 3, sk[1] - 8], [sk[0] + 15, sk[1] - 9], [sk[0] + 16, sk[1] - 6], [sk[0] + 5, sk[1] - 6]], "y");
+    l.each((x, y, k) => (k === "y" && y >= sk[1] - 7 ? "Y" : null));
+  });
+  // ---- googly lantern eye: glowing paper ball + loose pupil
+  const ex = sk[0] + 10;
+  const ey = sk[1] - 4;
+  layer(p, (l) => ball(l, ex, ey, 4.6, 4.6, ["y", "z", "z", "w"], { spec: "w" }));
+  layer(p, (l) => l.ellipse(ex + P.pupil[0] + 0.5, ey + P.pupil[1] + 0.5, 1.9, 1.9, "0"), null);
+  p.set(ex + P.pupil[0], ey + P.pupil[1] - 1, "w");
+  // ---- upper whisker: a fuse from the nose curling up, forward, then back over the snout
+  // a curl like a question mark, flicking with the frame
+  const w = P.whisk;
+  const curl: P2[] = [];
+  const ctrl: P2[] = [
+    [sk[0] + 27, snY - 3],
+    [sk[0] + 31 + w * 0.3, snY - 8],
+    [sk[0] + 30 + w * 0.5, snY - 13 - w * 0.3],
+    [sk[0] + 25, snY - 16 - w * 0.4],
+    [sk[0] + 20 - w, snY - 14 - w * 0.6],
+  ];
+  for (const c of ctrl) c[1] = Math.max(2, c[1]);
+  for (let i = 0; i + 1 < ctrl.length; i++)
+    for (let t = 0; t < 1; t += 0.25) curl.push([ctrl[i][0] + (ctrl[i + 1][0] - ctrl[i][0]) * t, ctrl[i][1] + (ctrl[i + 1][1] - ctrl[i][1]) * t]);
+  curl.push(ctrl[ctrl.length - 1]);
+  const t1 = fuse(curl);
   for (const [x, y] of [t1, t2]) {
     sparkle(p, x, y, P.whisk >= 3 ? 2 : 1);
     p.set(x, y, "y");
   }
   // ---- per-frame fx
+  const mx = sk[0] + 30;
+  const my = jy + 2;
   if (f === 2) {
     // inhale: spark motes streaming INTO the mouth
-    for (const [x, y] of [[69, 26], [66, 31], [70, 34], [63, 37]] as P2[]) p.set(x, y, "y").set(x - 1, y, "o");
-    p.line(64, 28, 67, 27, "z").line(62, 34, 66, 35, "z");
+    for (const [x, y] of [[mx + 9, my - 3], [mx + 7, my + 2], [mx + 10, my + 5], [mx + 4, my + 7]] as P2[]) p.set(x, y, "y").set(x - 1, y, "o");
+    p.line(mx + 3, my - 1, mx + 6, my - 2, "z").line(mx + 2, my + 4, mx + 6, my + 5, "z");
   }
   if (f === 3) {
     // breathe: spray of sparks out of the open jaw
-    for (const [x, y, s] of [[66, 30, 2], [70, 36, 1], [62, 38, 1], [69, 25, 0], [71, 31, 0]] as [number, number, 0 | 1 | 2][]) {
+    for (const [x, y, s] of [[mx + 6, my + 2, 2], [mx + 10, my + 7, 1], [mx + 3, my + 9, 1], [mx + 9, my - 3, 0], [mx + 11, my + 2, 0]] as [number, number, 0 | 1 | 2][]) {
       sparkle(p, x, y, s);
       p.set(x, y, "y");
     }
-    p.line(58, 31, 64, 29, "z").line(58, 33, 65, 35, "y").line(57, 35, 62, 39, "o");
+    p.line(mx - 2, my + 1, mx + 3, my, "z").line(mx - 2, my + 3, mx + 4, my + 5, "y").line(mx - 3, my + 5, mx + 1, my + 9, "o");
   }
   if (f === 4) {
     // burst: fireworks popping around the head
@@ -192,10 +200,11 @@ function head(f: number): Pix {
         p.set(cx + Math.cos(a) * r, cy + Math.sin(a) * r, k);
         p.set(cx + Math.cos(a) * (r - 1.4), cy + Math.sin(a) * (r - 1.4), "w");
       }
+      p.set(cx, cy, "w");
     };
-    burst(62, 8, 5, "y");
-    burst(6, 6, 4, "p");
-    burst(66, 40, 4, "c");
+    burst(64, 8, 5, "y");
+    burst(6, 7, 4, "p");
+    burst(65, 40, 4, "c");
   }
   if (f === 5) {
     // coil: smoke puffs from the fuses

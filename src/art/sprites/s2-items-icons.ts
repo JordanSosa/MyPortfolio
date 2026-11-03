@@ -133,7 +133,7 @@ UWWWWgu
   const trail = (x0: number, y0: number, ph: number, amp: number) => {
     for (let x = x0; x >= 0; x--) {
       const y = Math.round(y0 + Math.sin((x0 - x) * 0.85 + ph) * amp);
-      if (c.get(x, y) === ".") c.set(x, y, (x0 - x) % 4 === 0 ? "w" : "v");
+      if (c.get(x, y) === ".") c.set(x, y, (x0 - x) % 3 === 0 ? "B" : "F");
     }
   };
   trail(7, 2, 0, 2.2);
@@ -183,17 +183,28 @@ function noticeMeSparkles(): Cv {
 
 function henshinBurst(): Cv {
   const c = I16();
-  // wand stick (gold) from bottom-left
+  // gold wand from the bottom-left
   c.line(2, 14, 7, 9, "y");
   c.line(3, 14, 8, 9, "Y");
-  // mint heart head
-  heart(c, 10.2, 5.8, 4.2, ["E", "l", "m"]);
+  // mint heart head (hand-placed so it reads as a heart, not a leaf)
+  c.put(
+    `
+.aa..aa.
+awaaaacc
+aaaaaccC
+aaaacccC
+.acccCC.
+..cCCC..
+...CC...`,
+    6,
+    1,
+  );
   c.outline("1");
-  c.set(8, 4, "w");
-  // pink ribbons streaming from the heart's point
+  c.set(7, 3, "w");
+  // pink ribbons streaming from the heart
   c.pts([[6, 11], [5, 12], [5, 13], [6, 14], [7, 14]], "p");
-  c.pts([[10, 11], [11, 12], [12, 12], [13, 13], [14, 13]], "p");
-  c.pts([[7, 13], [13, 12]], "q");
+  c.pts([[10, 10], [11, 11], [12, 11], [13, 12], [14, 12]], "p");
+  c.pts([[7, 13], [13, 11]], "q");
   sparkle(c, 2, 3, "w", "z");
   return c;
 }
@@ -218,12 +229,12 @@ function cheatFireball(): Cv {
   c.outline("1");
   // the tag: "Lv.9999" squeezed into a white price tag
   const t = new Cv(16, 16);
-  t.rect(5, 10, 10, 5, "w");
-  t.rect(5, 14, 10, 1, "W");
-  t.set(5, 10, ".").set(5, 14, ".");
+  t.rect(3, 9, 13, 7, "w");
+  t.rect(3, 15, 13, 1, "W");
+  t.set(3, 9, ".").set(3, 15, ".");
   t.outline("1");
-  micro(t, "999", 6, 10, "r", 0);
-  t.set(14, 10, "r").set(14, 11, "r").set(14, 12, "r");
+  t.set(4, 12, "1");
+  micro(t, "999", 5, 10, "r");
   c.put(t, 0, 0);
   return c;
 }
@@ -269,32 +280,36 @@ function bubbleTea(): Cv {
   return c;
 }
 
-const CRANE_BIG = `
-..W........
-..wW......w
-..wwW....wW
-..wwwW..wW.
-W.wwwwWwW..
-.WwwwwwwW..
-..ggWWWg...
-...gggg....`;
-const CRANE_SMALL = `
-.W....w
-.wW..wW
-.wwWwW.
-W.wwW..
-.wwW...
-..gg...`;
+/** Origami crane facing right (13x10): thin tail up-left, tall folded wing, neck up-right with a hooked head, small body. */
+const CRANE13 = `
+......l......
+.....lm......
+l....lm.....l
+.l..llm....lm
+..l.llmm..l..
+...lllmm.l...
+....llmmlm...
+...dllmmmd...
+....ddmmd....
+......dd.....`;
+const crane13 = (lit: string, mid: string, dark: string) => CRANE13.replace(/l/g, lit).replace(/m/g, mid).replace(/d/g, dark);
+const CRANE7 = `
+..l....
+..lm..l
+l.lm.l.
+.llml..
+..dd...`;
+const crane7 = (lit: string, mid: string, dark: string) => CRANE7.replace(/l/g, lit).replace(/m/g, mid).replace(/d/g, dark);
+
 function paperCraneFlock(): Cv {
   const c = I16();
-  const back = new Cv(16, 16).put(CRANE_SMALL, 8, 1);
+  const back = new Cv(16, 16).put(crane7("w", "W", "g"), 8, 1);
   back.outline("1");
-  const front = new Cv(16, 16).put(CRANE_BIG, 1, 7);
+  const front = new Cv(16, 16).put(crane13("w", "W", "g"), 1, 5);
   front.outline("1");
   c.put(back, 0, 0);
   c.put(front, 0, 0);
-  c.set(11, 9, "1").set(12, 8, "w");
-  sparkle(c, 3, 3, "w", "g");
+  sparkle(c, 2, 2, "w", "q");
   return c;
 }
 
@@ -521,11 +536,11 @@ function cheatMeteor(): Cv {
   c.set(9, 8, "h");
   // the absurd number tag
   const t = new Cv(16, 16);
-  t.rect(1, 11, 9, 4, "w");
+  t.rect(1, 10, 13, 5, "w");
+  t.rect(1, 14, 13, 1, "W");
   t.outline("1");
-  micro(t, "99", 2, 11, "R", 1);
-  t.pts([[8, 12], [8, 13]], "R");
-  t.set(8, 14, "R");
+  micro(t, "999", 2, 10, "R");
+  t.set(14, 10, "1").set(14, 11, "R").set(14, 12, "R").set(14, 14, "R").set(14, 13, "1");
   c.put(t, 0, 0);
   twinkle(c, "tr");
   return c;
@@ -554,60 +569,55 @@ function isekaiRushHour(): Cv {
 }
 
 const WAVE = `
-................
-................
-................
-................
-................
-................
-................
-................
-................
-.www......www...
-wBBBw....wBBBw..
-BhH.hw..BhH.hw.w
-hhhhhhhhhhhhhhhh
-hHhhhhHhhhhhHhhh
-HHHHHHHHHHHHHHHH`;
+..ww......ww..
+.wBBw....wBBw.
+wBhhBwwwwBhhBw
+hhHhhhBBBhhHhh
+hHHhhhhhhhhHHh
+.HHHHHHHHHHHH.`;
 function tapiocaTsunami(): Cv {
-  const c = Cv.of(WAVE).shift(0, 0);
-  // giant boba riding the crest
-  const b = new Cv(16, 16);
-  b.ball(8, 6.2, 4.6, 4.4, "XddddH");
-  b.outline("1");
-  b.pts([[6, 3], [5, 4], [6, 4], [7, 3]], "w");
-  b.set(12, 8, "H").set(11, 9, "H");
+  const c = I16();
+  // giant glossy boba riding the crest of a milk-tea wave
+  c.ball(7.5, 5.4, 4.6, 4.4, "22ddH", { spec: "w", specAt: 0.9 });
+  c.put(WAVE, 1, 9);
   c.outline("1");
-  c.put(b, 0, 0);
-  // splash droplets
-  c.set(2, 7, "B").set(13, 7, "B").set(14, 6, "h");
+  c.pts([[5, 3], [6, 2]], "h"); // glossy streak next to the spec
+  c.pts([[10, 7], [11, 6]], "H"); // bounce light bottom-right
+  // splash droplets flying off
+  c.set(1, 7, "B").set(14, 7, "B").set(0, 5, "h");
   twinkle(c, "tr");
   return c;
 }
 
 function thousandCraneWish(): Cv {
   const c = I16();
-  craneAt(c, 1, 4, 1.05, true, true);
+  c.put(crane13("z", "y", "Y"), 1, 5);
   c.outline("1");
-  // star above
-  shadedStar(c, 12.5, 3.2, 2.8, 1.3, { rimLit: "z", rimDark: "Y", body: "y", inner: "y", core: "w" }, { coreR: 0.6 });
-  sparkle(c, 3, 13, "w", "y");
+  c.set(6, 6, "w");
+  // star above the crane's head
+  shadedStar(c, 12, 3.2, 3, 1.4, { rimLit: "z", rimDark: "O", body: "y", inner: "y", core: "w" }, { coreR: 0.6 });
+  sparkle(c, 14, 13, "w", "y");
   twinkle(c, "tl");
   return c;
 }
 
 function soldOutDomeTour(): Cv {
   const c = I16();
-  // two crossing spotlight beams
-  c.poly([[1, 1], [3, 1], [10, 10], [7, 10]], "&");
-  c.poly([[13, 1], [15, 1], [9, 10], [6, 10]], "^");
-  // dome stage
-  c.ellipse(7.5, 13, 7, 4.4, (x, y) => (y > 13 ? "I" : (x + y) % 3 === 0 ? "y" : "i"));
+  // the dome: broad roof lit from the top-left, panel ribs, a lit stage mouth, a crowd of lightsticks
+  c.ellipse(7.5, 14, 7.2, 7, (x, y) => (y > 13 ? null : shade(x - 7.5, y - 14) > 2.5 ? "j" : shade(x - 7.5, y - 14) > -1.5 ? "i" : "I"));
   c.rect(0, 13, 16, 2, "2");
-  c.rect(1, 13, 14, 1, "p");
   c.outline("1");
-  c.set(7, 9, "w");
-  c.set(1, 0, "z").set(14, 0, "a");
+  c.line(7, 8, 4, 12, "I");
+  c.line(8, 8, 11, 12, "I");
+  c.line(7, 7, 8, 7, "w");
+  c.rect(6, 11, 4, 2, "z");
+  c.rect(6, 11, 4, 1, "w");
+  for (let x = 1; x <= 14; x += 2) c.set(x, 14, ["p", "c", "y", "l"][(x >> 1) % 4]);
+  // spotlight beams fanning out of the roof (no outline: they're light)
+  c.line(5, 7, 1, 1, "z");
+  c.line(10, 7, 14, 1, "a");
+  c.line(6, 7, 3, 1, "&");
+  c.line(9, 7, 12, 1, "^");
   twinkle(c, "tl");
   return c;
 }
@@ -744,10 +754,11 @@ function trainingMontage(): Cv {
   // dumbbell (diagonal-ish, horizontal for readability)
   c.rect(4, 9, 8, 2, "g");
   c.rect(4, 10, 8, 1, "G");
-  c.rect(1, 6, 3, 8, "x");
-  c.rect(12, 6, 3, 8, "x");
-  c.rect(1, 6, 1, 8, "f");
-  c.rect(12, 6, 1, 8, "f");
+  c.rect(1, 6, 3, 8, "G");
+  c.rect(12, 6, 3, 8, "G");
+  c.rect(1, 6, 1, 8, "W");
+  c.rect(12, 6, 1, 8, "g");
+  c.rect(2, 6, 1, 8, "g");
   // red hachimaki tied round the bar, tails flowing up
   c.rect(7, 8, 2, 4, "r");
   c.pts([[8, 7], [9, 6], [10, 5], [11, 4], [9, 7], [10, 6]], "r");

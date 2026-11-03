@@ -7,7 +7,8 @@
  *    are saved when the finger lifts.
  *  - SAVE DATA (docs/EXPANSION.md §14): export the profile as a text string
  *    (copied with a button, also shown selectable), import one (pasted, with a
- *    confirm; the replaced profile is kept as a backup), start over.
+ *    confirm; the replaced profile is kept as a backup), start over. Hub only:
+ *    from the pause menu the run in progress would bank into the new profile.
  * Works with touch, mouse, keys (left/right adjusts the focused slider /
  * segment) and gamepad.
  */
@@ -21,7 +22,10 @@ type Key = keyof Settings;
 
 export function openSettings(app: App, onClose: () => void): UiScreen {
   const el = h("div", "modal settings");
-  const s = save.data.settings;
+  // (re-read after an import / reset: the profile, and its settings object, are replaced)
+  let s = save.data.settings;
+  // mid-run (pause menu) there is no SAVE DATA tab: an import / reset would bank the live run into another profile
+  const inRun = app.screen === "game";
   const slider = (k: Key, label: string) =>
     `<div class="set-row"><span>${label}</span><button class="slider" data-nav data-k="${k}"><div class="f"></div><div class="v"></div></button></div>`;
   const seg = (k: Key, label: string, opts: [string, string | number][]) =>
@@ -33,7 +37,7 @@ export function openSettings(app: App, onClose: () => void): UiScreen {
   const canFullscreen = typeof document !== "undefined" && document.fullscreenEnabled === true && typeof document.documentElement.requestFullscreen === "function";
   el.innerHTML = `
     <div class="panel settings-panel">
-      <div class="set-head"><div class="h1">SETTINGS</div><div class="seg set-tabs" role="tablist"><button class="on" data-nav data-tab="game" role="tab">GAME</button><button data-nav data-tab="save" role="tab">SAVE DATA</button></div></div>
+      <div class="set-head"><div class="h1">SETTINGS</div>${inRun ? "" : `<div class="seg set-tabs" role="tablist"><button class="on" data-nav data-tab="game" role="tab">GAME</button><button data-nav data-tab="save" role="tab">SAVE DATA</button></div>`}</div>
       <div class="set-game">
       ${slider("master", "Master volume")}
       ${slider("music", "Music")}
@@ -214,6 +218,7 @@ export function openSettings(app: App, onClose: () => void): UiScreen {
     if (r.ok) {
       app.sfx("unlockFanfare");
       ta.value = "";
+      s = save.data.settings;
       app.applySettings();
       refresh();
       info();
@@ -225,6 +230,7 @@ export function openSettings(app: App, onClose: () => void): UiScreen {
     const b = await confirmDialog(app, { title: "Really really?", body: "Episode 1 again. The plushies will be thrilled.", ok: "YES, RESET", cancel: "No, I'm invested", danger: true });
     if (!b) return;
     save.reset();
+    s = save.data.settings;
     app.sfx("reroll");
     msg("import", "Fresh profile. Welcome to Episode 1!");
     info();

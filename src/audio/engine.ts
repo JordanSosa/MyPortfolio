@@ -365,6 +365,23 @@ export class Engine {
     this.current?.setIntensity(this.intensity);
   }
 
+  /** Series-finale "budget cuts" for the current track (only songs with a `degrade` arrangement react). */
+  setDegrade(x: number): void {
+    this.current?.setDegrade(Math.max(0, Math.min(1, Number.isFinite(x) ? x : 0)), this.now());
+  }
+
+  /** Mix analysis: play only channel `id` of the current track (null = all). Not used by the game. */
+  soloChannel(id: string | null): void {
+    const p = this.current;
+    if (!p) return;
+    for (const c of p.channelIds) p.setChannelGain(c, id === null || c === id ? 1 : 0);
+  }
+
+  /** Degrade value the current track is playing with right now (meters / tests). */
+  get degrade(): number {
+    return this.current?.degAt(this.now()) ?? 0;
+  }
+
   setMuffled(on: boolean): void {
     if (on === this.muffled) return;
     this.muffled = on;

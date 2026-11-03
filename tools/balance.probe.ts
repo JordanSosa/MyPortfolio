@@ -9,6 +9,9 @@
  *   T=300 BOT=good VERBOSE=1 npm run balance          # 5 min, with the 30 s timeline per run
  *   META=mid|max  MAXE=150|250|350  VIEW=phone|land|desktop  DT=0.0167
  *   GAUGE=1 [IDS=star_shot,...] npm run balance       # per-weapon dps gauge instead of runs
+ *   RUN="stage=dream_meadow&twists=budget_cuts:3,spoilers&relics=sakuga_cel:6&flags=dashCharges:1"
+ *     npm run balance                                 # any Season 2 RunConfig, same syntax as the debug URL
+ *                                                     # params (src/debug/params.ts debugRunConfig)
  *
  * BOT: `good` = the autoplay bot (dodges, dashes, picks a sensible build; the
  * average-player proxy) / `lazy` = random level-up picks and never dashes (a
@@ -18,7 +21,8 @@ import { test } from "vitest";
 import { Bot, simulate } from "../src/debug/bot";
 import { RANKS, xpToNext } from "../src/game/config";
 import { META } from "../src/game/meta";
-import { phaseAt } from "../src/game/director/timeline";
+import { debugRunConfig, type DebugParams } from "../src/debug/params";
+import { stagePhaseAt } from "../src/game/stage";
 import { WEAPONS } from "../src/game/registry";
 import { World } from "../src/game/world";
 
@@ -97,8 +101,14 @@ const range = (a: number[], d = 0): string => {
   return `${fmt(median(v), d)} [${fmt(Math.min(...v), d)}-${fmt(Math.max(...v), d)}]`;
 };
 
+/** RUN env -> a fresh RunConfig per World (undefined = the default Dream Meadow config). */
+function runConfig() {
+  const q = process.env.RUN;
+  return q ? debugRunConfig({ query: q.startsWith("?") ? q : `?${q}` } as DebugParams) : undefined;
+}
+
 function play(hero: string, seed: number, botKind: string, T: number, dt: number, meta: Record<string, number>, maxE: number, view: [number, number], verbose: boolean): Run {
-  const w = new World({ hero, seed, viewW: view[0], viewH: view[1], meta, maxEnemies: maxE });
+  const w = new World({ hero, seed, viewW: view[0], viewH: view[1], meta, maxEnemies: maxE, run: runConfig() });
   const bot = new Bot(seed ^ 77);
   if (botKind === "lazy") {
     bot.noDash = true;
@@ -188,7 +198,7 @@ function play(hero: string, seed: number, botKind: string, T: number, dt: number
       last = ww.level;
     }
     const m = Math.min(mins - 1, Math.floor(ww.t / 60));
-    const cap = Math.min(phaseAt(ww.t).max, ww.maxEnemies);
+    const cap = Math.min(stagePhaseAt(ww.stage, ww.t).max, ww.maxEnemies);
     capAcc[m] += ww.enemyCount / cap;
     if (ww.comboRank >= 5) sssAcc[m]++;
     if (ww.comboRank >= 3) sAcc[m]++;
@@ -377,7 +387,7 @@ test("balance probe", () => {
   const maxE = Number(process.env.MAXE ?? 350);
   const view = VIEWS[process.env.VIEW ?? "phone"] ?? VIEWS.phone;
   const verbose = !!process.env.VERBOSE;
-  console.log(`balance probe: T=${T}s dt=${dt.toFixed(4)} meta=${process.env.META ?? "0"} maxEnemies=${maxE} view=${view.join("x")}`);
+  console.log(`balance probe: T=${T}s dt=${dt.toFixed(4)} meta=${process.env.META ?? "0"} maxEnemies=${maxE} view=${view.join("x")}${process.env.RUN ? ` run=${process.env.RUN}` : ""}`);
   const all: Run[] = [];
   const hurt = new Map<string, Map<string, number>>();
   const killedBy = new Map<string, string[]>();

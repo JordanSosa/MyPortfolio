@@ -120,8 +120,16 @@ export function unlockRule(kind: UnlockKind, id: string, ctx: MetaContent = game
       const req = st.requires ? ctx.stageById.get(st.requires) : stageByOrder(st.order - 1, ctx);
       return { id, kind, cond: { t: "stageClear", order: req?.order ?? st.order - 1 }, hint: `Clear ${req?.name ?? "the previous stage"}.` };
     }
-    case "twist":
+    case "twist": {
+      // the sim's TwistDef.unlockedBy (a stage id) when the table has no row; a stage that is not
+      // registered yet keeps the twist locked
+      const by = ctx.twists.get(id)?.unlockedBy;
+      if (by) {
+        const st = ctx.stageById.get(by);
+        return { id, kind, cond: { t: "stageClear", order: st?.order ?? Number.MAX_SAFE_INTEGER }, hint: `Clear ${st?.name ?? "a later episode"}.` };
+      }
       return { id, kind, cond: { t: "life", key: "clears", count: 1 }, hint: "Clear any stage to unlock Plot Twists." };
+    }
     case "relic":
       return { id, kind, cond: { t: "gacha" }, hint: "Merch Machine or the Copium Exchange." };
     default:

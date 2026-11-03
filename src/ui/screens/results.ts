@@ -62,7 +62,7 @@ export function showResults(app: App, s: RunSummary, r: RunReport, ep: EpisodeIn
   cbar.set(c0);
 
   const stinger = clear
-    ? `<div class="er-finale">${letters(finalStage ? "RENEWED FOR SEASON 2!!" : "SERIES FINALE?!", "ltr", 0.05)}${r.endless && s.stats?.endlessTime ? `<small>(the filler continued for ${fmtTime(s.stats.endlessTime)})</small>` : ""}</div>`
+    ? `<div class="er-finale"><span class="erf-t">${letters(finalStage ? "RENEWED FOR SEASON 2!!" : "SERIES FINALE?!", "ltr", 0.05)}</span>${r.endless && s.stats?.endlessTime ? `<small>(the filler continued for ${fmtTime(s.stats.endlessTime)})</small>` : ""}</div>`
     : quit
       ? `<div class="er-dropped">DROPPED AFTER EPISODE ${fmtInt(r.episode)}</div>`
       : tbcBanner();
@@ -92,7 +92,7 @@ export function showResults(app: App, s: RunSummary, r: RunReport, ep: EpisodeIn
     <div class="er-scroll kscroll">
       <div class="er-main">
         <header class="er-head">
-          <div class="er-ep"><small>${esc(r.stageName.toUpperCase())}${r.heat ? ` · HEAT ${r.heat}` : ""}</small><b>EPISODE ${fmtInt(r.episode)}</b><span class="er-title">“${esc(ep.title)}”</span></div>
+          <div class="er-ep"><small>${esc(r.stageName.toUpperCase())}${r.heat ? ` · HEAT ${r.heat}` : ""}</small><b>EPISODE ${fmtInt(r.episode)}</b><span class="er-title">“${esc(ep.title)}”</span>${app.practice ? `<span class="er-practice">${tag("PRACTICE RUN · NOT SAVED", "cyan")}</span>` : ""}</div>
           <div class="er-sting">${stinger}</div>
           <div class="er-hero">
             <div class="por${clear ? " won" : " lost"}" style="--hc:${app.heroColor(hd.id)}">${portrait(hd.portrait, clear ? 1 : 0, "pimg")}${clear ? "" : '<i class="sweat"></i>'}</div>
@@ -126,7 +126,7 @@ export function showResults(app: App, s: RunSummary, r: RunReport, ep: EpisodeIn
                   const rw = a.def.reward;
                   return `<div class="ach-card" style="--i:${i}">${trophyIcon("aico")}<span class="ac-tx"><b>${esc(a.def.name)}</b><small>${esc(a.def.desc)}</small></span><span class="ac-rw">${rw.gems ? money("gems", `+${fmtInt(rw.gems)}`) : ""}${rw.coins ? money("coins", `+${fmtInt(rw.coins)}`) : ""}${rw.title ? tag("TITLE", "pink") : ""}</span></div>`;
                 })
-                .join("")}${r.achievements.some((a) => a.def.reward.gems || a.def.reward.coins) ? `<div class="ac-claim">${btn("CLAIM ALL", { cls: "gold small", act: "claim" })}</div>` : ""}</section>`
+                .join("")}${!app.practice && r.achievements.some((a) => a.def.reward.gems || a.def.reward.coins) ? `<div class="ac-claim">${btn("CLAIM ALL", { cls: "gold small", act: "claim" })}</div>` : ""}</section>`
             : ""
         }
         ${recChips.length ? `<section class="er-recs">${recChips.join("")}</section>` : ""}
@@ -235,12 +235,23 @@ export function showResults(app: App, s: RunSummary, r: RunReport, ep: EpisodeIn
   cursor += r.achievements.length ? 0.5 : 0;
   at(cursor, () => el.querySelector(".er-recs")?.classList.add("in"));
   cursor += 0.3;
-  // celebrations for new unlocks
-  const unlocks = r.unlocks.slice();
-  if (unlocks.length) {
-    at(cursor, () => {
-      if (!skipped) celebrateUnlocks(app, unlocks);
+  // celebrations for new unlocks: always shown once (a skip / reduced motion shows them at once; a button
+  // pressed before their beat shows them first, then acts)
+  const unlocks = r.unlocks.filter((u) => !u.start);
+  let celebrating = false;
+  const celebrate = (then?: () => void) => {
+    if (celebrating || !unlocks.length) {
+      if (!celebrating) then?.();
+      return;
+    }
+    celebrating = true;
+    celebrateUnlocks(app, unlocks.splice(0), () => {
+      celebrating = false;
+      then?.();
     });
+  };
+  if (unlocks.length) {
+    at(cursor, () => celebrate());
     cursor += 0.3;
   }
   // 5. narrator, then the "you can afford" line
@@ -271,12 +282,12 @@ export function showResults(app: App, s: RunSummary, r: RunReport, ep: EpisodeIn
   // ---------------------------------------------------------------- buttons
   onTap(el.querySelector('[data-act="upgrade"]'), () => {
     app.sfx("uiConfirm");
-    app.goHub(["home", "board"], { focus: "affordable" });
+    celebrate(() => app.goHub(["home", "board"], { focus: "affordable" }));
   });
-  onTap(el.querySelector('[data-act="retry"]'), () => app.retry());
+  onTap(el.querySelector('[data-act="retry"]'), () => celebrate(() => app.retry()));
   onTap(el.querySelector('[data-act="hub"]'), () => {
     app.sfx("uiBack");
-    app.goHub();
+    celebrate(() => app.goHub());
   });
   onTap(el.querySelector('[data-act="claim"]'), (e) => {
     const res = claimAllAchievements(save.profile);
@@ -295,7 +306,7 @@ export function showResults(app: App, s: RunSummary, r: RunReport, ep: EpisodeIn
     if ((e.target as HTMLElement).closest("button, summary")) return;
     skip();
   });
-  const L = layer(el, () => app.goHub());
+  const L = layer(el, () => celebrate(() => app.goHub()));
   if (reducedMotion()) skip();
 
   return {

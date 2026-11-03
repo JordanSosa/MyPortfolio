@@ -99,6 +99,7 @@ import { save, recordRun, exportSave, importSave, resetSettings } from "./save";
 save.profile                     // the live Profile: mutate with src/meta functions, then save.save()
 save.runPlan(choice?)            // buildRunConfig -> { hero, config, issues, heat, relicSlots, board }
 save.recordRun(summary)          // applyRunToProfile + persist -> RunReport (also save.lastReport)
+save.previewRun(summary)         // the same report on a throwaway copy: debug / deep-link ("practice") runs never bank
 save.exportString() / save.importString(text) / save.reset()
 save.origin / save.migration / save.bootUnlocks
 save.data                        // v1-shaped live view for the pre-hub screens (coins, meta, settings, best, runs, wins, lastHero, totalKills, tut)
@@ -118,12 +119,18 @@ so the old results screen shows what was earned.
 const plan = save.runPlan({ stage, hero, relics, twists, endless, startWeapon });  // repaired, never throws
 if (plan.issues.length) showWhyTheLoadoutChanged(plan.issues);
 const world = new World({ hero: plan.hero, seed, run: plan.config });
-// in-run toasts (about once a second, not per frame):
+// in-run toasts (about once a second, not per frame; runStats() refreshes one live object, no summary build):
 const watch = new AchievementWatch(save.profile);
-for (const a of watch.poll(world.summary().stats)) toast(a);
+for (const a of watch.poll(world.runStats())) toast(a);
 // after the run:
 const report = save.recordRun(world.summary());   // RunReport for results v2
 ```
+
+Only **account runs** bank (`App.startAccountRun`: hub START EPISODE, RETRY of one).
+Debug / deep-link runs (`?autoplay`, `?screen=game`, `?god`, `?relics=` ...) play
+with every pool open and use `save.previewRun` instead: Episode Results shows the
+payout with a "PRACTICE RUN · NOT SAVED" tag, nothing is stored, the saved
+loadout is untouched and no in-run Plot Point toasts fire.
 
 **RunConfig built by `buildRunConfig`** (contract: `src/game/run-config.ts`):
 `mods` = board stat mod + hero level mod (+1% damage, +1% max HP per level above
@@ -133,7 +140,9 @@ registered (the hero's signature weapon always offered), `weaponDamage` = +3%
 per mastery rank, `weaponLevelBonus` = +1 at rank 5 ("Limit Break"), +2 at 10,
 `relics` with stars, `talents` (repaired against the tree and points),
 `constellation`, `twists` + `twistRanks`, `start` (board start levels, chosen
-start weapon at Lv2 with "Prepared Protagonist"), slots (6 + board), `flags`
+start weapon at Lv2 with "Prepared Protagonist": the hero's signature weapon
+when none is chosen, which the World then levels to Lv2 instead of adding a
+second copy; another weapon joins the build at Lv2), slots (6 + board), `flags`
 (board `RUN_FLAGS`: banish, skip, dashCharges, ultStart, chestLuck, eliteRate,
 plotArmor, friendship, revives).
 
@@ -160,8 +169,10 @@ something'").
   (D / C / B / A); a clear is A, S under 150 damage taken, SS under 50 with an
   SSS combo rank.
 - **Coins**: picked up + time (per minute) + kills (+ elites) + each boss (by its
-  slot in the stage) + clear + endless minutes, then x grade x heat
-  (`1 + 0.08 heat`) x curse x stage `rewardMul`.
+  slot in the stage) + clear + endless minutes, then a **Greed** line (the
+  bonuses x `RunStats.greed`; the coins picked up already include greed, so it
+  never counts twice), then x grade x heat (`1 + 0.08 heat`) x curse x stage
+  `rewardMul`.
 - **Gems**: stipend (per run + per minute + endless) x gem find (`RunStats.gemFind`)
   x heat x curse x stage, + first clear (by stage order), + boss first kills, +
   heat badges (4 / 8 / 16 / 32, once per stage), + codex bounties; achievements
@@ -248,7 +259,8 @@ completions mid-run without touching the profile.
 Aoi / Akane (clear stages 1-3), gacha heroes (gacha only), signature weapons with
 their hero, the 4 general weapons and 8 passives on lifetime counters, Plot Twists
 by stage clears. Content with no entry is free (dev content just works); stages
-need the previous clear. `evaluateUnlocks` runs after every run and at boot;
+need the previous clear; a twist without a row opens with the stage its
+`TwistDef.unlockedBy` names (locked while that stage is not registered). `evaluateUnlocks` runs after every run and at boot;
 `unlockStatus` gives the codex hint and progress ("412 / 1,000"). Codex
 discoveries pay `TUNING.codex` gems once per entry.
 
@@ -276,3 +288,12 @@ the in-run watcher, unlock rules, loadout validation and RunConfig (with a live
 World run), applyRunToProfile (with a live bot run), and save v2 against an
 in-memory localStorage (fresh / migrated / corrupt / garbage / throwing storage,
 export / import, the v1 view, banking a run).
+
+`tests/integration.test.ts` pins the seams between the layers with the LIVE
+registries: run -> bank -> buy -> a measurably stronger run, hero level mods,
+relic / talent / constellation stats applied exactly once, Prepared Protagonist,
+mastery and Limit Break levels, board slots / start level / flags in the World,
+Plot Twist heat agreeing across loadout, sim, RunStats and payout, content pools,
+unlock rules vs `TwistDef.unlockedBy`, banner rotation + Plot Point evaluation
+per banked run, greed on the payout, and a Filler Arc run banked as a clear.
+The browser side of the same loop is `node scripts/flows.mjs` (ARCHITECTURE.md §8).

@@ -22,10 +22,14 @@ export const FILLER_AT = 1.7;
 /** Seconds from "TO BE CONTINUED..." to the record scratch + "JUST KIDDING". */
 export const FILLER_KID = 1.5;
 /**
- * Screen-anchored stamps (PLOT ARMOR!, SAKUGA MODE!, FILLER ARC...) sit this far above the view centre:
- * between the HUD and the combo counter, clear of the hero (who stands at the centre).
+ * Screen-anchored stamps (PLOT ARMOR!, SAKUGA MODE!, FILLER ARC...) sit this far above the view centre
+ * (a share of the view height, at most 100 art px): between the HUD and the combo counter, clear of the
+ * hero (who stands at the centre). A fixed -100 put the stamps on the HUD timer in short desktop /
+ * landscape views (300 / 216 art px tall).
  */
-const STAMP_Y = -100;
+function stampY(viewH: number): number {
+  return -Math.round(Math.max(48, Math.min(100, viewH * 0.24)));
+}
 /** A proc's name text shows at most once per id per this many seconds. */
 const NAME_EVERY = 6;
 /** Filler Arc episode card titles (docs/content/satire.md §2.2). */
@@ -165,13 +169,13 @@ export class RelicFx {
         }
         fx.speed.radial(0.9, { color: C.paleYellow, intensity: 0.9 });
         fx.ps.emit(P.rays, e.x, e.y - 10, 22, NaN, C.paleYellow, 1.3, 1.6);
-        this.texts.add("PLOT ARMOR!", 0, STAMP_Y, { anchor: 2, scale: 3, rainbow: true, life: 1.8, wobble: 2 });
-        this.texts.add("the main character can't die yet", 0, STAMP_Y + 20, { anchor: 2, scale: 1, color: C.paleYellow, life: 1.6, delay: 0.25 });
+        this.texts.add("PLOT ARMOR!", 0, stampY(this.r.camera.view.h), { anchor: 2, scale: 3, rainbow: true, life: 1.8, wobble: 2 });
+        this.texts.add("the main character can't die yet", 0, stampY(this.r.camera.view.h) + 20, { anchor: 2, scale: 1, color: C.paleYellow, life: 1.6, delay: 0.25 });
         o.sfx("revive");
         o.haptic(90);
       }),
       bus.on("ultEncore", (e) => {
-        this.texts.add("ENCORE!", 0, STAMP_Y, { anchor: 2, scale: 3, rainbow: true, life: 1.4, wobble: 3 });
+        this.texts.add("ENCORE!", 0, stampY(this.r.camera.view.h), { anchor: 2, scale: 3, rainbow: true, life: 1.4, wobble: 3 });
         fx.ps.emit(P.confetti, e.x, e.y - 16, 30, NaN, -1, 1.2, 1.6);
         if (!o.calm) juice.flash(C.pinkLight, 0.5, 0.4);
         o.sfx("ultBlast", 0.8, 3);
@@ -193,7 +197,7 @@ export class RelicFx {
     const juice = fx.juice;
     this.fillerT = 0;
     this.after(FILLER_AT, () => {
-      this.texts.add("TO BE CONTINUED...", 0, STAMP_Y, { anchor: 2, scale: 2, color: C.paleYellow, life: FILLER_KID + 0.1, rise: 0 });
+      this.texts.add("TO BE CONTINUED...", 0, stampY(this.r.camera.view.h), { anchor: 2, scale: 2, color: C.paleYellow, life: FILLER_KID + 0.1, rise: 0 });
       o.sfx("toBeContinued");
     });
     this.after(FILLER_AT + FILLER_KID, () => {
@@ -205,9 +209,9 @@ export class RelicFx {
         juice.zoomPunch(0.06);
       }
       fx.speed.radial(1.2, { color: C.pinkLight, intensity: 1 });
-      this.texts.add("JUST KIDDING!", 0, STAMP_Y - 18, { anchor: 2, scale: 2, color: C.pink, life: 3, wobble: 2, rise: 2 });
-      this.texts.add("...IN THE FILLER ARC!", 0, STAMP_Y + 4, { anchor: 2, scale: 2, rainbow: true, life: 3.4, wobble: 3, rise: 3, delay: 0.15 });
-      this.texts.add("the stage counts as cleared. the run goes on", 0, STAMP_Y + 22, { anchor: 2, scale: 1, color: C.paleYellow, life: 3, delay: 0.5, rise: 2 });
+      this.texts.add("JUST KIDDING!", 0, stampY(this.r.camera.view.h) - 18, { anchor: 2, scale: 2, color: C.pink, life: 3, wobble: 2, rise: 2 });
+      this.texts.add("...IN THE FILLER ARC!", 0, stampY(this.r.camera.view.h) + 4, { anchor: 2, scale: 2, rainbow: true, life: 3.4, wobble: 3, rise: 3, delay: 0.15 });
+      this.texts.add("stage cleared! the run goes on", 0, stampY(this.r.camera.view.h) + 22, { anchor: 2, scale: 1, color: C.paleYellow, life: 3, delay: 0.5, rise: 2 });
       // the HUD card waits for the stamp to clear (never two headlines at once)
       this.after(3.6, () => o.hooks?.banner?.("info", "FILLER ARC", "endless - rewards keep counting"));
       const v = this.r.camera.view;
@@ -249,12 +253,12 @@ export class RelicFx {
         for (let i = 0; i < 5; i++) this.after(i * 0.06, () => fx.ps.emit(P.ring, x, y, 1, NaN, cols[i], 2.4 + i * 0.6));
         fx.ps.emit(P.rays, x, y, 20, NaN, -1, 1.4, 1.6);
         if (!o.calm) juice.shake(0.5);
-        this.texts.add("SENTAI!", 0, STAMP_Y, { anchor: 2, scale: 2, rainbow: true, life: 1.2, wobble: 2 });
+        this.texts.add("SENTAI!", 0, stampY(this.r.camera.view.h), { anchor: 2, scale: 2, rainbow: true, life: 1.2, wobble: 2 });
         o.sfx("explosionBig", 0.8);
         return;
       }
       case "time_skip_clock":
-        this.texts.add("TWO YEARS LATER...", 0, STAMP_Y, { anchor: 2, scale: 2, color: C.paleYellow, life: 2.2, rise: 0 });
+        this.texts.add("TWO YEARS LATER...", 0, stampY(this.r.camera.view.h), { anchor: 2, scale: 2, color: C.paleYellow, life: 2.2, rise: 0 });
         fx.ps.emit(P.ring, x, y, 1, NaN, C.cyan, 3);
         if (!o.calm) juice.flash(C.lavender, 0.4, 0.6);
         o.sfx("freeze");
@@ -262,7 +266,7 @@ export class RelicFx {
       case "sakuga_cel":
         // SAKUGA MODE: a gold border pulses for its duration; every hit sparkles (enemyHit, below)
         this.sakugaT = Math.max(this.sakugaT, v || 5);
-        this.texts.add("SAKUGA MODE!", 0, STAMP_Y, { anchor: 2, scale: 2, rainbow: true, life: 1.4, wobble: 2 });
+        this.texts.add("SAKUGA MODE!", 0, stampY(this.r.camera.view.h), { anchor: 2, scale: 2, rainbow: true, life: 1.4, wobble: 2 });
         fx.speed.radial(0.6, { color: C.yellow, intensity: 0.7 });
         o.sfx("powerup");
         return;
@@ -277,7 +281,7 @@ export class RelicFx {
         return;
       // ---- Plot Twist: Shounen Rival
       case "rival_recolour":
-        this.texts.add("YOUR RIVAL (RECOLOUR) APPEARS!", 0, STAMP_Y + 8, { anchor: 2, scale: 1, color: C.red, life: 2.2, wobble: 2, rise: 4 });
+        this.texts.add("YOUR RIVAL (RECOLOUR) APPEARS!", 0, stampY(this.r.camera.view.h) + 8, { anchor: 2, scale: 1, color: C.red, life: 2.2, wobble: 2, rise: 4 });
         o.hooks?.banner?.("incoming", "RIVAL!", "\"I'll never lose to you!\"");
         fx.ps.emit(P.smoke, x, y - 8, 4, NaN, -1, 1.2);
         o.sfx("bossRoar", 0.5, 7);

@@ -9,23 +9,15 @@
  *   vol  base level            gap  min seconds between two triggers of this id
  *   max  max concurrent        pri  priority for voice stealing (0 spam .. 3 critical)
  *   rev  reverb send           rnd  random pitch spread (+- semitones)
+ *
+ * Season 2 patches live in sfx-s2.ts; shared helpers in sfx-kit.ts.
  */
-import type { SfxId, SfxOpts } from "./api";
-import { semis as st, type Voice } from "./synth";
+import type { SfxId } from "./api";
+import { boom, rand, sparkles, type SfxDef } from "./sfx-kit";
+import { S2_SFX } from "./sfx-s2";
+import { semis as st } from "./synth";
 
-export interface SfxDef {
-  play(v: Voice, p: number, o: SfxOpts): void;
-  vol?: number;
-  gap?: number;
-  max?: number;
-  pri?: number;
-  rev?: number;
-  rnd?: number;
-  /** Never subject to the engine's global low-priority voice budget (UI ticks, boss hits). */
-  free?: boolean;
-  /** Always subject to that budget despite a higher priority (spammy weapon booms). */
-  budget?: boolean;
-}
+export type { SfxDef } from "./sfx-kit";
 
 // note frequencies used a lot
 const C5 = 523.25, E5 = 659.26, G5 = 783.99, A5 = 880, C6 = 1046.5, E6 = 1318.5, G6 = 1568, C7 = 2093;
@@ -39,27 +31,6 @@ const VOWELS: [number, number][] = [
   [500, 1950], // e
   [540, 880], // o
 ];
-
-function rand(a: number, b: number): number {
-  return a + Math.random() * (b - a);
-}
-
-/** sparkle tail: a few random high FM pings */
-function sparkles(v: Voice, t: number, n: number, base: number, spread: number, vol: number, step = 0.045): void {
-  const scale = [0, 4, 7, 12, 16, 19, 24];
-  for (let i = 0; i < n; i++) {
-    const s = scale[Math.floor(Math.random() * Math.min(scale.length, spread))];
-    let f = base * st(s);
-    while (f > 4800) f /= 2; // keep FM sidebands well below Nyquist (and ears happy)
-    v.fm({ t: t + i * step + Math.random() * step * 0.5, f, ratio: 3.5, idx: 1.1, idx2: 0.05, a: 0.001, d: 0.22, s: 0, v: vol * (1 - (i / n) * 0.6), pan: rand(-0.5, 0.5) });
-  }
-}
-
-/** low punchy boom */
-function boom(v: Voice, t: number, f: number, dur: number, vol: number): void {
-  v.tone({ t, w: "sine", f: f * 2.2, f2: f * 0.5, gt: dur * 0.35, a: 0.001, d: dur, s: 0, v: vol });
-  v.tone({ t, w: "triangle", f: f * 4, f2: f, gt: 0.04, a: 0.001, d: 0.08, s: 0, v: vol * 0.35 });
-}
 
 const BASE_SFX = {
   // ------------------------------------------------------------------ UI
@@ -653,50 +624,8 @@ const BASE_SFX = {
   },
 } satisfies Partial<Record<SfxId, SfxDef>>;
 
-/** Season 2 ids start as aliases of similar sounds (docs/EXPANSION.md); the audio agent replaces them with bespoke synthesis. */
+/** Base game + Season 2 (bespoke synthesis for every id, see sfx-s2.ts). */
 export const SFX: Record<SfxId, SfxDef> = {
   ...BASE_SFX,
-  hubOpen: BASE_SFX.uiConfirm,
-  tabSwitch: BASE_SFX.uiMove,
-  nodeBuy: BASE_SFX.powerup,
-  nodeDeny: BASE_SFX.uiDeny,
-  talentUp: BASE_SFX.cardPick,
-  heroLevelUp: BASE_SFX.levelUp,
-  masteryUp: BASE_SFX.rankUp,
-  unlockFanfare: BASE_SFX.evolve,
-  achievement: BASE_SFX.rankUp,
-  payoutTick: BASE_SFX.countTick,
-  payoutTotal: BASE_SFX.coin,
-  currencyGain: BASE_SFX.coin,
-  equip: BASE_SFX.cardPick,
-  gachaCharge: BASE_SFX.ultReady,
-  gachaMeteor: BASE_SFX.ultCutin,
-  gachaReveal: BASE_SFX.cardFlip,
-  gachaRevealSR: BASE_SFX.powerup,
-  gachaRevealSSR: BASE_SFX.chestJackpot,
-  gachaRevealUR: BASE_SFX.evolve,
-  gachaMythicGlitch: BASE_SFX.warning,
-  gachaMythicBoom: BASE_SFX.ultBlast,
-  gachaDupe: BASE_SFX.coin,
-  gachaLost5050: BASE_SFX.comboBreak,
-  starUp: BASE_SFX.rankUp,
-  narratorSting: BASE_SFX.telegraph,
-  nani: BASE_SFX.hitCrit,
-  baka: BASE_SFX.bossHit,
-  recordScratch: BASE_SFX.comboBreak,
-  toBeContinued: BASE_SFX.gameOver,
-  honk: BASE_SFX.bossRoar,
-  missile: BASE_SFX.starShot,
-  fanSmack: BASE_SFX.bossHit,
-  teacup: BASE_SFX.bubblePop,
-  sparkleCharm: BASE_SFX.heal,
-  transform: BASE_SFX.evolve,
-  fireball: BASE_SFX.explosion,
-  boba: BASE_SFX.bubblePop,
-  paperCrane: BASE_SFX.boomerang,
-  lightstick: BASE_SFX.beam,
-  snore: BASE_SFX.freeze,
-  glitch: BASE_SFX.warning,
-  splash: BASE_SFX.bubblePop,
-  crunch: BASE_SFX.propBreak,
+  ...S2_SFX,
 };

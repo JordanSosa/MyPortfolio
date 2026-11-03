@@ -98,7 +98,7 @@ export class Hub implements UiScreen {
     this.el.innerHTML = `
       <div class="hub-bg" aria-hidden="true"></div>
       ${sparkles(10)}
-      <header class="hub-top">
+      <header class="hub-top" data-nav-chrome>
         ${iconBtn("◀", "back", "Back", "hub-back")}
         <div class="hub-title" aria-live="polite"><span></span></div>
         <div class="hub-cbar"></div>
@@ -152,6 +152,8 @@ export class Hub implements UiScreen {
     const prev = this.top;
     const page = PAGES[id](this, o);
     if (prev) {
+      // the outgoing page stays visible while it slides: inert, so it can't take focus or a second tap
+      prev.el.inert = true;
       this.app.nav.remove(prev.layer);
       this.slide(prev.el, "p-out-l", true);
     }
@@ -178,6 +180,7 @@ export class Hub implements UiScreen {
   back(): void {
     if (this.closed || this.stack.length <= 1) return;
     const page = this.stack.pop() as HubPage;
+    page.el.inert = true;
     this.app.nav.remove(page.layer);
     this.app.sfx("uiBack");
     this.slide(page.el, "p-out-r", false, () => {
@@ -186,6 +189,7 @@ export class Hub implements UiScreen {
     });
     const top = this.top as HubPage;
     top.el.hidden = false;
+    top.el.inert = false;
     this.slide(top.el, "p-in-l", false);
     this.app.nav.push(top.layer);
     markBorn();
@@ -232,7 +236,8 @@ export class Hub implements UiScreen {
         this.titleEl.animate([{ transform: "translateY(-40%) scale(1.15)", opacity: 0 }, { transform: "none", opacity: 1 }], { duration: 320, easing: "cubic-bezier(0.2, 1.6, 0.4, 1)" });
     }
     this.app.music(top.music ?? "hub");
-    this.app.syncHistory();
+    // (while the App is still switching to this hub, its setScreen syncs the history guard)
+    if (this.app.hub === this) this.app.syncHistory();
   }
 
   // ---------------------------------------------------------------- shared helpers for pages

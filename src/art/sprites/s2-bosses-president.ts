@@ -94,13 +94,16 @@ function capeBlazer(p: Pix, cx: number, top: number, mode: 0 | 1 | 2): void {
         [cx - 6 - flare, top + 22],
         [cx - 13 - flare * 1.4, top + 19 + flare * 0.2],
       ],
-      "G",
+      "2",
     );
-    l.each((x, y, k) => (k === "G" && x < cx - 5 - (y - top) * 0.15 ? "g" : k === "G" && x > cx + 6 ? "2" : null));
-    // hem trim
-    l.each((x, y, k) => (k !== "." && !l.solid(x, y + 1) ? "2" : null));
+    // dark plum school blazer: lit back edge (top-left light), shadow toward the body
+    l.each((x, y, k) => (k === "2" && x < cx - 5 - (y - top) * 0.15 ? "G" : k === "2" && x > cx + 6 ? "X" : null));
+    // gold piping on the hem
+    l.each((x, y, k) => (k !== "." && !l.solid(x, y + 1) ? "Y" : null));
     // empty sleeve hanging at the back shoulder
-    strand(l, [[cx - 8, top + 2], [cx - 11 - flare * 0.8, top + 10], [cx - 12 - flare, top + 17]], 4, 3, { base: "G", shade: "2", light: "g" });
+    strand(l, [[cx - 8, top + 2], [cx - 11 - flare * 0.8, top + 10], [cx - 12 - flare, top + 17]], 4, 3, { base: "2", shade: "X", light: "G" });
+    // gold cuff on the empty sleeve
+    l.each((x, y, k) => (k !== "." && y === top + 16 && x < cx - 10 ? "y" : null));
   });
   // gold crest button
   p.set(cx + 7, top + 6, "y").set(cx + 7, top + 9, "Y");
@@ -109,9 +112,9 @@ function capeBlazer(p: Pix, cx: number, top: number, mode: 0 | 1 | 2): void {
 /** Front lapel of the shoulder-cape, drawn over the shirt. */
 function capeFront(p: Pix, cx: number, top: number): void {
   layer(p, (l) => {
-    l.poly([[cx + 3, top - 1], [cx + 8, top], [cx + 9, top + 9], [cx + 6, top + 8], [cx + 4, top + 2]], "G");
-    l.each((x, y, k) => (k === "G" && x >= cx + 8 ? "2" : k === "G" && x <= cx + 4 ? "g" : null));
-    l.poly([[cx - 3, top - 1], [cx - 8, top], [cx - 8, top + 7], [cx - 5, top + 3]], "g");
+    l.poly([[cx + 3, top - 1], [cx + 8, top], [cx + 9, top + 9], [cx + 6, top + 8], [cx + 4, top + 2]], "2");
+    l.each((x, y, k) => (k === "2" && x >= cx + 8 ? "X" : k === "2" && x <= cx + 4 ? "G" : null));
+    l.poly([[cx - 3, top - 1], [cx - 8, top], [cx - 8, top + 7], [cx - 5, top + 3]], "G");
   });
   p.set(cx + 6, top + 5, "y");
 }

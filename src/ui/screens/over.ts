@@ -6,9 +6,10 @@
  * the right, a subtitle line (the killing boss's own line, a speedrun line, or
  * a generic one), the hero's portrait (greyed, tilted), a "so close" line (the
  * boss's HP left / the next boss's arrival / the gap to the best time), REVIVE
- * when owned, and RETRY next to RESULTS. RETRY banks the run exactly like the
- * Results screen (App.bankRun, once) before starting the next one, so coins,
- * bests and the run counter are never lost.
+ * when owned, and RETRY next to RESULTS. The App banks the run as soon as this
+ * modal opens with no revive left (or on victory); RETRY / RESULTS otherwise
+ * bank it (App.bankRun, exactly once) before moving on, so coins, bests and the
+ * run counter are never lost.
  */
 import { CFG } from "../../game/config";
 import { heroDef } from "../../game/heroes";
