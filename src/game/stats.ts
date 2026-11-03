@@ -77,6 +77,8 @@ export interface Stats {
   comboTime: number;
   /** Damage multiplier against elites and bosses. */
   bossDmg: number;
+  /** Player collision radius multiplier (CFG.playerRadius x this): Chibi Charm shrinks it, Truck-kun is 1.5. */
+  hitbox: number;
 }
 
 export type StatMod = (s: Stats) => void;
@@ -114,6 +116,7 @@ export function baseStats(): Stats {
     ultPower: 1,
     comboTime: 0,
     bossDmg: 1,
+    hitbox: 1,
   };
 }
 
@@ -134,6 +137,7 @@ export function finalizeStats(s: Stats): Stats {
   s.ultPower = Math.max(0, s.ultPower);
   s.comboTime = Math.max(0, s.comboTime);
   s.bossDmg = Math.max(0, s.bossDmg);
+  s.hitbox = Math.max(0.3, s.hitbox);
   s.revives = Math.max(0, Math.floor(s.revives));
   return s;
 }

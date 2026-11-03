@@ -146,7 +146,7 @@ export class RunStatsCollector {
       if (c.jackpot) s.jackpots = (s.jackpots ?? 0) + 1;
     });
     h.on("pickup", (p) => {
-      if (p.kind === "onigiri" || p.kind === "cake") s.foodEaten++;
+      if (p.kind === "onigiri" || p.kind === "cake" || p.kind === "snack") s.foodEaten++;
     });
     h.on("prop", () => {
       s.propsBroken = (s.propsBroken ?? 0) + 1;

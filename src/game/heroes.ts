@@ -7,7 +7,10 @@ import type { ConstellationDef } from "./defs";
 import { Budget } from "./talents/_node";
 import type { HeroDef, HeroId } from "./types";
 import { miniStar } from "./weapons/star-shot";
+import { aoiDrone } from "./weapons/micro-missile-swarm";
+import { puddingC6 } from "./weapons/teapot-tempest";
 import type { World } from "./world";
+import { HEROES_B } from "./heroes-b";
 
 /**
  * Constellations C1..C6 (gacha dupes), literally as docs/content/heroes.md §4:
@@ -138,6 +141,117 @@ export const HEROES: HeroDef[] = [
       ["Yarn balls never turn off and pull gems like Cosmic Yarn"],
     ]),
   },
+  // ---------------------------------------------------------------- Season 2, group A (docs/content/heroes.md §2.4-2.7)
+  {
+    id: "kuro",
+    name: "Kuro",
+    title: "Lord of the Abyssal Flame",
+    sprite: "kuro",
+    portrait: "portrait_kuro",
+    weapon: "dark_flame_dragon",
+    ult: "eternal_abyss",
+    trait: "Sealed Power: +15% area, +10% duration, -10 max HP (the seal is heavy)",
+    color: C.darkViolet,
+    colors: [C.darkViolet, C.violet, C.red, C.deep],
+    band: ["#ddc6ff", "#743fd1", "#2d1b45"],
+    cutinLine: "My right arm... it's RESONATING!! Stand back — I can't hold the seal!!",
+    apply: (s) => {
+      s.area += 0.15;
+      s.duration += 0.1;
+      s.maxHp -= 10;
+    },
+    constellations: stars("dark_flame_dragon", [
+      ["+6% area", (s) => void (s.area += 0.06)],
+      ["Dark Flame Dragon starts at Lv2"],
+      ['Trait loses its -10 HP ("the seal holds") and gives +20% area', (s) => void ((s.maxHp += 10), (s.area += 0.05))],
+      ["Eternal Abyss +3 ticks"],
+      ["+10% crit damage", (s) => void (s.critMult += 0.1)],
+      ['A second salamander (Ragnarok II, "the sequel") joins with its own breath'],
+    ]),
+  },
+  {
+    id: "pudding",
+    name: "Pudding",
+    title: "Maid Café Ace",
+    sprite: "pudding",
+    portrait: "portrait_pudding",
+    weapon: "teapot_tempest",
+    ult: "omurice_of_love",
+    trait: "Customer Service: +0.3 HP/s regen, +15% healing, +10% luck",
+    color: C.paleYellow,
+    colors: [C.paleYellow, C.gold, C.pinkLight, C.white],
+    band: ["#fff0c9", "#f2bd66", "#a6683f"],
+    cutinLine: "Welcome home, Master~! Now say it with me... MOE MOE KYUN♡!",
+    apply: (s) => {
+      s.regen += 0.3;
+      s.healMul += 0.15;
+      s.luck += 0.1;
+    },
+    constellations: stars("teapot_tempest", [
+      ["+10 max HP", (s) => void (s.maxHp += 10)],
+      ["Teapot Tempest starts at Lv2"],
+      ["Trait becomes +0.5 HP/s, +25% healing, +10% luck", (s) => void ((s.regen += 0.2), (s.healMul += 0.1))],
+      ["Omurice of Love +1 pulse"],
+      ["+8% luck, +8% coins", (s) => void ((s.luck += 0.08), (s.greed += 0.08))],
+      ["Puddles heal twice as fast; every 100 kills drops a pudding (heal 8)", undefined, puddingC6],
+    ]),
+  },
+  {
+    id: "aoi",
+    name: "Aoi",
+    title: "Mecha Pilot (Licensed Since Tuesday)",
+    sprite: "aoi",
+    portrait: "portrait_aoi",
+    weapon: "micro_missile_swarm",
+    ult: "get_in_the_robot",
+    trait: "Mech Suit: +1 projectile, +1 armor, -15% move speed",
+    color: C.blue,
+    colors: [C.blue, C.lightBlue, C.yellow, C.white],
+    band: ["#b0d8ff", "#5aa8ff", "#3462d6"],
+    cutinLine: "I don't need a license for a GIANT FIST!!",
+    apply: (s) => {
+      s.amount += 1;
+      s.armor += 1;
+      s.moveSpeed -= 0.15;
+    },
+    constellations: stars("micro_missile_swarm", [
+      ["+1 armor", (s) => void (s.armor += 1)],
+      ["Micro Missile Swarm starts at Lv2"],
+      ["Trait move penalty becomes -5%", (s) => void (s.moveSpeed += 0.1)],
+      ["GET IN THE ROBOT +1 fist"],
+      ["+10% projectile speed", (s) => void (s.projSpeed += 0.1)],
+      ["A support drone orbits Aoi and fires 3 micro missiles every 2 s (Aoi's missile stats, 60% damage)", undefined, aoiDrone],
+    ]),
+  },
+  {
+    id: "akane",
+    name: "Akane",
+    title: "Tsundere Drill Princess",
+    sprite: "akane",
+    portrait: "portrait_akane",
+    weapon: "baka_harisen",
+    ult: "not_like_i_like_you",
+    trait: "Tsun Tsun: +10% damage, +30% knockback, +5% crit chance",
+    color: C.orange,
+    colors: [C.red, C.orange, C.yellow, C.pinkLight],
+    band: ["#ffe14d", "#ff9a3d", "#ad1d4a"],
+    cutinLine: "D-don't get the wrong idea! I'm only saving you because you're in my WAY!!",
+    apply: (s) => {
+      s.might += 0.1;
+      s.knock += 0.3;
+      s.crit += 0.05;
+    },
+    constellations: stars("baka_harisen", [
+      ["+5% might", (s) => void (s.might += 0.05)],
+      ["Baka Harisen starts at Lv2"],
+      ["Trait becomes +15% damage, +50% knockback, +8% crit", (s) => void ((s.might += 0.05), (s.knock += 0.2), (s.crit += 0.03))],
+      ["Barrage +12 smacks"],
+      ["+10% crit damage", (s) => void (s.critMult += 0.1)],
+      ["Every BAKA! pop stuns enemies within 40 px for 1 s (the shout itself hurts)"],
+    ]),
+  },
+  // ---------------------------------------------------------------- Season 2, group B (heroes-b.ts: Senpai, MG#47, Isekai-kun, Truck-kun)
+  ...HEROES_B,
 ];
 
 export const HERO_BY_ID: ReadonlyMap<string, HeroDef> = new Map(HEROES.map((h) => [h.id, h]));

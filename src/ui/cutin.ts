@@ -8,6 +8,7 @@
  * wall-clock fallback: App ends it whenever the sim is no longer in its cut-in
  * and whenever the run / screen ends (a paused game keeps it up, untouched).
  */
+import { HERO_BY_ID } from "../game/heroes";
 import { esc, h, sprite } from "./dom";
 
 const BAND: Record<string, [string, string, string]> = {
@@ -25,7 +26,10 @@ export interface CutinHandle {
 const OUT_MS = 200;
 
 export function showCutin(parent: HTMLElement, heroId: string, portrait: string, title: string): CutinHandle {
-  const [c1, c2, c3] = BAND[heroId] ?? BAND.hoshi;
+  // Season 2 heroes carry their band in the HeroDef (docs/content/heroes.md §1.2) and a shouted line
+  const def = HERO_BY_ID.get(heroId);
+  const [c1, c2, c3] = def?.band ?? BAND[heroId] ?? BAND.hoshi;
+  const line = def?.cutinLine ?? "";
   const el = h("div", "cutin");
   const words = title.split(" ");
   const half = Math.ceil(words.length / 2);
@@ -34,7 +38,7 @@ export function showCutin(parent: HTMLElement, heroId: string, portrait: string,
   el.innerHTML = `
     <div class="band" style="--c1:${c1};--c2:${c2};--c3:${c3}"></div>
     <img class="por px" src="${sprite(portrait, 1, 4)}" alt="">
-    <div class="ttl"><small>OVERDRIVE</small>${esc(t1)}<br>${esc(t2)}</div>
+    <div class="ttl"><small>OVERDRIVE</small>${esc(t1)}<br>${esc(t2)}</div>${line ? `<div class="line">${esc(line)}</div>` : ""}
     <div class="flash"></div>`;
   parent.appendChild(el);
   let done = false;

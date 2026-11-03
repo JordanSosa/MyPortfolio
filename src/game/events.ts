@@ -72,6 +72,26 @@ export interface EnemyFxEvent {
 }
 
 /**
+ * Season 2 hero cue (signature weapons, ultimates, talents): `kind` is a
+ * namespaced string constant ("kuro_shadow", "akane_baka"...) owned by the
+ * hero's sim files; the view file of that hero group handles its own kinds and
+ * ignores the rest. Reused payload: copy what you need, keep no `enemy` reference.
+ */
+export interface HeroFxEvent {
+  kind: string;
+  x: number;
+  y: number;
+  /** Second point / direction, kind-specific. */
+  x2: number;
+  y2: number;
+  /** Radius / scale / duration, kind-specific. */
+  r: number;
+  /** Count / index / variant, kind-specific. */
+  n: number;
+  enemy: Enemy | null;
+}
+
+/**
  * Stage-driven presentation directive (the sim tells the view to change the
  * look: Cancel-sama's "Ratings Drop" grade, "Budget Cuts" render scale...).
  * Handled by src/view/stage-view.ts. Kinds:
@@ -147,6 +167,8 @@ export interface GameEvents {
   ultBurst: { x: number; y: number; w: number; h: number };
   /** Mochi's ult: a wave of cats enters at the view edge x (leading edge), running along `dir` (+1 right, -1 left). */
   ultMeow: { x: number; y: number; dir: number; wave: number };
+  /** Season 2 hero weapon / ult / talent cue (see HeroFxEvent; reused payload). */
+  heroFx: HeroFxEvent;
   // director
   /** `label` (TimelineEvent.label) overrides the kind's banner text. */
   waveIncoming: { kind: string; x: number; y: number; label?: string };

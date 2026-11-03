@@ -524,7 +524,7 @@ export class Feedback {
         this.opts.hooks?.coinPulse?.();
       }),
       bus.on("pickup", (e) => {
-        if (e.kind === "onigiri" || e.kind === "cake") this.sfx("food");
+        if (e.kind === "onigiri" || e.kind === "cake" || e.kind === "snack") this.sfx("food");
         else if (e.kind === "heart") {
           this.sfx("heal", 0.5, 5);
           fx.ps.emit(P.hearts, e.x, e.y - 6, 3, NaN, -1, 0.8, 1);

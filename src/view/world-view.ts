@@ -686,7 +686,18 @@ export class WorldView {
           break;
         }
         default: {
-          const id = k.kind === "onigiri" ? "food_onigiri" : k.kind === "cake" ? "food_cake" : k.kind === "magnet" ? "pk_magnet" : k.kind === "bomb" ? "pk_bomb" : "pk_clock";
+          const id =
+            k.kind === "snack"
+              ? k.sprite || "food_onigiri"
+              : k.kind === "onigiri"
+                ? "food_onigiri"
+                : k.kind === "cake"
+                  ? "food_cake"
+                  : k.kind === "magnet"
+                    ? "pk_magnet"
+                    : k.kind === "bomb"
+                      ? "pk_bomb"
+                      : "pk_clock";
           const a = this.anims.get(id);
           const h = a.first + (Math.floor(time * 4 + i) % a.count);
           const power = k.kind === "magnet" || k.kind === "bomb" || k.kind === "clock";
@@ -696,7 +707,8 @@ export class WorldView {
             r.glow(k.x, k.y - 7 + bob, 12, c, 0.35 + 0.15 * Math.sin(time * 6));
             r.ring(Layer.FxAdd, k.x, k.y - 7 + bob, 8 + ((time * 10) % 6), c, 0.5 - ((time * 10) % 6) / 12, Flag.Add | Flag.Glow);
           }
-          r.spr(Layer.Entity, h, k.x, k.y - k.z - 6 + bob, 1, 1, 0, 0xffffff, 1, 0, power ? Flag.Glow : 0);
+          // (a content snack carries its own sprite + tint: pudding, petit four, chocolates...)
+          r.spr(Layer.Entity, h, k.x, k.y - k.z - 6 + bob, 1, 1, 0, k.kind === "snack" ? k.tint : 0xffffff, 1, 0, power ? Flag.Glow : 0);
         }
       }
     }

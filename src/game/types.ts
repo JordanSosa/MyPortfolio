@@ -129,6 +129,11 @@ export interface Enemy {
   inv: number;
   /** Sprite override for this one enemy ("" = def.sprite): re-skins such as the Rival (Recolour). */
   skin: string;
+  /**
+   * Stunned / dazed while > 0 (seconds, counts down): no behaviour update (a boss's pattern does not
+   * progress) and no movement of its own; knockback still applies (Baka Harisen daze, bull bars...).
+   */
+  stun: number;
 }
 
 // ---------------------------------------------------------------- projectiles
@@ -288,8 +293,12 @@ export interface Gem {
   dead: boolean;
 }
 
-/** "heart": a tiny relic heart (heals `value` HP, magnet-pulled like coins). */
-export type PickupKind = "coin" | "onigiri" | "cake" | "magnet" | "bomb" | "clock" | "chest" | "heart";
+/**
+ * "heart": a tiny relic heart (heals `value` HP, magnet-pulled like coins).
+ * "snack": content food (heals `value` HP, collected on touch like onigiri, counts as food eaten),
+ * drawn with its own `sprite` (pudding, petit four, chocolates...).
+ */
+export type PickupKind = "coin" | "onigiri" | "cake" | "magnet" | "bomb" | "clock" | "chest" | "heart" | "snack";
 
 export interface Pickup {
   kind: PickupKind;
@@ -303,6 +312,9 @@ export interface Pickup {
   golden: boolean;
   /** Coins dropped instead of censored food (Censored twist: the view draws a black bar). */
   censored: boolean;
+  /** Sprite id for a "snack" (and a tint for it, 0xffffff = none); "" for every other kind. */
+  sprite: string;
+  tint: number;
   state: number;
   speed: number;
   t: number;
@@ -434,6 +446,13 @@ export interface HeroDef {
   constellations?: readonly ConstellationDef[];
   /** The shouted subtitle under the ult title in the cut-in. */
   cutinLine?: string;
+  /** Cut-in band gradient [top, middle, bottom] CSS colours (docs/content/heroes.md §1.2); default Hoshi's. */
+  band?: readonly [string, string, string];
+  /**
+   * Trait behaviour beyond `apply` (Senpai's staring aura, Isekai-kun's Lv 3 start, Truck-kun's driving):
+   * installed once per run, after relics and before talents / constellations (World constructor).
+   */
+  install?(w: World): void;
 }
 
 export interface UltState {
@@ -444,6 +463,8 @@ export interface UltState {
   /** Strength scale (grows with player level). */
   power: number;
   data: Record<string, number>;
+  /** Active duration of THIS cast (s) when an ult's start() changes it (talent capstones, constellations); default def.duration. */
+  dur?: number;
 }
 
 export interface UltimateDef {

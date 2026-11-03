@@ -259,6 +259,7 @@ const newEnemy = (): Enemy => ({
   z: 0,
   inv: 0,
   skin: "",
+  stun: 0,
 });
 
 export function resetProjectile(p: Projectile): void {
@@ -314,7 +315,7 @@ const newProjectile = (): Projectile => {
 const newBullet = (): Bullet => ({ x: 0, y: 0, vx: 0, vy: 0, r: 3, dmg: 5, life: 4, age: 0, sprite: "eb_orb", turn: 0, accel: 0, from: "", dead: false });
 const newTelegraph = (): Telegraph => ({ shape: 0, x: 0, y: 0, x2: 0, y2: 0, r: 10, age: 0, life: 1, color: 0xff4d6d, dead: false });
 const newGem = (): Gem => ({ x: 0, y: 0, z: 0, vz: 0, vx: 0, vy: 0, value: 1, tier: 1, state: 0, speed: 0, t: 0, dead: false });
-const newPickup = (): Pickup => ({ kind: "coin", x: 0, y: 0, z: 0, vz: 0, vx: 0, vy: 0, value: 1, golden: false, censored: false, state: 0, speed: 0, t: 0, dead: false });
+const newPickup = (): Pickup => ({ kind: "coin", x: 0, y: 0, z: 0, vz: 0, vx: 0, vy: 0, value: 1, golden: false, censored: false, sprite: "", tint: 0xffffff, state: 0, speed: 0, t: 0, dead: false });
 
 /** RunConfig relic stars, clamped to 0..6. */
 function relicStars(s: number): number {
@@ -382,6 +383,26 @@ export class World {
    * any rule returning true makes the hit a crit. The crit roll is drawn either way.
    */
   readonly critRules: ((e: Enemy, source: string) => boolean)[] = [];
+  /**
+   * Damage-taken multipliers applied in hitEnemy (after crit / bossDmg): each returns a factor for
+   * this hit (1 = none), e.g. burning enemies take +15% (Kuro), swooned ones +50% (Senpai).
+   * Cheap, allocation-free functions only: they run on every hit.
+   */
+  readonly dmgTaken: ((e: Enemy, source: string, crit: boolean) => number)[] = [];
+  /**
+   * Hurt guards (Season 2 heroes: Magical Girl #47's Panic Henshin): run when a hit would land on the
+   * hero (after invulnerability, before shields); a guard returning true negates the hit. Cheap only.
+   */
+  readonly hurtGuards: ((dmg: number, sx: number, sy: number) => boolean)[] = [];
+  /** Contact damage taken multiplier (Senpai's "Too Cool To Get Hit"); bullets / blasts are unaffected. */
+  contactDmg = 1;
+  /** The hero ignores hit recoil (Truck-kun: "can't be knocked back"). */
+  heavy = false;
+  /**
+   * Hero movement override (Truck-kun drives like a vehicle): when set it replaces the default
+   * input -> velocity damping (dashes still use the dash velocity); it sets player.vx / vy.
+   */
+  mover: ((w: World, mx: number, my: number, dt: number) => void) | null = null;
   /** Hero constellation this run (0..6). */
   readonly cons: number;
   /** Seconds of invulnerability after a Plot Armor save. */
@@ -602,6 +623,9 @@ export class World {
       const d = RELICS.get(r.id);
       if (d?.install) d.install(this, relicStars(r.stars));
     }
+    // (the hero's own behaviour: a trait that is more than stats - Truck-kun's driving, Senpai's stare...)
+    this.startLevel = Math.max(1, Math.floor(run.start.level || 1));
+    this.hero.install?.(this);
     const tree = TALENT_TREES.get(this.hero.id);
     if (tree) for (const n of tree.nodes) {
       const rank = talentRank(run.talents[n.id], n.maxRank);
@@ -634,7 +658,7 @@ export class World {
       this.recomputeStats();
     }
     // start at level N: those level-ups are picked on the first frames (the level-up modal / the bot)
-    const lv = Math.max(1, Math.floor(run.start.level || 1));
+    const lv = Math.max(1, Math.floor(this.startLevel));
     if (lv > 1) {
       this.level = lv;
       this.xpNext = xpToNext(lv);
@@ -645,6 +669,11 @@ export class World {
   /** Weapon the hero starts with and its level (talent capstones may change them in install()). */
   startWeapon: string;
   startWeaponLevel = 1;
+  /**
+   * Level the run starts at (RunConfig.start.level; hero traits / talents / constellations may raise
+   * it in install(): Isekai-kun starts at Lv 3). Read once at the end of the constructor.
+   */
+  startLevel = 1;
 
   /** Is `e` this stage's final boss (and not an endless rematch)? */
   isFinalBoss(e: Enemy): boolean {
@@ -838,7 +867,8 @@ export class World {
       p.dashT -= dt;
       p.vx = p.dashDX * CFG.dashSpeed;
       p.vy = p.dashDY * CFG.dashSpeed;
-    } else {
+    } else if (this.mover) this.mover(this, mx, my, dt);
+    else {
       const sp = CFG.playerSpeed * s.moveSpeed;
       p.vx = damp(p.vx, mx * sp, 22, dt);
       p.vy = damp(p.vy, my * sp, 22, dt);
@@ -902,6 +932,8 @@ export class World {
   hurtPlayer(dmg: number, sx: number, sy: number, by = "hit"): boolean {
     const p = this.player;
     if (this.phase !== "play" || this.invulnerable) return false;
+    const guards = this.hurtGuards;
+    for (let i = 0; i < guards.length; i++) if (guards[i](dmg, sx, sy)) return true;
     if (p.shield > 0) {
       // a shield charge eats the whole hit (no damage, no combo loss), then i-frames
       if (p.shieldT <= 0) p.shieldT = this.stats.shieldCd;
@@ -930,12 +962,14 @@ export class World {
     this.hooks.emit("hurt", hh);
     // a hit costs style: the combo drops one rank
     if (this.comboRank >= 1) this.dropRank();
-    // small recoil away from the source
-    const ax = p.x - sx;
-    const ay = p.y - sy;
-    const al = Math.sqrt(ax * ax + ay * ay) || 1;
-    p.vx += (ax / al) * 70;
-    p.vy += (ay / al) * 70;
+    // small recoil away from the source (a heavy hero - Truck-kun - can't be knocked back)
+    if (!this.heavy) {
+      const ax = p.x - sx;
+      const ay = p.y - sy;
+      const al = Math.sqrt(ax * ax + ay * ay) || 1;
+      p.vx += (ax / al) * 70;
+      p.vy += (ay / al) * 70;
+    }
     this.emit("playerHurt", { dmg: d, x: p.x, y: p.y, hp: Math.max(0, p.hp), maxHp: p.maxHp });
     if (p.hp <= 0) {
       p.hp = 0;
@@ -1054,7 +1088,7 @@ export class World {
     const u = this.ult as UltState;
     u.t += dt;
     u.def.update(this, u, dt);
-    if (u.t >= u.def.duration) {
+    if (u.t >= (u.dur ?? u.def.duration)) {
       u.def.end?.(this, u);
       this.timeStop = false;
       this.ult = null;
@@ -1152,6 +1186,7 @@ export class World {
     e.z = 0;
     e.inv = 0;
     e.skin = "";
+    e.stun = 0;
     if (d.prop) this.propCount++;
     else this.enemyCount++;
     d.init?.(e, this);
@@ -1193,7 +1228,8 @@ export class World {
     const far2 = far * far;
     const items = this.enemies.items;
     const buf = this.acquire();
-    const pr = CFG.playerRadius;
+    const pr = CFG.playerRadius * this.stats.hitbox;
+    const cdm = this.contactDmg;
     for (let i = 0; i < this.enemies.count; i++) {
       const e = items[i];
       if (e.dead) continue;
@@ -1210,7 +1246,10 @@ export class World {
         if (e.slowT <= 0) e.slow = 1;
       }
       if (d.prop) continue;
-      if (frozen) {
+      // stunned / dazed (Enemy.stun): no behaviour, no own movement - knockback still carries it
+      const stunned = e.stun > 0;
+      if (stunned) e.stun = Math.max(0, e.stun - dt);
+      if (frozen || stunned) {
         e.vx = e.vy = 0;
       } else if (e.mode !== MODE_STRAIGHT) {
         // (bullets fired during an enemy's update remember who shot them: RunStats.killedBy)
@@ -1265,7 +1304,7 @@ export class World {
       const rr = e.r + pr;
       const d2 = dx * dx + dy * dy;
       if (d2 < rr * rr) {
-        if (e.dmg > 0 && !frozen) this.hurtPlayer(e.dmg, e.x, e.y, d.id);
+        if (e.dmg > 0 && !frozen) this.hurtPlayer(cdm === 1 ? e.dmg : e.dmg * cdm, e.x, e.y, d.id);
         // keep a little personal space so the hero stays readable
         if (d2 > 1e-4 && !d.boss) {
           const dd = Math.sqrt(d2);
@@ -1306,6 +1345,8 @@ export class World {
     const v = CFG.damageVariance;
     let d = base * (1 + (this.rng.next() * 2 - 1) * v) * (crit ? s.critMult : 1);
     if (s.bossDmg !== 1 && (e.elite || e.def.boss)) d *= s.bossDmg;
+    const taken = this.dmgTaken;
+    for (let i = 0; i < taken.length; i++) d *= taken[i](e, source, crit);
     d = Math.max(1, Math.round(d));
     e.hp -= d;
     e.flash = 0.08;
@@ -1905,7 +1946,7 @@ export class World {
         b.dead = true;
         continue;
       }
-      const rr = b.r + CFG.playerRadius - 2;
+      const rr = b.r + CFG.playerRadius * this.stats.hitbox - 2;
       if (dx * dx + dy * dy < rr * rr) {
         if (this.hurtPlayer(b.dmg, b.x, b.y, b.from || b.sprite)) b.dead = true;
       }
@@ -1947,6 +1988,8 @@ export class World {
     k.value = value;
     k.golden = golden;
     k.censored = false;
+    k.sprite = "";
+    k.tint = 0xffffff;
     k.state = 0;
     k.speed = 0;
     k.t = 0;
@@ -2204,6 +2247,7 @@ export class World {
         this.heal(20);
         break;
       case "heart":
+      case "snack":
         this.heal(k.value);
         hp.value = k.value;
         break;
