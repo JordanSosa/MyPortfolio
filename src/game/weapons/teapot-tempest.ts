@@ -81,8 +81,10 @@ function sip(w: World, inst: WeaponInstance, inside: boolean, hps: number, dt: n
   d.sip -= 1;
   // Pudding C6: puddles heal twice as fast
   const k = w.hero.id === "pudding" && w.cons >= 6 ? 2 : 1;
-  w.heal(hps * k);
-  hfx(w, HFX_PUD_SIP, pl.x, pl.y, pl.x, pl.y, 0, Math.round(hps * k * w.stats.healMul));
+  // (silent: the view shows a small tea-steam "+N" instead of the full heal fanfare every second)
+  const before = pl.hp;
+  w.heal(hps * k, true);
+  hfx(w, HFX_PUD_SIP, pl.x, pl.y, pl.x, pl.y, 0, Math.round(pl.hp - before));
 }
 
 /** Keep `n` cups orbiting (p.a = CUP); returns nothing, cups are the first entries found. */

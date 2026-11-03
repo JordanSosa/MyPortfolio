@@ -9,6 +9,7 @@ import { CFG } from "../src/game/config";
 import type { GameEvents } from "../src/game/events";
 import { BOSSES } from "../src/game/registry";
 import type { Enemy } from "../src/game/types";
+import { defaultRunConfig } from "../src/game/run-config";
 import { World } from "../src/game/world";
 
 const DT = 1 / 30;
@@ -73,7 +74,12 @@ describe("run integrity", () => {
   });
 
   test("full unmuted run (listener on every event): victory, no exceptions, every list bounded", () => {
-    const w = new World({ hero: "mochi", seed: 2, god: true });
+    // (the shipped slice's card pool: Season 2 content changes every level-up roll of this frozen seed)
+    const run = defaultRunConfig({
+      weaponPool: ["star_shot", "petal_slash", "yarn_orbit", "heart_boomerang", "thunder_bell", "candy_bomb", "bubble_aura", "prism_beam"],
+      passivePool: ["power_bow", "wish_charm", "big_ribbon", "twin_charm", "swift_shoes", "magnet_star", "lucky_clover", "heart_locket"],
+    });
+    const w = new World({ hero: "mochi", seed: 2, god: true, run });
     // every GameEvents key gets a listener, so every payload is built and delivered
     const seen = new Map<string, number>();
     const keys: (keyof GameEvents)[] = [
@@ -82,6 +88,7 @@ describe("run integrity", () => {
       "gem", "coin", "pickup", "chestDropped", "chestCollected", "chestOpened", "magnet", "bomb", "freeze",
       "comboRank", "comboDrop", "comboBreak", "ultReady", "ultCutin", "ultStart", "ultEnd", "ultSlash", "ultBurst", "ultMeow",
       "waveIncoming", "bossWarning", "bossSpawn", "bossKilled", "bossEnrage", "bossPhase", "enemyFx", "bulletsCleared", "victory",
+      "heroFx",
     ];
     for (const k of keys) w.bus.on(k, () => seen.set(k, (seen.get(k) ?? 0) + 1));
     const peak = { enemies: 0, projectiles: 0, bullets: 0, gems: 0, pickups: 0, telegraphs: 0 };
@@ -94,7 +101,9 @@ describe("run integrity", () => {
       peak.telegraphs = Math.max(peak.telegraphs, ww.telegraphs.count);
     });
     expect(w.phase).toBe("victory");
-    for (const k of ["bossSpawn", "bossKilled", "bossPhase", "enemyFx", "weaponFx", "bulletsCleared", "victory", "evolution"]) expect(seen.get(k) ?? 0, k).toBeGreaterThan(0);
+    for (const k of ["bossSpawn", "bossKilled", "bossPhase", "enemyFx", "bulletsCleared", "victory", "evolution"]) expect(seen.get(k) ?? 0, k).toBeGreaterThan(0);
+    // (weapon visuals travel on weaponFx (the arsenal) or heroFx (Season 2 signature weapons), whichever this build picked)
+    expect((seen.get("weaponFx") ?? 0) + (seen.get("heroFx") ?? 0), "weaponFx / heroFx").toBeGreaterThan(0);
     expect(seen.get("bossKilled")).toBe(3);
     expect(peak.enemies).toBeLessThanOrEqual(360);
     expect(peak.projectiles).toBeLessThan(900);

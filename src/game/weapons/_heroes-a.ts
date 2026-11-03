@@ -17,14 +17,12 @@
  * Content-module import rule: types only from world.ts.
  */
 import { C } from "../../art/palette";
+import { heroFx as hfx } from "./_fx";
 import { CFG } from "../config";
-import type { HeroFxEvent } from "../events";
 import type { Enemy, Pickup, WeaponInstance } from "../types";
 import type { World } from "../world";
 
 // ---------------------------------------------------------------- heroFx cues (namespaced kinds)
-/** Kuro: a familiar breathes (x, y = mouth, x2 = angle, y2 = cone half-angle, r = length, n = 1 black flames). */
-export const HFX_KURO_BREATH = "kuro_breath";
 /** Kuro: the Crimson Eye Beam (x, y origin, x2 angle, r length, y2 duration). */
 export const HFX_KURO_EYE_BEAM = "kuro_eye_beam";
 /** Kuro: an enemy got Marked by the Abyssal Gaze (enemy). */
@@ -77,24 +75,10 @@ export const HFX_AKANE_BONK = "akane_bonk";
 export const HFX_TEXT = "ha_text";
 
 /** Text pops sent with HFX_TEXT (index = n). */
-export const HERO_TEXTS = ["FULL BURST!", "COMBINED!", "MOE", "MOE", "KYUN♡", "KYUN KYUN♡", "...it's a large shadow.", "...h-hmph.", "WELCOME HOME!", "MARKED"] as const;
+export const HERO_TEXTS = ["FULL BURST!", "COMBINED!", "MOE", "MOE", "KYUN♡", "KYUN KYUN♡", "...it's a large shadow.", "...h-hmph."] as const;
 
-const ev: HeroFxEvent = { kind: "", x: 0, y: 0, x2: 0, y2: 0, r: 0, n: 0, enemy: null };
-
-/** Emit a heroFx cue (no-op while muted; reused payload). */
-export function hfx(w: World, kind: string, x: number, y: number, x2 = x, y2 = y, r = 0, n = 0, enemy: Enemy | null = null): void {
-  if (w.muted) return;
-  ev.kind = kind;
-  ev.x = x;
-  ev.y = y;
-  ev.x2 = x2;
-  ev.y2 = y2;
-  ev.r = r;
-  ev.n = n;
-  ev.enemy = enemy;
-  w.emit("heroFx", ev);
-  ev.enemy = null;
-}
+/** Emit a heroFx cue (no-op while muted): the shared emitter of weapons/_fx.ts (one reused payload). */
+export { hfx };
 
 /** Daze an enemy for `t` s (Enemy.stun; bosses and props never). */
 export function daze(e: Enemy, t: number): void {

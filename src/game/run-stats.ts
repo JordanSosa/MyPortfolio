@@ -6,6 +6,7 @@
  * the snapshot from the world's end state.
  */
 import { CFG } from "./config";
+import { installNani } from "./nani";
 import { WEAPONS } from "./registry";
 import type { RunStatCounter, RunStats } from "./run-config";
 import type { World } from "./world";
@@ -83,6 +84,8 @@ export class RunStatsCollector {
       maxWeaponsHeld: 0,
     };
     this.bind();
+    // NANI?! pops (satire.md §5): decided in the sim so RunStats.nanis counts exactly what is shown
+    installNani(w);
   }
 
   /** Add to a numeric extra (World.bumpStat). "comfyBest" keeps the max instead. */
@@ -211,7 +214,8 @@ export class RunStatsCollector {
     s.damageByWeapon = {};
     for (const [k, v] of w.damageBy) if (WEAPONS.has(k)) s.damageByWeapon[k] = Math.round(v);
     s.evolutions = [];
-    for (const inst of w.weapons) if (inst.def.evolved || inst.level >= w.weaponMaxLevel(inst.def)) s.evolutions.push(inst.def.id);
+    // (true evolutions only: "Evolve 10 weapons" / "Hold 6 evolved weapons" - a maxed base weapon is not one)
+    for (const inst of w.weapons) if (inst.def.evolved) s.evolutions.push(inst.def.id);
     s.weaponsUsed = [...w.weaponsUsed];
     s.passivesUsed = [...w.passivesUsed];
     return s;

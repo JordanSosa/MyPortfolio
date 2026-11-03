@@ -35,26 +35,59 @@ src/
                        CH_MISC, CH_RELIC)
     stats.ts           Stats block + modifier chain (pipeline order in the header)
     heroes.ts          hero table (stats trait, start weapon, ult, constellations C1-C6)
-    passives.ts        passive table (8 passives x 5 levels)
+    passives.ts        passive table (16 passives x 5 levels: the slice's 8 + Season 2's 8, locked until unlocked;
+                       `install(w, inst)` for run-state effects such as Friendship Bracelet's per-weapon statMod)
     meta.ts            legacy Dream Shop ranks (WorldOptions.meta; tests / balance probe)
     upgrades.ts        level-up card generation / application (pools, banish, Limit Break cards, Light Novel
                        titles), chest rewards (chest luck)
     registry.ts        auto-registry (import.meta.glob) of weapons / enemies / bosses / ultimates / stages /
                        relics / talent trees / twists (+ registerStage for tests / tools, twistHeat, stageInfos)
-    stages/*.ts        one file per stage (dream-meadow.ts = the original slice, timeline included)
-    relics/*.ts        one file per rarity (n, r, sr, ssr, ur, lr, mythic); `_util.ts` (proc, atStar)
+    stages/*.ts        one file per stage (dream-meadow.ts = the original slice, timeline included); candy-kingdom.ts
+                       (stage 2: the pinata's coins + gumdrop snack in onStart), shoujo-academy.ts (stage 3: the
+                       vending machine's chilled can in onStart); beach-episode.ts
+                       (stage 4: the cooler's chilled onigiri in onStart), final-arc.ts (stage 5: Truck-kun's evil
+                       name card in onStart, Cancel-sama's restoration in onFinalBossKilled)
+    relics/*.ts        one file per rarity (n, r, sr, ssr, ur, lr, mythic); `_util.ts` (proc, atStar, dirtyOn),
+                       `_friend.ts` (A Real Friend: the ally + its sandboxed weapon instance)
+    nani.ts            NANI?! pop rules (satire.md §5), installed by the RunStats collector (RunStats.nanis)
     talents/*.ts       one tree per hero (hoshi, rin, mochi); `_node.ts` helpers
     twists/*.ts        Plot Twist groups (production, story, broadcast); `_twist.ts` helpers
     weapons/*.ts       one file per weapon (+ its evolution); `_shared.ts` helpers, `_fx.ts` (weaponFx kinds,
-                       reused-payload emit helpers, random on-screen targets)
+                       reused-payload emit helpers, random on-screen targets, `heroFx()`: THE heroFx emitter every
+                       Season 2 group shares - `_heroes-a.ts` / `_hb.ts` re-export it as `hfx`, `_arsenal2.ts`
+                       wraps it as `a2fx`); `_arsenal2.ts` (the general Season 2
+                       weapons: "a2_*" heroFx cues, the stage beat clock from StageDef.bpm, the combo-rank crowd bonus)
     enemies/*.ts       one file per enemy behaviour (props too); `_steer.ts` helpers, `_bullets.ts` (fair
-                       shoot / ring / fan helpers: never spawn on the player), `_fx.ts` (enemyFx kinds + emit helper)
+                       shoot / ring / fan helpers: never spawn on the player), `_fx.ts` (enemyFx kinds + emit helper);
+                       `_s45.ts` (Beach Episode / Final Arc: enemyFx cue kinds 400-499 + the hero's environment - slow
+                       zones and pulls applied by one `step` hook per world); props-s45.ts (beach ball, cooler,
+                       clapperboard, CRT TV); stage 4 crab-kun, seagull, jellyfish, watermelon (+ half),
+                       sandcastle-golem, tiny-shark; stage 5 shadow-clone, filler-goon, plot-hole, animation-error
+                       (+ dropped frames), mini-truck (`launchMiniTruck` for Truck-kun's RUSH HOUR);
+                       `_say.ts` (`say(w, e, text)`: the `enemySay` speech-bubble event), `_cue.ts` (`cue()`: the
+                       string-kinded `stageCue` event); `_candy.ts` (Candy Kingdom: Shield Wall dmgTaken rule, Toasty
+                       hit hook, S'more puddles, "candy_*" cue kinds), `_academy.ts` (Shoujo Academy: dash watch, the
+                       Tsundere hit hook, homing paper hearts, F- stacks as a statMod, ninja decoys, "academy_*" cues);
+                       candy-props.ts / academy-props.ts; stage 2 gummy-bear, candy-corn, donut-roller, marshmallow-brute,
+                       lollipop-mage; stage 3 hall-monitor (`monitorWhistle`, the schoolBell's target), love-letter,
+                       tsundere-slime, transfer-student, exam-paper, council-ninja
     bosses/*.ts        one file per boss (king-puff, nightmare-teddy, lady-lunatic); `_luna.ts` (Lady Lunatic
-                       state + moon-ring geometry, import-cycle free for the bot / view)
+                       state + moon-ring geometry, import-cycle free for the bot / view); `_dawn.ts` (`dawnOut`: the
+                       victory dawn every final boss shares - bullets cleared, on-screen enemies dissolve in light);
+                       `_s45boss.ts` (stage 4 / 5 boss kit: readable(), phaseFlourish(), finalDawn (= `_dawn.ts`),
+                       tinted shot / ring / fan, heroInLane, stageFx());
+                       kraken-chan, firework-dragon, truck-kun, rival-chan, cancel-sama (state getters for view / tests);
+                       `_s23.ts` (stage 2 / 3 boss kit: hoverAnchor + catch-up glide, lineAcross, the telegraphed
+                       Rain queue, dawnOut, segDist); gingerbread-golem, sugar-plum-tyrant, council-president (+ the
+                       School Regulation rules: `activeRule(w)`), bishounen
     ultimates/*.ts     one file per hero ultimate
     director/
       timeline.ts      SpawnPhase / TimelineEvent types + Dream Meadow compat exports (the data lives in stages/)
-      events.ts        event-kind handlers (swarmLine, batStorm, wispRush, encircle, flood, elite, boss)
+      events.ts        event-kind handlers (swarmLine, batStorm, wispRush, encircle, flood, elite, boss); more kinds
+                       merged from `events-*.ts` (`eventHandlers` export): events-s45.ts = tideSweep (`tideBands`),
+                       commercialBreak (`commercialOf`), flashback (`isFlashback`); events-s2.ts is spread in directly:
+                       laneCharge (lanes telegraphed before AND while their column crosses), teleportIn, bulletRain
+                       (ground shadows on the player's row), schoolBell
       director.ts      stage-driven spawning, props, boss warning/entrance, run end, Filler Arc waves / rematches
 
   view/                draws the world with the renderer (reads the World, never mutates it)
@@ -62,15 +95,57 @@ src/
                        bullets, gems, pickups (+ relic hearts, censored coins), telegraphs, overlays
     ground.ts          stage-driven infinite ground: tile region rules + scatter / tall deco (stable per-cell hashing)
     stage-view.ts      StageLook: grade + ambient keyframes, extra ambient layers, clear colour, stage music ids,
-                       sim `stageFx` directives (grade override, render scale, anim fps cap, speed lines, stills)
+                       sim `stageFx` directives (grade override + DIRECTIVE_GRADES "ratings", render scale = the scene
+                       FBO's `Renderer.sceneScale` (ENGINE.md §9), anim fps cap, particles, speed lines, stills;
+                       "Reduce flashing" drops the degrading ones)
+    s45-fx.ts          Beach Episode + The Final Arc looks (one WorldView field / Feedback bind): beach-fx.ts (crabs facing
+                       the hero, seagull loot + dive tells, jelly zaps + chain bolts, shark fins, sand-pile rebuild rings,
+                       tide bands, Kraken-chan's tentacles / ink / HIGH TIDE water, the lantern dragon body + rockets,
+                       the crab-hug death scene), finale-fx.ts (sepia flashbacks, clone eyes, off-model Animation
+                       Errors, headlight tells, the evil moustached Truck-kun, Rival-chan's headband / aura / push-ups /
+                       beams, Cancel stamps + CANCELLED decals, the ratings chart, letterbox eyecatches, still-frame
+                       borders, EPISODE ENDS IN 60 / OVERTIME, the reduce-flashing phase badge, death scenes, the
+                       cancel theme's setDegrade), s45-common.ts (tick rings, `Captions` = a thin adapter over the shared
+                       speech.ts `sayAt` bubbles, hero-safe text pops)
     relic-fx.ts        relic / talent / twist procs, shields, Plot Armor, ENCORE!, the Filler Arc sequence + cards
+    merch-fx.ts        the 61-relic merch line's own looks (asked first by relic-fx): per-relic stamps / particles,
+                       A Real Friend (hero sprites + pink outline), the Red String, Rival marks, SECOND WIND border,
+                       the NANI?! pop (game/nani.ts decides it)
+    heroes-a-fx.ts     Kuro / Pudding / Aoi / Akane: breath streams + burning heads, the Abyssal Gaze eye, beams, the
+                       ETERNAL ABYSS shadow sweep (dim grade, flashlight reveal, black-feather kills), teacups / tea
+                       puddles / moat / teapot, the omurice, spaghetti missile trails + sauce decals, the C6 drone,
+                       ROCKET PUNCH, drill spins, the "...h-hmph." band, BAKA! / text pops (satire pop rules)
+    heroes-b-fx.ts     Senpai / Magical Girl #47 / Isekai-kun / Truck-kun: the sparkle aura (Shoujo Filter roses,
+                       KIRA KIRA), charm hearts + pink tint, the SENPAI NOTICED YOU shoujo frame; henshin flashes,
+                       the charge ring, the ult turntable + narrator subtitle; burning craters, STATUS SCREEN window
+                       slams + fake "9999999" numbers; truck lean / exhaust, HONK waves + pops, isekai'd light
+                       pillars (no confetti), ghost trucks on their lanes
+    arsenal2-fx.ts     Bubble Tea / Paper Cranes / Idol Lightsticks / Kotatsu (+ evolutions): crane flock drawing (flap,
+                       facing, crumple, fold glow, paper trail), tapered lightstick crescents + the Chorus ring, the
+                       ENCORE! crowd, the kotatsu (aura, quilt frames, steam, Zzz over the hero and sleeping enemies),
+                       the WISH GRANTED! gold rain, boba pops / tea splashes, mikan splashes ("a2_*" heroFx cues)
     trails.ts          projectile trail presets (keyed by Projectile.trail)
     texts.ts           in-world bitmap texts ("LEVEL UP!", "FREEZE!")
     anims.ts           sprite handle cache
-    feedback.ts        EVENT -> juice/particles/numbers/audio/haptics/HUD hooks bridge
+    feedback.ts        EVENT -> juice/particles/numbers/audio/haptics/HUD hooks bridge (one bind-options object - sfx,
+                       haptic, sound, calm, hooks - shared by every content view group's `bind`)
     weapon-fx.ts       arsenal visuals: bubble field / ocean dome, prism + rainbow beams, candy landing markers,
                        love-tornado swirl (per frame) + `weaponFx` events (lightning, blasts, dome bursts, heals)
                        + arsenal trail looks (merged into TRAILS)
+    speech.ts          THE enemy speech bubbles of every stage (satire.md §5-6 pools of all five stages): ambient 4 % /
+                       elite 25 % on entering the view, scripted lines from the sim's `enemySay`, free-standing
+                       `sayAt(x, y, text, life, ink)` lines (boss death lines: rows of <= 22 characters, a trailing "♡"
+                       as the heart sprite, kept out of the bottom third where the touch buttons are); 3 on screen in
+                       total, 8 s per type, none above 200 enemies or within 40 px of the hero
+    bullet-looks.ts    SHARED per-sprite enemy-bullet looks for drawBullets (glow colour / radius, spin, velocity
+                       rotation, tint, size by hit radius): a stage view registers its bullets at module load
+    candy-fx.ts        Candy Kingdom looks: gummy flavour tints, Shield Wall glint, Corn-mander flag, donut roll
+                       rotation, Toasty / S'more marshmallows, mage staff glow, the golem's buttons / dashed Cookie
+                       Cutter / crumbs, the Tyrant's halo / jete afterimages / crash Zzz, chocolate puddles, the
+                       SUGAR RUSH grade ("candy_*" cues, `StageFxOpts`)
+    academy-fx.ts      Shoujo Academy looks: whistle glints, blushing slimes, transfer sparkles, ninja smoke + decoys,
+                       glare beams, the phone-glare wedge, the wind lane, REJECTED stamps, the School Regulation rule
+                       card, the F- badge, phase 3's shoujo filter ("academy_*" cues)
     bestiary-fx.ts     bestiary visuals: per-enemy `decorate` hook (eye charge, pumpkin shiver, wisp fuse ring,
                        boss eyes / claws / halo, Lady Lunatic's moon ring), `enemyFx` cues, boss phase / enrage
                        juice, boss death throes, the VICTORY dawn sequence and the grade overrides (LUNATIC MOON
@@ -92,7 +167,8 @@ src/
                        in-run Plot Point toasts, Back-gesture history guard, AutoQuality feed, WebGL draw throttle
     session.ts         Session = World + WorldView + Feedback (real run or attract mode)
     hud.ts             HUD (XP, level, timer, kills/coins, icons, combo, boss bar, banners + boss letterbox,
-                       onboarding hint / bubbles, READY?/GO! stamp); diffed, quantised, WAAPI juice (see 2.1)
+                       onboarding hint / bubbles, READY?/GO! stamp); diffed, quantised, WAAPI juice (see 2.1);
+                       `hud-arsenal2.ts`: the lightstick icon pulses on the beat, the Thousand Crane Wish counter
     cutin.ts           ultimate anime cut-in overlay (ended by the sim / App only: no wall-clock timer)
     tutorial.ts        first-runs onboarding (move hint until moved, DASH bubble until the first dash,
                        OVERDRIVE-ready bubble x2, "fills as you fight" once per run)
@@ -132,6 +208,8 @@ tests/                 vitest: core math, xp/cards/chests/meta, headless 3-minut
                        endless.test.ts (Filler Arc, RunStats, the view's stage look / stageFx directives)
                        Season 2 meta: tests/meta.*.test.ts (docs/META.md §10); integration.test.ts (the seams
                        between meta, sim and banking with the live registries: section 11)
+                       Season 2 content: heroes-a / heroes-b / arsenal2 / relics / achievements / stage-<id> suites;
+                       coverage.test.ts = the registries against the bible (section 12)
 tools/balance.probe.ts `npm run balance`: full headless runs, every hero x seed, good + lazy bot, pacing report (section 6)
 tools/progression.sim.ts `npm run progression`: consecutive runs with one account (bot + spending policy), hours to
                        every EXPANSION §2 milestone, income / power curves (docs/META.md §9)
@@ -334,7 +412,7 @@ Hitstop / slow-mo are global `time` effects triggered by the feedback bridge.
 | director | `waveIncoming`, `bossWarning`, `bossSpawn`, `bossKilled`, `bossEnrage`, `bossPhase` |
 | bestiary | `enemyFx` (EFX_* cue + position / direction / power, reused payload), `bulletsCleared` (fired before the bullet list is emptied) |
 | run | `victory`, `fillerArc` (endless continues), `fillerWave` (elite wave / rematch), `fillerEpisode` (every 5:00) |
-| Season 2 | `shieldBlock`, `plotArmor` (lethal hit survived), `ultEncore` (ENCORE! heart meteors), `relicProc` (relic / talent / twist proc, reused payload), `stageFx` (sim -> view look directive) |
+| Season 2 | `shieldBlock`, `plotArmor` (lethal hit survived), `ultEncore` (ENCORE! heart meteors), `relicProc` (relic / talent / twist proc, reused payload), `stageFx` (sim -> view look directive), `enemySay` (speech bubble: `enemies/_say.ts`, drawn by `view/speech.ts`), `stageCue` (stage content cue with namespaced string kinds, `enemies/_cue.ts`) |
 
 Feedback for each lives in `src/view/feedback.ts` (one `bus.on` per event).
 
@@ -408,7 +486,8 @@ export const enemies: EnemyDef[] = [eyepuff];
 The director picks it up as soon as its id appears in a stage's phase mix
 (`src/game/stages/<stage>.ts`; Dream Meadow's 2:00+ phases already list
 `eyepuff`, `pumpkin`, `teddy`, `wisp`). `special: true` keeps an event / twist
-enemy out of every random pick; `tint` re-colours a re-used sprite and a
+enemy out of every random pick; `noCodex: true` keeps an implementation actor (the Animation Error's
+dropped frames) out of the wiki / codex; `tint` re-colours a re-used sprite and a
 per-enemy `e.skin` re-dresses one enemy (the Rival (Recolour)).
 Elite variants, hit flash, squash, knockback, separation, death confetti
 (`colors`), gems and HP scaling are all automatic. Telegraphs:
@@ -459,6 +538,10 @@ Import rule for content modules: never import a *value* from `world.ts`
 content -> world -> registry -> content crashes whichever module is loaded
 first ("Cannot access 'bosses' before initialization"); helpers the bot or the
 view need (e.g. the moon ring) live in import-free `_*.ts` files.
+
+Hit context for `dmgTaken` / `hit` listeners: `World.hitProj` is the projectile whose hit is
+being applied (null for auras, explosions, ults...) and `World.blastDepth` > 0 inside
+`explode()` (the Candy Corn's front-half Shield Wall, the Marshmallow Brute's Toasty).
 
 ### Director event (`src/game/director/`)
 
@@ -515,7 +598,31 @@ install(w, s) {
 
 Hook listeners must not allocate per event (payloads are reused: read, don't
 keep). Gameplay randomness uses `w.rng`. Relic damage uses source = relic id.
-New look for a proc: a `case` in `view/relic-fx.ts proc()`.
+New look for a proc: a `case` in `view/merch-fx.ts proc()` (the merch line's own
+looks; `relic-fx.ts proc()` asks it first, then its own cases, then the generic
+sparkle + name tag).
+
+All 61 relics of the bible ship (`relics/n.ts` ... `mythic.ts`; `tests/relics.test.ts`
+installs each at ★0 / ★6 and checks its effect). Run-state levers they use, all
+additive on `World` and safe to reuse:
+
+- `w.hurtMods` - final-damage modifiers on a landed hit (after shields / armor,
+  before the lethal check): Mascot Costume Head (1 damage), Pocket Tissues (-50 %).
+- `w.dmgTaken` - per-hit damage-taken factors on enemies: Rival Plushie marks, Red
+  String of Fate, Oversized Sword Keychain (x3 + a forced NANI?!).
+- `w.jackpotBonus` (absolute chest JACKPOT chance), `w.chestEvoEarly` (chests offer
+  an evolution N levels before max: Golden Gacha Ticket), `w.doublePicks` (levels
+  whose offer is picked twice: `World.choose` keeps the rest of the offer - Season
+  Finale Manga), `u.dur` from the `ult` hook (Studio's Last Remaining Budget).
+- `relics/_util.ts dirtyOn(w, key)`: recompute stats when a state key changes (combo
+  rank, HP below 50 %, MINT / OPENED).
+- A Real Friend (`relics/_friend.ts`, view: `merch-fx.ts drawFriend`): an ally with a
+  second instance of the start weapon (not in `w.weapons`). While it (or a projectile
+  it owns) updates, the hero's position and self-buff state are swapped to the Friend
+  ("sandbox"), so any weapon fires from the Friend; PK_ATTACHED shots are re-anchored.
+- NANI?! pops (`game/nani.ts`, installed by the RunStats collector): decided in the
+  sim (`RunStats.nanis` = pops shown), rolled from a hash of the step + enemy uid so
+  no `w.rng` draw is added; the view pop lives in `merch-fx.ts`.
 
 ### Talent tree (`src/game/talents/<hero>.ts`)
 
@@ -542,12 +649,78 @@ install(w, rank), note?, unlockedBy? }`. Usually it scales `w.difficulty`, pushe
 a `w.statMods` entry, sets a `w.look` hint for the view, or registers a timer
 (`shounen_rival`). Total heat = `twistHeat(ids, ranks)` (= `RunStats.heat`).
 
+### Season 2 hero primitives (shared, additive)
+
+- `Enemy.stun` (s): dazed / stunned - no behaviour update, no own movement, knockback still applies
+  (Baka Harisen daze; bosses are never dazed by `daze()` in `weapons/_heroes-a.ts`).
+- `World.dmgTaken`: damage-taken multipliers applied in `hitEnemy` (burning enemies +15 % with Kuro's
+  The Seal Is Broken, Senpai's swoon...). Cheap, allocation-free functions only.
+- `"snack"` pickups: content food with its own `Pickup.sprite` / `tint` (puddings, petit fours, Moe hearts),
+  collected on touch, heals `value` x healMul, counts as food eaten.
+- `heroFx` event (`HeroFxEvent`, namespaced string kinds such as `kuro_shadow`, `akane_baka`, `hb_*`, `a2_*`)
+  for hero weapon / ult / talent cues, all emitted through `weapons/_fx.ts heroFx()` (one reused payload; kinds
+  are pinned collision-free by `tests/coverage.test.ts`); each group's view file handles its own kinds.
+- `UltState.dur`: an ult's `start()` may lengthen THIS cast (TRUE Forbidden Technique, Super Robot Upgrade,
+  extra Omurice pulses); `HeroDef.band` / `cutinLine` feed `ui/cutin.ts`.
+- Group A sim helpers live in `weapons/_heroes-a.ts` (`heroesA(w)`: per-world burns, the Abyssal Gaze mark,
+  smacked "flyers", BAKA! pop rules, Aoi's drone position; one kill + one step hook per world).
+- `HeroDef.install(w)`: a trait that is more than stats, run once after relics and before talents /
+  constellations (Senpai's staring aura, Isekai-kun's Lv 3 start, Truck-kun's driving). `World.startLevel`
+  (from `RunConfig.start.level`) may be raised there or by talents (Starter Village Bonus).
+- `World.mover` replaces the default input -> velocity damping (Truck-kun: heading + throttle, `weapons/_truck.ts`);
+  `World.heavy` ignores hit recoil; `Stats.hitbox` scales the player radius (Truck-kun 1.5, Chibi Charm < 1);
+  `World.contactDmg` scales contact damage only (Too Cool To Get Hit).
+- `World.hurtGuards`: a guard returning true negates a hit before shields (Panic Henshin; it emits `block` itself).
+  `World.dmgTaken` rules also receive the hit's `crit` (Shoujo Filter's crit bonus on charmed enemies).
+- Group B sim helpers: `weapons/_hb.ts` (`HB` heroFx kinds, `densest()` cluster finder, the isekai'd rules,
+  `everyStat()`), `weapons/_charm.ts` (charm / swoon / fluster book: charmed enemies run in MODE_STRAIGHT with their
+  contact damage parked), `weapons/_truck.ts` (driving, ram check, the C6 trailer); hero defs in `game/heroes-b.ts`.
+- `World.dozing` (Kotatsu of Sloth's Too Comfy): while true, `hitEnemy` ignores every weapon hit (an owner or a
+  weapon-id source): no damage, no hit hook, so `RunStats.pacifistBest` grows by itself; ults / relics still hit.
+- Beat-synced weapons (Idol Lightstick Wave, Sold-Out Dome Tour) read `weapons/_arsenal2.ts beatIndex(w)`: beats of
+  `StageDef.bpm` (default 140) from the run clock, so every beat weapon shares one grid; `inst.data.beatAt` is the
+  run time of the last beat (the HUD pulse).
+- View hooks for hero looks: `WorldView.heroXf` (rotation / scale / y offset of the hero sprite, set per frame),
+  `heroesB.death(e)` (an enemyKilled that the hero fx draws itself: isekai'd pillars) and `heroesB.numberText(e)`
+  (a damage-number text override) consulted by `feedback.ts`.
+
+### Season 2 stage primitives (stages 4-5, shared, additive)
+
+- `Enemy.untargetable`: skipped by homing / auto-aim picks (`homingTarget`, `nearestEnemy`, `nearestEnemies`,
+  `randomEnemyInView`) while true; area damage still hits (Tiny Shark's fin, a Sandcastle Golem's sand pile).
+- `Bullet.tint` (reset to white by `spawnBullet`): per-bullet sprite + glow tint drawn by `WorldView.drawBullets`
+  over the per-sprite `bullet-looks.ts` look (firework stars cycling colours, Shadow Clone orbs).
+- `hooks.blast { x, y, r }`: every `World.explode` (never muted) - a pile crumbles in an explosion.
+- `enemies/_s45.ts` environment: `slowZone(w, k)` (call each step the hero stands in it), `slowFor(w, k, s)`,
+  `pullHero(w, dx, dy)`, applied once per step by one `step` hook per world (it takes back part of the hero's own
+  movement - no Stats recompute; a dash cuts through at full speed).
+- A killing blow can be refused from a `hit` hook (it fires after `e.hp -= d`, before the kill check): the golem's
+  hook turns the "death" into its pile by setting `hp = 1` + `inv`, so XP and elite loot drop only on the final death.
+- Still frames = `w.freezeT` (enemies + bullets hold, the hero moves) + a `stageFx` "still" (WorldView keeps the
+  pose without the frozen tint / overlay). Bosses that must keep time through them use `World.t` stamps.
+- Cosmetic cues of these stages are `enemyFx` kinds 400-499 (EFX_* in `_fx.ts` stay below 100).
+- `stageFx` directives travel on the muted presentation bus: a boss whose look persists (Cancel-sama's
+  degradations, the Firework Dragon's night) re-sends its current state on the first update after `w.muted` turns
+  false, so `?skip=` / `__kk.skipTo` never leave the view out of step with the sim.
+- Big bosses only start a pattern while `readable(e, w, top, margin)` (margin ~ half their sprite width);
+  Cancel-sama, left out of the shot for 1.2 s while drifting, smash-cuts back to his anchor (`BX_CUT`, "CUT TO:").
+
 ### RunStats counters
 
-Collected by `run-stats.ts` from `world.hooks`; content-specific counters
+Collected by `run-stats.ts` from `world.hooks` (`evolutions` = the EVOLVED weapons held at the end: a maxed
+base weapon is not an evolution); content-specific counters
 (`nanis`, `bakas`, `charmed`, ...) go through `w.bumpStat(key, n)`. A new
 counter = an optional field on `RunStats` (contract: additive only) + its
-collection in `RunStatsCollector`.
+collection in `RunStatsCollector`. `RunStats.killedBy` is the `by` argument of
+`w.hurtPlayer(dmg, sx, sy, by)` (contact damage passes the enemy id itself): a boss
+slam / blast that calls `hurtPlayer` directly should pass `e.def.id` too, or the
+"defeated by X" Plot Points (Candle Wisp, Truck-kun) can't see it.
+
+Plot Points (`src/meta/achievements/defs/*.ts`, 171 entries = docs/content/achievements.md;
+shared readers in `defs/_shared.ts`) read only `AchCtx`; end-of-run feats (a death, a
+quit) also require `c.ended`, so the in-run watcher never toasts them mid-run. Every
+id has a crafted trigger in `tests/achievements.test.ts` (with a bible-sized content
+catalogue) and every unlock-granting one matches its `UNLOCK_RULES` row.
 
 ### Passive (`src/game/passives.ts`)
 
@@ -555,7 +728,10 @@ Append `{ id, name, icon, levels: [5 texts], apply(stats, level) }`. Stats are
 recomputed from scratch (base -> hero -> account / relic / talent /
 constellation mods -> passives -> run modifiers). New stat? add it to `Stats`
 in `stats.ts` (+ `baseStats`, + a clamp in `finalizeStats` if it needs one) and
-read it where needed.
+read it where needed. A passive whose effect depends on run state (Friendship
+Bracelet: damage per weapon held) adds `install(w, inst)` and pushes a
+`World.statMods` entry that reads `inst.level` live (weapon changes already mark
+the stats dirty when statMods exist).
 
 ### Ultimate (`src/game/ultimates/<name>.ts`)
 
@@ -569,6 +745,11 @@ channels, `w.timeStop` to freeze enemies, and emit custom events for visuals
 
 Add a `HeroDef` (sprites `${id}_idle|run|hurt|cast`, `portrait_${id}`), its
 start weapon and ultimate. The select screen lists `HEROES` automatically.
+Season 2 hero groups keep their defs in their own file and spread them into
+`HEROES` (`...HEROES_B` from `heroes-b.ts`); `band` / `cutinLine` feed the cut-in
+(`heroes-b.ts cutinLine(w)` lets a talent rewrite the line for a run), `install`
+carries trait behaviour, and the bot's per-hero distances live in `debug/bot.ts`
+(`PREF`, `BOSS_ENGAGE`, `BRAVE`).
 
 ---
 
@@ -576,7 +757,7 @@ start weapon and ultimate. The select screen lists `HEROES` automatically.
 
 | Event | Where |
 | --- | --- |
-| Enemy hit flash / squash / knockback | `World.hitEnemy` (flash, sqV, kx/ky) + `WorldView.drawEnemies` |
+| Enemy hit flash / squash / knockback | `World.hitEnemy` (flash, sqV, kx/ky) + `WorldView.drawEnemies` (a boss flashes at half strength, `BOSS_FLASH`: under six weapons its flash timer never runs out, and a full flash would keep it a white silhouette all fight) |
 | Damage numbers, hit sparks, hit sfx (rate-limited, ±2 st) | `feedback.ts enemyHit` (per-frame budgets; a plain number per enemy at most every 0.22 s so 0.07 s beam ticks don't stack columns; boss damage summed into one number every 0.14 s and boss sparks every 0.05 s, so a boss soaking six weapons is never buried under its own numbers) |
 | Death confetti in enemy colours, puff, ring, gem hop | `feedback.ts enemyKilled` -> `fxEnemyDeath(def.colors)`, `World.dropGem` arc |
 | Elite death (shockwave, 30 particles, coins, hitstop 60) | `fxEliteDeath` |
@@ -1014,3 +1195,88 @@ a horizontal page overflow or a button cut off at the screen edge):
 **Gates for a foundation hand-off**: `npm run typecheck`, `npm test`,
 `npm run build`, `npm run build:single`, `node scripts/e2e.mjs`,
 `node scripts/flows.mjs`, `npm run balance`, `npm run progression`.
+
+---
+
+## 12. Season 2 content tables (what ships, where it lives)
+
+Everything below is registered by dropping files into the registry folders (section 4) and is pinned
+against the content bible by **`tests/coverage.test.ts`**: ids, names, rarities, evolution pairs, Limit
+Break numbers + card texts, talent nodes (tier / branch / ranks), stage lengths / boss times / gating /
+tempo, twist ranks + heat + unlock stage, Plot Point categories + unlock rewards, the unlock path of every
+earnable item, every sprite id the bible's art manifest lists and every sprite id literal in `src/`,
+every sfx / music id a content def names, the Merch Machine pools (every rarity tier filled, Truck-kun
+only on the Isekai Express), heroFx kind uniqueness, and the hub copy each entry needs (speech pools,
+wiki blurbs, TO BE CONTINUED lines, OC bios). Adding a row to the bible without its content (or drifting
+from it) fails there with the exact id.
+
+### Heroes (`game/heroes.ts` + `game/heroes-b.ts`, talents `game/talents/<hero>.ts`, ults `game/ultimates/`)
+
+| Hero | Start weapon -> evolution (+ passive) | Ultimate | Unlock (`meta/unlocks.ts`) |
+| --- | --- | --- | --- |
+| `hoshi` | `star_shot` -> `galaxy_barrage` (+ `wish_charm`) | `supernova_shower` | start |
+| `rin` | `petal_slash` -> `sakura_tempest` (+ `big_ribbon`) | `thousand_blossom_cut` | defeat King Puff |
+| `mochi` | `yarn_orbit` -> `cosmic_yarn` (+ `magnet_star`) | `nyan_stampede` | 3,000 lifetime kills |
+| `kuro` | `dark_flame_dragon` -> `unsealed_abyss_dragon` (+ `inner_monologue`) | `eternal_abyss` | survive 6:00 in Dream Meadow |
+| `pudding` | `teapot_tempest` -> `eternal_tea_party` (+ `bento_box`) | `omurice_of_love` | clear Dream Meadow |
+| `aoi` | `micro_missile_swarm` -> `al_dente_armageddon` (+ `speed_lines`) | `get_in_the_robot` | clear Candy Kingdom |
+| `akane` | `baka_harisen` -> `dere_dere_harisen` (+ `friendship_bracelet`) | `not_like_i_like_you` | clear Shoujo Academy |
+| `senpai` | `notice_me_sparkles` -> `shoujo_filter` (+ `main_character_aura`) | `senpai_noticed_you` | Merch Machine (SSR) / Copium |
+| `magical_girl_47` | `henshin_burst` -> `infinite_henshin_loop` (+ `plot_armor`) | `episode_long_transformation` | Merch Machine (SSR) / Copium |
+| `isekai_kun` | `cheat_fireball` -> `cheat_meteor` (+ `training_montage`) | `status_screen` | Merch Machine (UR) / Copium |
+| `truck_kun` | `horn_of_reincarnation` -> `isekai_rush_hour` (+ `swift_shoes`) | `isekai_express` | Isekai Express (MYTHIC) / 1,000-pull spark |
+
+Signature weapons unlock with their hero and then join every hero's pool. Every hero: 15 talent nodes
+(5 / 3 / 3 / 3 / 1 ranks per branch), C1-C6 constellations, a cut-in band + line, an OC bio, bot distances.
+View files: `view/heroes-a-fx.ts` (Kuro, Pudding, Aoi, Akane), `view/heroes-b-fx.ts` (the other four).
+
+### General weapons and passives
+
+| Weapon | Evolution (+ passive) | Unlock |
+| --- | --- | --- |
+| `heart_boomerang` / `thunder_bell` / `candy_bomb` / `bubble_aura` / `prism_beam` | `love_tornado` (+ `twin_charm`) / `raijin_drum` (+ `power_bow`) / `sugar_nuke` (+ `lucky_clover`) / `ocean_dome` (+ `heart_locket`) / `rainbow_cannon` (+ `swift_shoes`) | start |
+| `bubble_tea_cannon` | `tapioca_tsunami` (+ `big_ribbon`) | 1,000 lifetime Puff kills |
+| `paper_crane_flock` | `thousand_crane_wish` (+ `wish_charm`) | 10 lifetime evolutions (`RunStats.evolutions`: evolved weapons only) |
+| `idol_lightstick_wave` | `sold_out_dome_tour` (+ `twin_charm`) | reach SSS rank |
+| `kotatsu_of_sloth` | `eternal_winter_break` (+ `chibi_charm`) | survive 3:00 without dashing |
+
+All 20 base weapons carry Lv6 / Lv7 Limit Breaks (`WeaponDef.limitBreak`). Passives: the slice's 8 at
+start; `plot_armor` 5,000 damage taken, `main_character_aura` S rank, `bento_box` 50 snacks, `speed_lines`
+500 dashes, `inner_monologue` 25 Overdrives, `training_montage` level 25 in a run, `friendship_bracelet`
+4 heroes, `chibi_charm` 2:00 without a hit. View: `view/arsenal2-fx.ts`, `ui/hud-arsenal2.ts`.
+
+### Stages (`game/stages/<id>.ts`)
+
+| # | Stage | Length | bpm | Music (battle / boss / final) | Bosses | Roster | Look files |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | `dream_meadow` | 10:00 | 150 | battle / boss / final | `king_puff` 3:00, `nightmare_teddy` 6:00, `lady_lunatic` 9:00 | puff, batbun, boo, shroomie (+ spore), eyepuff, pumpkin, teddy, wisp | bestiary-fx |
+| 2 | `candy_kingdom` | 12:00 | 150 | candy / boss_candy / boss_candy | `gingerbread_golem` 6:00, `sugar_plum_tyrant` 11:00 | gummy_bear, candy_corn, donut_roller, marshmallow_brute, lollipop_mage | candy-fx |
+| 3 | `shoujo_academy` | 14:00 | 136 | academy / boss_academy / boss_academy | `council_president` 7:00, `bishounen` 13:00 | hall_monitor, love_letter, tsundere_slime, transfer_student, exam_paper, council_ninja | academy-fx |
+| 4 | `beach_episode` | 16:00 | 128 | beach / boss_beach / boss_beach | `kraken_chan` 8:00, `firework_dragon` 15:00 | crab_kun, seagull, jellyfish, watermelon (+ half), sandcastle_golem, tiny_shark | beach-fx (s45-fx) |
+| 5 | `final_arc` | 20:00 | 160 | finale / boss_finale / cancel | `truck_kun_boss` 8:00, `rival_chan` 14:00, `cancel_sama` 19:00 | shadow_clone, filler_goon, plot_hole, animation_error (+ dropped frames), mini_truck | finale-fx (s45-fx) |
+
+Each stage unlocks with the previous stage's clear; `bpm` is its battle theme's tempo (the beat clock of
+Idol Lightstick Wave: Dream Meadow keeps the slice's 150 bpm theme, the bible's 140 predates it).
+Director event kinds: `events.ts` (swarmLine, batStorm, wispRush, encircle, flood, elite, boss),
+`events-s2.ts` (laneCharge, teleportIn, bulletRain, schoolBell), `events-s45.ts` (tideSweep,
+commercialBreak, flashback). The twist enemy `rival_recolour` (Shounen Rival) is shared by every stage.
+
+### Relics, Plot Twists, Plot Points
+
+| Registry | Files | Count |
+| --- | --- | --- |
+| Relics (Merch) | `game/relics/n.ts r.ts sr.ts ssr.ts ur.ts lr.ts mythic.ts` (+ `_friend.ts` A Real Friend, `_util.ts`) | 61: N 12, R 14, SR 12, SSR 10, UR 6, LR 4, MYTHIC 3 |
+| Plot Twists | `game/twists/production.ts story.ts broadcast.ts` | 15 (6 open with Dream Meadow, +3 / +2 / +2 / +2 per later clear) |
+| Plot Points | `meta/achievements/defs/story.ts combat.ts heroes.ts weapons.ts gacha.ts silly.ts` (+ `_shared.ts`) | 171: story 24, combat 28, heroes 36, weapons 37, gacha 25, silly 21 |
+
+### Cue namespaces (presentation events, one reused payload each)
+
+| Event | Kinds | Emitter | View |
+| --- | --- | --- | --- |
+| `weaponFx` | numeric `WFX_*` | `weapons/_fx.ts wfx` | `view/weapon-fx.ts` |
+| `heroFx` | strings: `kuro_* pudding_* aoi_* akane_* ha_text` / `hb_*` / `a2_*` | `weapons/_fx.ts heroFx` (`hfx`, `a2fx`) | heroes-a-fx / heroes-b-fx / arsenal2-fx |
+| `enemyFx` | numeric: `EFX_*` < 100 (bestiary), 400-499 (Beach / Final Arc, `enemies/_s45.ts`) | `enemies/_fx.ts efx` | bestiary-fx / s45-fx |
+| `stageCue` | strings `candy_*` / `academy_*` | `enemies/_cue.ts cue` | candy-fx / academy-fx |
+| `enemySay` | free text ("" = a pool line) | `enemies/_say.ts say` | `view/speech.ts` (also `sayAt` for boss death lines) |
+| `stageFx` | `grade renderScale animFps speedLines still reset ...` | `bosses/_s45boss.ts stageFx` | `view/stage-view.ts` |
+| `relicProc` | relic / talent / twist ids | `relics/_util.ts proc` | merch-fx, then relic-fx |

@@ -28,7 +28,7 @@ const TELL = 0.4;
 const DMG = 420;
 const BASE_LANES = [0.4, 1.2, 2.0, 2.8];
 const MAX_LANES = 8;
-const DURATION = 5;
+const DURATION = 4;
 const GHOST_TINT = 0xbafff6;
 const MINI_TINT = 0xb0d8ff;
 const pt = { x: 0, y: 0 };
@@ -218,7 +218,6 @@ export const isekaiExpress: UltimateDef = {
   name: "ISEKAI EXPRESS",
   hero: "truck_kun",
   desc: "HONK HONK. Ghost trucks drive four lanes across the screen; whatever they flatten is sent to another world.",
-  // (the longest version - Unlimited Mileage + C4 - takes 5 s; shorter ones end early, see update)
   duration: DURATION,
   start(w, u) {
     const st = installIsekai(w);
@@ -228,6 +227,8 @@ export const isekaiExpress: UltimateDef = {
     for (let i = 0; i < d.n; i++) d[KT[i]] = times[i];
     d.len = w.talentRank("truck_unlimited_mileage") > 0 ? 4.6 : 4;
     if (w.cons >= 4 && w.hero.id === "truck_kun") d.len += 0.4;
+    // (this cast's length: Unlimited Mileage 4.6 s, C4 +0.4 s for its extra lane)
+    u.dur = d.len;
     d.tell = 0;
     d.go = 0;
     d.drop = -1;
@@ -254,7 +255,6 @@ export const isekaiExpress: UltimateDef = {
       d.drop = -1;
       minis(w, d.ex, d.ey, u.power);
     }
-    if (u.t >= d.len && d.len < DURATION) u.t = DURATION;
   },
   end(w) {
     // Unlimited Mileage: +1 Overdrive per isekai'd enemy (after the ult: the meter is locked during it)

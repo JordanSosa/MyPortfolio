@@ -10,7 +10,7 @@
  * Content modules import values from here, never from world.ts (ARCHITECTURE.md import rule).
  */
 import { gemXpScale } from "../config";
-import type { HeroFxEvent } from "../events";
+import { heroFx as hfx } from "./_fx";
 import type { Stats } from "../stats";
 import type { Enemy, ProjHook } from "../types";
 import type { World } from "../world";
@@ -81,22 +81,8 @@ export const HB = {
   EXPRESS: "hb_express",
 } as const;
 
-const ev: HeroFxEvent = { kind: "", x: 0, y: 0, x2: 0, y2: 0, r: 0, n: 0, enemy: null };
-
-/** Emit a heroes-B view cue (no-op while muted). The payload is reused: listeners copy what they need. */
-export function hfx(w: World, kind: string, x: number, y: number, x2 = x, y2 = y, r = 0, n = 0, enemy: Enemy | null = null): void {
-  if (w.muted) return;
-  ev.kind = kind;
-  ev.x = x;
-  ev.y = y;
-  ev.x2 = x2;
-  ev.y2 = y2;
-  ev.r = r;
-  ev.n = n;
-  ev.enemy = enemy;
-  w.emit("heroFx", ev);
-  ev.enemy = null;
-}
+/** Emit a heroes-B view cue (no-op while muted): the shared emitter of weapons/_fx.ts (one reused payload). */
+export { hfx };
 
 // ---------------------------------------------------------------- densest cluster
 const CELL = 48;

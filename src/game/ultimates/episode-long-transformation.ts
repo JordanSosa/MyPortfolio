@@ -70,6 +70,7 @@ export const episodeLongTransformation: UltimateDef = {
     u.data.stage = 0;
     u.data.step = named ? 0.6 : 1;
     u.data.len = named ? NAMED_DURATION : DURATION;
+    u.dur = u.data.len;
     u.data.mul = (named ? 1.5 : 1) * (w.cons >= 4 && w.hero.id === "magical_girl_47" ? 1.3 : 1);
     if (w.talentRank("mg47_special_episode") > 0) special(w);
     for (let i = 0; i < RIBBONS; i++) {
@@ -123,8 +124,6 @@ export const episodeLongTransformation: UltimateDef = {
       }
       d.stage++;
     }
-    // Finally Has a Name!: the episode is cut to 4 s
-    if (u.t >= d.len && d.len < DURATION) u.t = DURATION;
   },
   end(w) {
     if (w.talentRank("mg47_special_episode") > 0) special(w).start(6);

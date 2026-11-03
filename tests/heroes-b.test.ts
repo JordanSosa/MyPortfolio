@@ -337,8 +337,9 @@ describe("Magical Girl #47", () => {
     crowd(w, 30, 10, 100);
     const m0 = w.stats.might;
     const r = castUlt(w);
-    expect(r.steps).toBeLessThan(60 * 4.3);
-    expect(r.steps).toBeGreaterThan(60 * 3.8);
+    // (steps include the 1.1 s cut-in)
+    expect(r.steps - CFG.cutinTime * 60).toBeLessThan(60 * 4.2);
+    expect(r.steps - CFG.cutinTime * 60).toBeGreaterThan(60 * 3.8);
     w.step(DT);
     expect(w.stats.might).toBeGreaterThan(m0 + 0.39);
   });
@@ -426,21 +427,24 @@ describe("Truck-kun", () => {
     // hit recoil ignored
     (w as unknown as { god: boolean }).god = false;
     w.hurtPlayer(10, w.player.x - 10, w.player.y);
-    expect(w.player.vx).toBe(0);
+    expect(Math.abs(w.player.vx)).toBe(0);
   });
 
   test("ramming damages enemies ahead while moving fast, and their deaths are isekai'd", () => {
-    const w = sandbox("truck_kun");
+    const w = sandbox("truck_kun", { talents: { truck_next_life: 3 } });
     const wi = inst(w, "horn_of_reincarnation");
+    let drops = 0;
+    const drop = w.dropGem.bind(w);
+    w.dropGem = (x, y, v, t) => (drops++, drop(x, y, v, t));
     w.input.mx = 1;
     run(w, 0.5);
     for (let i = 0; i < 12; i++) w.spawnEnemy("puff", w.player.x + 20 + i * 14, w.player.y + 8);
-    const g0 = w.gems.count;
     run(w, 2);
     expect(wi.damage).toBeGreaterThan(0);
     const s = w.runStats();
     expect(s.isekaid ?? 0).toBeGreaterThan(0);
-    expect(w.gems.count).toBeGreaterThan(g0);
+    // +1 extra gem with 25 % (+35 % Next-Life Guarantee) per isekai'd kill
+    expect(drops).toBeGreaterThan(w.kills);
   });
 
   test("ISEKAI EXPRESS: 4 lanes (C4 +1, Unlimited Mileage 6 + Overdrive), Afterlife Loyalty minis", () => {
@@ -474,3 +478,117 @@ describe("Truck-kun", () => {
     expect(dx).toBeLessThan(30);
   });
 });
+
+// ---------------------------------------------------------------- talents and constellations (behaviour)
+describe("heroes B talents / constellations", () => {
+  test("Senpai: Too Cool cuts contact damage, Valentine's chocolates heal + Overdrive, Glance charms, Love Triangle chains", () => {
+    const cool = sandbox("senpai", { talents: { senpai_too_cool: 3 } });
+    expect(cool.contactDmg).toBeCloseTo(1 - 0.24, 9);
+    const w = sandbox("senpai", { talents: { senpai_valentines: 3 } });
+    run(w, 40.6);
+    const choc = w.pickups.items.slice(0, w.pickups.count).filter((k) => !k.dead && k.kind === "snack");
+    expect(choc.length).toBe(12);
+    const m0 = w.ultMeter;
+    for (const k of choc) {
+      k.x = w.player.x;
+      k.y = w.player.y - 4;
+      k.z = 0;
+      k.vz = 0;
+    }
+    w.step(DT);
+    expect(w.ultMeter - m0).toBeGreaterThanOrEqual(11.5);
+    expect(w.runStats().foodEaten).toBe(12);
+    const g = sandbox("senpai", { talents: { senpai_glance: 1 } });
+    for (const x of g.weapons) x.def.dispose?.(g, x);
+    g.weapons.length = 0;
+    crowd(g, 6, 60, 80, "teddy");
+    run(g, 4.1);
+    expect(g.runStats().charmed).toBeGreaterThanOrEqual(1);
+    // Love Triangle: a charmed enemy's kill charms the next one (free) - chains appear in a crowded fight
+    const lt = sandbox("senpai", { talents: { senpai_love_triangle: 1 } });
+    inst(lt, "notice_me_sparkles").level = 5;
+    let chained = 0;
+    lt.bus.on("heroFx", (e) => void (e.kind === "hb_charm" && e.n === 1 && chained++));
+    crowd(lt, 40, 10, 60);
+    run(lt, 12, () => topUp(lt, 40, "puff", 10, 60));
+    expect(chained).toBeGreaterThan(0);
+  });
+
+  test("Senpai C6: charmed enemies drop double XP", () => {
+    const w = sandbox("senpai", { constellation: 6 });
+    for (const x of w.weapons) x.def.dispose?.(w, x);
+    w.weapons.length = 0;
+    const e = w.spawnEnemy("puff", w.player.x + 50, w.player.y)!;
+    charm(w, e, 5, {});
+    let drops = 0;
+    const drop = w.dropGem.bind(w);
+    w.dropGem = (x, y, v, t) => (drops++, drop(x, y, v, t));
+    w.hitEnemy(e, 1e6, null, 0, 0, 0, "test", 0xffffff);
+    expect(drops).toBe(2);
+  });
+
+  test("Magical Girl #47: Double Henshin echoes, Who Are You Again? shields, Recurring Character scales with bosses", () => {
+    const w = sandbox("magical_girl_47", { talents: { mg47_double_henshin: 1 } });
+    let bursts = 0;
+    w.bus.on("heroFx", (e) => void (e.kind === "hb_burst" && bursts++));
+    run(w, 5.9);
+    expect(bursts).toBe(2);
+    const f = sandbox("magical_girl_47", { talents: { mg47_who_are_you: 3 } });
+    for (const x of f.weapons) x.def.dispose?.(f, x);
+    f.weapons.length = 0;
+    run(f, 6.2);
+    expect(f.player.shield).toBe(1);
+    run(f, 7);
+    expect(f.player.shield).toBe(1);
+    const rc = sandbox("magical_girl_47", { talents: { mg47_recurring: 3 } });
+    const m0 = rc.stats.might;
+    const b = rc.spawnEnemy("king_puff", rc.player.x + 80, rc.player.y)!;
+    rc.hitEnemy(b, 1e7, null, 0, 0, 0, "test", 0xffffff);
+    rc.step(DT);
+    expect(rc.stats.might).toBeCloseTo(m0 + 0.05, 6);
+  });
+
+  test("Isekai-kun: Guild Support volleys, AGAIN bursts six fireballs, C6 +1 card", () => {
+    const w = sandbox("isekai_kun", { talents: { isekai_guild_support: 3 } });
+    for (const x of w.weapons) x.def.dispose?.(w, x);
+    w.weapons.length = 0;
+    crowd(w, 14, 40, 90, "teddy");
+    let arrows = 0;
+    w.bus.on("heroFx", (e) => void (e.kind === "hb_arrow" && arrows++));
+    run(w, 20.1);
+    expect(arrows).toBe(10);
+    expect(w.damageBy.get("isekai_guild_support") ?? 0).toBeGreaterThan(0);
+    const a = sandbox("isekai_kun", { talents: { isekai_overdid_again: 1, isekai_overdone: 3 } });
+    crowd(a, 20, 30, 60);
+    let fireballs = 0;
+    const spawn = a.spawnProjectile.bind(a);
+    a.spawnProjectile = (o, src) => {
+      const p = spawn(o, src);
+      fireballs++;
+      return p;
+    };
+    run(a, 8, () => topUp(a, 16, "puff", 30, 60));
+    // 3 casts of 1 fireball, the 3rd overdone: + 6 children + the crater
+    expect(fireballs).toBeGreaterThanOrEqual(3 + 6);
+    expect(sandbox("isekai_kun", { constellation: 6 }).stats.cards).toBe(4);
+  });
+
+  test("Truck-kun: Airbags shield, Bull Bar stuns rammed enemies, Eighteen Wheeler honks backward", () => {
+    const air = sandbox("truck_kun", { talents: { truck_airbags: 3 } });
+    expect(air.player.shield).toBe(1);
+    expect(air.stats.shieldCd).toBe(18);
+    const w = sandbox("truck_kun", { talents: { truck_bull_bar: 3, truck_eighteen_wheeler: 1 } });
+    let honks = 0;
+    w.bus.on("heroFx", (e) => void (e.kind === "hb_honk" && honks++));
+    w.input.mx = 1;
+    run(w, 0.5);
+    const e = w.spawnEnemy("teddy", w.player.x + 22, w.player.y + 8)!;
+    e.hp = e.maxHp = 1e6;
+    let stunned = false;
+    run(w, 1.2, () => void (e.stun > 0.25 && (stunned = true)));
+    expect(stunned).toBe(true);
+    expect(honks % 2).toBe(0);
+    expect(honks).toBeGreaterThanOrEqual(2);
+  });
+});
+

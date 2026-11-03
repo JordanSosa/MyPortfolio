@@ -88,6 +88,13 @@ export class Renderer {
   contextLost = false;
   /** Glow pass brightness multiplier. */
   glowGain = 1;
+  /**
+   * Scene buffer resolution scale, 0.25..1 (1 = art resolution). Below 1 the world renders into a
+   * smaller scene target (chunkier pixels: Cancel-sama's BUDGET CUTS, stageFx "renderScale"), while
+   * the protected layers - enemy bullets and in-world text - render at full art resolution into a
+   * second target composited on top (so they stay crisp and are never graded down with the scene).
+   */
+  sceneScale = 1;
   /** realDt of the current frame (feeds the adaptive bloom limiter). */
   private frameDt = 1 / 60;
   /** Called after the canvas size / pixel scale changes. */
@@ -278,7 +285,12 @@ export class Renderer {
     const sh = Math.ceil(this.cssH / cam.scale) + 2;
     this.sceneW = sw;
     this.sceneH = sh;
-    this.pipeline.resize(sw, sh);
+    // reduced-resolution scene (sceneScale < 1): the scene target shrinks, bullets + text get their own full-res target
+    const ss = clamp(this.sceneScale, 0.25, 1);
+    const split = ss < 0.999;
+    const tw = split ? Math.max(2, Math.ceil(sw * ss)) : sw;
+    const th = split ? Math.max(2, Math.ceil(sh * ss)) : sh;
+    this.pipeline.resize(tw, th, split ? sw : 0, split ? sh : 0);
     const ox = Math.floor(v.x) - 1;
     const oy = Math.floor(v.y) - 1;
 
@@ -293,8 +305,24 @@ export class Renderer {
     gl.clear(gl.COLOR_BUFFER_BIT);
     gl.enable(gl.BLEND);
     gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-    this.batch.begin(ox, oy, sw, sh, 1);
-    this.batch.drawLayers(0, 9);
+    if (!split) {
+      this.batch.begin(ox, oy, sw, sh, 1);
+      this.batch.drawLayers(0, 9);
+    } else {
+      // low-res scene: everything but the protected layers (snapped to the coarse texel grid)
+      this.batch.begin(ox, oy, sw, sh, 1, tw / sw, th / sh);
+      this.batch.drawLayers(0, Layer.FxAdd);
+      this.batch.drawLayers(Layer.Overlay, Layer.Overlay);
+      // protected layers at art resolution into a transparent target (premultiplied)
+      const top = p.top;
+      if (top) {
+        top.bind();
+        gl.clearColor(0, 0, 0, 0);
+        gl.clear(gl.COLOR_BUFFER_BIT);
+        this.batch.begin(ox, oy, sw, sh, 1);
+        this.batch.drawLayers(Layer.Bullets, Layer.Text);
+      }
+    }
 
     // glow pass
     const bloomOn = this.quality.bloom && this.post.bloomEnabled;
@@ -319,6 +347,9 @@ export class Renderer {
         offY: v.y - oy,
         viewX: v.x,
         viewY: v.y,
+        sceneKx: split ? tw / sw : 1,
+        sceneKy: split ? th / sh : 1,
+        topOn: split,
       },
       bloomOn,
     );

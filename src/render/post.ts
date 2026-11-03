@@ -309,6 +309,11 @@ uniform float u_scale;     // css px per art px
 uniform vec2 u_off;        // scene texel at the screen's top-left
 uniform vec2 u_sceneUsed;  // used scene size (texels)
 uniform vec2 u_sceneInv;   // 1 / scene capacity
+uniform vec2 u_sceneK;     // scene texels per art px (1; 0.5 = a half-resolution scene, Renderer.sceneScale)
+uniform sampler2D u_top;   // protected layers (bullets + text) at full art resolution while the scene is low-res
+uniform float u_topOn;
+uniform vec2 u_topUsed;
+uniform vec2 u_topInv;
 uniform vec2 u_glowK;      // glow uv per scene texel
 uniform vec2 u_glowMax;
 uniform vec2 u_bloomK;
@@ -339,15 +344,17 @@ out vec4 o;
 
 const vec3 LUMA = vec3(0.299, 0.587, 0.114);
 
-// sharp-bilinear: flat texels, ~1 device px of linear blend at texel borders
-vec2 sharpUv(vec2 t) {
-  t = clamp(t, vec2(0.5), u_sceneUsed - 0.5);
-  float sc = u_scale * u_dpr;
+// sharp-bilinear: flat texels, ~1 device px of linear blend at texel borders (sc = device px per texel)
+vec2 sharpUvOf(vec2 t, vec2 used, vec2 inv, float sc) {
+  t = clamp(t, vec2(0.5), used - 0.5);
   vec2 tf = floor(t);
   vec2 cd = fract(t) - 0.5;
   float rr = 0.5 - 0.5 / max(sc, 1.0);
   vec2 f = (cd - clamp(cd, -rr, rr)) * sc + 0.5;
-  return (tf + f) * u_sceneInv;
+  return (tf + f) * inv;
+}
+vec2 sharpUv(vec2 t) {
+  return sharpUvOf(t, u_sceneUsed, u_sceneInv, u_scale * u_dpr / u_sceneK.x);
 }
 
 vec3 hueRotate(vec3 c, float a) {
@@ -387,13 +394,14 @@ void main() {
       ringDir += n * rw;
     }
   }
-  vec2 t = u_off + s / u_scale;
+  vec2 tArt = u_off + s / u_scale;
+  vec2 t = tArt * u_sceneK;
   vec3 col;
   float ab = u_aberr + ring * 2.5 * u_scale;
   if (ab > 0.01) {
     vec2 dir = (css - cssRes * 0.5) / (0.5 * length(cssRes));
     dir = normalize(dir + ringDir * 4.0 + 1e-5) * min(1.0, length(dir) + ring);
-    vec2 o2 = dir * (ab / u_scale);
+    vec2 o2 = dir * (ab / u_scale) * u_sceneK;
     col.r = texture(u_scene, sharpUv(t + o2)).r;
     col.g = texture(u_scene, sharpUv(t)).g;
     col.b = texture(u_scene, sharpUv(t - o2)).b;
@@ -419,6 +427,11 @@ void main() {
   vec3 glow = glowS.rgb;
   vec3 bloom = texture(u_bloom, min(fsc * u_bloomK, u_bloomMax)).rgb;
   col += glow * u_glowCore + bloom * u_bloomStr;
+  // protected layers (low-res scene only): drawn crisp over the graded scene (premultiplied)
+  if (u_topOn > 0.5) {
+    vec4 tp = texture(u_top, sharpUvOf(tArt, u_topUsed, u_topInv, u_scale * u_dpr));
+    col = col * (1.0 - tp.a) + tp.rgb;
+  }
   col += vec3(ring * 0.16);
   col *= 1.0 - u_dim;
 
@@ -451,11 +464,21 @@ export interface PostFrame {
   /** World -> css px conversion for waves. */
   viewX: number;
   viewY: number;
+  /** Scene texels per art px on x / y (default 1; Renderer.sceneScale). */
+  sceneKx?: number;
+  sceneKy?: number;
+  /** Composite the protected-layer target (`PostPipeline.top`) over the scene. */
+  topOn?: boolean;
 }
 
 export class PostPipeline {
   scene!: Target;
   glow!: Target;
+  /**
+   * Full-resolution target for the protected layers (bullets + text) while the scene renders at a
+   * reduced scale (Renderer.sceneScale < 1); created on first use.
+   */
+  top: Target | null = null;
   chain: Target[] = [];
   private gl!: GL;
   private down!: Program;
@@ -476,13 +499,21 @@ export class PostPipeline {
     this.scene = new Target(gl, sceneW, sceneH, gl.LINEAR);
     this.glow = new Target(gl, sceneW * this.glowScale, sceneH * this.glowScale, gl.LINEAR);
     this.chain = [];
+    this.top = null;
     this.resize(sceneW, sceneH);
   }
 
-  /** Set used sizes for this frame (cheap unless capacity grows). */
-  resize(sceneW: number, sceneH: number): void {
+  /**
+   * Set used sizes for this frame (cheap unless capacity grows). `topW / topH` > 0 sizes the
+   * protected-layer target (a reduced-scale scene: art resolution for bullets + text).
+   */
+  resize(sceneW: number, sceneH: number, topW = 0, topH = 0): void {
     const gl = this.gl;
     this.scene.setSize(sceneW, sceneH);
+    if (topW > 0) {
+      if (!this.top) this.top = new Target(gl, topW, topH, gl.LINEAR);
+      else this.top.setSize(topW, topH);
+    }
     const gw = Math.max(2, Math.ceil(sceneW * this.glowScale));
     const gh = Math.max(2, Math.ceil(sceneH * this.glowScale));
     this.glow.setSize(gw, gh);
@@ -550,6 +581,15 @@ export class PostPipeline {
     gl.activeTexture(gl.TEXTURE2);
     gl.bindTexture(gl.TEXTURE_2D, b.tex);
     gl.uniform1i(u.u_bloom, 2);
+    const top = f.topOn && this.top ? this.top : null;
+    gl.activeTexture(gl.TEXTURE3);
+    gl.bindTexture(gl.TEXTURE_2D, top ? top.tex : this.glow.tex);
+    gl.uniform1i(u.u_top, 3);
+    gl.uniform1f(u.u_topOn, top ? 1 : 0);
+    if (top) {
+      gl.uniform2f(u.u_topUsed, top.w, top.h);
+      gl.uniform2f(u.u_topInv, 1 / top.capW, 1 / top.capH);
+    }
     gl.activeTexture(gl.TEXTURE0);
 
     const sc = this.scene;
@@ -559,6 +599,7 @@ export class PostPipeline {
     gl.uniform2f(u.u_off, f.offX, f.offY);
     gl.uniform2f(u.u_sceneUsed, sc.w, sc.h);
     gl.uniform2f(u.u_sceneInv, 1 / sc.capW, 1 / sc.capH);
+    gl.uniform2f(u.u_sceneK, f.sceneKx ?? 1, f.sceneKy ?? 1);
     const g = this.glow;
     gl.uniform2f(u.u_glowK, g.w / g.capW / sc.w, g.h / g.capH / sc.h);
     gl.uniform2f(u.u_glowMax, (g.w - 0.5) / g.capW, (g.h - 0.5) / g.capH);
@@ -617,6 +658,8 @@ export class PostPipeline {
   dispose(): void {
     this.scene?.dispose();
     this.glow?.dispose();
+    this.top?.dispose();
+    this.top = null;
     for (const t of this.chain) t.dispose();
     this.chain = [];
   }

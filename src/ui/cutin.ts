@@ -25,11 +25,12 @@ export interface CutinHandle {
 /** Exit animation length (matches `.cutin.out` in styles.css). */
 const OUT_MS = 200;
 
-export function showCutin(parent: HTMLElement, heroId: string, portrait: string, title: string): CutinHandle {
+export function showCutin(parent: HTMLElement, heroId: string, portrait: string, title: string, lineOverride?: string): CutinHandle {
   // Season 2 heroes carry their band in the HeroDef (docs/content/heroes.md §1.2) and a shouted line
   const def = HERO_BY_ID.get(heroId);
   const [c1, c2, c3] = def?.band ?? BAND[heroId] ?? BAND.hoshi;
-  const line = def?.cutinLine ?? "";
+  // (a talent may rewrite the line for this run: Magical Girl #47's "Finally Has a Name!")
+  const line = lineOverride ?? def?.cutinLine ?? "";
   const el = h("div", "cutin");
   const words = title.split(" ");
   const half = Math.ceil(words.length / 2);

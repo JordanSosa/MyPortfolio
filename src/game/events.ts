@@ -77,6 +77,39 @@ export interface EnemyFxEvent {
  * hero's sim files; the view file of that hero group handles its own kinds and
  * ignores the rest. Reused payload: copy what you need, keep no `enemy` reference.
  */
+/**
+ * An enemy / boss says something (speech bubble, satire.md §5-6). `text` "" =
+ * a random line from the enemy's pool (the view owns the pools); `force` =
+ * a scripted line (boss taunts, behaviour shouts such as "NO RUNNING!"): it
+ * skips the ambient chance / per-type cooldown but still obeys the on-screen
+ * cap and never covers the hero. Reused payload: keep no `enemy` reference.
+ */
+/**
+ * Season 2 stage content cue (stage enemies / bosses / events): `kind` is a
+ * namespaced string owned by the stage's sim files ("candy_heal",
+ * "academy_glare"...); each stage's view file handles its own kinds and ignores
+ * the rest. Reused payload: copy what you need, keep no `enemy` reference.
+ */
+export interface StageCueEvent {
+  kind: string;
+  x: number;
+  y: number;
+  /** Second point / direction, kind-specific. */
+  x2: number;
+  y2: number;
+  /** Radius / scale / duration, kind-specific. */
+  r: number;
+  /** Count / index / variant, kind-specific. */
+  n: number;
+  enemy: Enemy | null;
+}
+
+export interface EnemySayEvent {
+  enemy: Enemy | null;
+  text: string;
+  force: boolean;
+}
+
 export interface HeroFxEvent {
   kind: string;
   x: number;
@@ -96,7 +129,8 @@ export interface HeroFxEvent {
  * look: Cancel-sama's "Ratings Drop" grade, "Budget Cuts" render scale...).
  * Handled by src/view/stage-view.ts. Kinds:
  *   "grade"       blend toward grade preset / StageDef grade key `id` by `value` (0..1) over `seconds`
- *   "renderScale" render resolution scale `value` (1 = full, 0.5 = half) over `seconds`
+ *   "renderScale" scene render resolution scale `value` (1 = full, 0.5 = half: Renderer.sceneScale) over `seconds`
+ *   "particles"   particle density `value` (1 = full, 0.5 = half the particles)
  *   "animFps"     cap sprite animation to `value` fps (0 = uncapped)
  *   "speedLines"  speed-line overlay intensity `value` (0 = off)
  *   "still"       hold the last frame for `seconds` (a "still frame")
@@ -181,6 +215,10 @@ export interface GameEvents {
   // bestiary
   /** Enemy / boss cosmetic cue (stomps, skids, roars, teleports...). Drawn by src/view/bestiary-fx.ts. */
   enemyFx: EnemyFxEvent;
+  /** An enemy / boss speaks: a speech bubble (src/view/speech.ts; sim helper game/enemies/_say.ts). Reused payload. */
+  enemySay: EnemySayEvent;
+  /** Stage content cosmetic cue (namespaced string kinds: "candy_*", "academy_*"...; game/enemies/_cue.ts). Reused payload. */
+  stageCue: StageCueEvent;
   /** Enemy bullets are about to be cleared (bomb, ult, revive, boss phase): `world.bullets` still holds them. */
   bulletsCleared: { n: number };
   // run

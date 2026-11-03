@@ -14,7 +14,8 @@ const DT = 1 / 30;
 describe.each(HERO_IDS)("3-minute run: %s", (hero) => {
   test("plays through 3:00 with sane counts and progression", () => {
     const w = new World({ hero, seed: 1234, maxEnemies: 250 });
-    let firstLevel = -1;
+    // (a hero that starts above Lv 1 - Isekai-kun's Cheat Skill - has its first level-up picks at 0:00)
+    let firstLevel = w.pendingLevels > 0 ? 1e-3 : -1;
     let ults = 0;
     let evolutions = 0;
     let hits = 0;
@@ -49,7 +50,8 @@ describe.each(HERO_IDS)("3-minute run: %s", (hero) => {
     expect(hits).toBeGreaterThan(w.kills);
     expect(maxEnemies).toBeLessThanOrEqual(250 + 60); // cap + event waves / splits
     expect(maxProj).toBeLessThan(800);
-    expect(maxGems).toBeLessThanOrEqual(CFG.maxGems + 60);
+    // (gems merge every 0.5 s: a Season 2 Overdrive / screen-wide blast can drop ~100 gems between two merges)
+    expect(maxGems).toBeLessThanOrEqual(CFG.maxGems + 140);
     expect(ults).toBeGreaterThanOrEqual(1);
     expect(w.weapons.length).toBeGreaterThanOrEqual(2);
     const s = w.summary();

@@ -19,7 +19,8 @@
  * Familiars are owned PK_MANAGED projectiles with r = 0 (no contact hits); the
  * view (src/view/heroes-a-fx.ts) reads their breath from the projectile:
  * ang = breath angle, a = breath seconds left, hh = cone length, hw = cone
- * half-angle (radians), b = black flames (1).
+ * half-angle (radians), b = black flames (1). Beams (unowned PK_MANAGED,
+ * r = 0) carry b = BEAM_JET / BEAM_EYE, origin (ox, oy), angle ang, length a.
  */
 import { C } from "../../art/palette";
 import { TAU, approachAngle } from "../../core/math";
@@ -30,6 +31,9 @@ import { fired, killOwned, own, prune, wstats, type WStats } from "./_shared";
 import { HFX_KURO_EYE_BEAM, HFX_KURO_JET, heroesA, hfx, segmentHits, strongestInView } from "./_heroes-a";
 
 const DEG = Math.PI / 180;
+/** Projectile.b markers for the view: ABYSSAL LORD'S JUDGEMENT jet / Crimson Eye Beam. */
+export const BEAM_JET = 7;
+export const BEAM_EYE = 8;
 /** Shoulder offsets (x, y from the feet) for familiars 1..6 (the first three from the bible). */
 const OFF_X = [10, -10, 0, 16, -16, 0];
 const OFF_Y = [-14, -14, -20, -7, -7, -26];
@@ -143,6 +147,9 @@ function eyeBeam(w: World, inst: WeaponInstance): void {
   p.dmg = 8 * w.stats.might * (inst.dmgMul ?? 1);
   p.pierce = Infinity;
   p.life = 0.4;
+  p.b = BEAM_EYE;
+  p.ox = ox;
+  p.oy = oy;
   p.update = eyeBeamHook;
   hfx(w, HFX_KURO_EYE_BEAM, ox, oy, a, 0.4, EYE_LEN);
 }
@@ -337,6 +344,9 @@ export const unsealedAbyssDragon: WeaponDef = {
         j.dmg = (L0.jetDmg ?? 30) * dk;
         j.pierce = Infinity;
         j.life = 0.5;
+        j.b = BEAM_JET;
+        j.ox = ox;
+        j.oy = oy;
         j.update = jetHook;
         hfx(w, HFX_KURO_JET, ox, oy, j.ang, 0.5, j.a, 0, t);
         fired(w, inst, ox, oy);

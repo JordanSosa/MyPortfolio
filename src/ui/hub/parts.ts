@@ -62,6 +62,11 @@ export function toggle(on: boolean, act: string, label: string): string {
   return `<button class="tog${on ? " on" : ""}" data-nav data-act="${act}" role="switch" aria-checked="${on}" aria-label="${esc(label)}"></button>`;
 }
 
+/** A stage reward multiplier as the bible writes it ("1.0", "1.25", "1.5", "2.2"): never rounded to one decimal. */
+export function ratingMul(x: number): string {
+  return Number.isInteger(x) ? x.toFixed(1) : String(Number(x.toFixed(2)));
+}
+
 /** "m:ss". */
 export function clock(t: number): string {
   const s = Math.max(0, Math.floor(t));

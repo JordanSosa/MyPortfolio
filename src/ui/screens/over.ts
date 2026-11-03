@@ -2,9 +2,10 @@
  * Game over - the "TO BE CONTINUED ->" death stinger (docs/content/satire.md
  * §4) - and victory (the stage's own text, "DAWN BREAKS!" in Dream Meadow).
  *
- * Defeat: the frozen frame goes sepia, the chunky arrow banner slides in from
- * the right, a subtitle line (the killing boss's own line, a speedrun line, or
- * a generic one), the hero's portrait (greyed, tilted), a "so close" line (the
+ * Defeat: the frozen frame goes sepia (vignette + drifting film grain), the
+ * chunky arrow banner slides in from the right and bobs, a subtitle line (the
+ * killing boss's own line, a speedrun line, or a generic one) types out under
+ * it, the hero's portrait (greyed, tilted) drops in, a "so close" line (the
  * boss's HP left / the next boss's arrival / the gap to the best time), REVIVE
  * when owned, and RETRY next to RESULTS. The App banks the run as soon as this
  * modal opens with no revive left (or on victory); RETRY / RESULTS otherwise
@@ -19,6 +20,7 @@ import type { App, UiScreen } from "../app";
 import { esc, fmtTime, h, img, letters } from "../dom";
 import { deathLine } from "../hub/copy";
 import { portrait } from "../kit/art";
+import { reducedMotion } from "../kit/ticker";
 import { save } from "../save";
 import { tbcBanner } from "../stinger";
 import { layer, onTap, sparkles } from "./common";
@@ -72,7 +74,7 @@ export function openGameOver(app: App, w: World, victory: boolean): UiScreen {
     : `
     <div class="sepia" aria-hidden="true"></div>
     ${tbcBanner()}
-    <div class="over-sub">${esc(sub)}</div>
+    <div class="over-sub typing" aria-label="${esc(sub)}"><span class="os-t">${reducedMotion() ? esc(sub) : ""}</span></div>
     <div class="over-por" style="--hc:${app.heroColor(hd.id)}">${portrait(hd.portrait, 0, "pimg")}<i class="sweat"></i></div>
     <div class="over-close">${soClose(w)}</div>
     <div class="over-s">EPISODE ${app.currentEpisode.n} · ${fmtTime(w.t)} · LV ${w.level} · ${w.kills} KO</div>
@@ -84,6 +86,9 @@ export function openGameOver(app: App, w: World, victory: boolean): UiScreen {
   app.ui.appendChild(el);
   let t = 0;
   let banked = false;
+  // the subtitle types out once the banner has landed (text changes only when a letter is added)
+  const subEl = el.querySelector(".os-t") as HTMLElement | null;
+  let typedN = reducedMotion() ? sub.length : 0;
   onTap(el.querySelector('[data-act="revive"]'), () => {
     if (t < 0.5) return;
     if (w.revive()) {
@@ -118,6 +123,13 @@ export function openGameOver(app: App, w: World, victory: boolean): UiScreen {
     },
     update(dt) {
       t += dt;
+      if (subEl && typedN < sub.length && t > 0.75) {
+        const n = Math.min(sub.length, Math.floor((t - 0.75) * 45));
+        if (n !== typedN) {
+          typedN = n;
+          subEl.textContent = sub.slice(0, n);
+        }
+      }
       if (app.params.autoplay && t > 2.5) {
         if (canRevive && w.revive()) {
           app.closeModal();

@@ -198,11 +198,7 @@ export const getInTheRobot: UltimateDef = {
       p.knock = 260;
       p.pierce = Infinity;
       p.life = (hw * 2 + 40) / ROCKET_SPEED;
-      p.sprite = "ult_robot_fist";
-      p.anim = 0;
-      p.fps = 0.0001;
-      p.scale = 1.3;
-      p.glow = true;
+      // (no sprite: the view draws the clenched fist + its motion blur, src/view/heroes-a-fx.ts)
       p.flipX = dir < 0;
       p.a = dir;
       p.b = d.boomerang;

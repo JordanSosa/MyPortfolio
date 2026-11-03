@@ -375,6 +375,7 @@ export const BOSS_DEATH_LINES: Readonly<Record<string, string>> = {
   "Sugar Plum Tyrant": "Sugar crash. Yours, not hers.",
   "Student Council President": "Your permanent record now says DEFEATED.",
   "The Bishounen": "He didn't even notice he won.",
+  "The Bishounen Who Never Notices You": "He didn't even notice he won.",
   "Kraken-chan": "She hugged too hard.",
   "Firework Dragon": "You were the main event.",
   "Truck-kun": "ISEKAI'D. Please enjoy your next life.",
@@ -470,7 +471,7 @@ export const GRADE_COMMENTS: Readonly<Record<string, readonly string[]>> = {
   ]
 };
 
-/** Narrator caption lines (results / hub moments). */
+/** Narrator caption lines (satire.md §1): in-run moments (src/ui/narrator.ts), results and hub. */
 export const NARRATOR: Readonly<Record<string, readonly string[]>> = {
   "runStart": [
     "Our hero steps into {stage}. The plushies are restless.",
@@ -479,6 +480,40 @@ export const NARRATOR: Readonly<Record<string, readonly string[]>> = {
     "Tonight's episode is brought to you by: your own determination.",
     "Last time, our hero learned nothing. This time, they will learn... something.",
     "{hero} has prepared for this moment. {hero} has not prepared for this moment."
+  ],
+  "firstLevel": [
+    "Our hero has grown! Narratively!",
+    "Power-up get! The animators are thrilled.",
+    "Level up! The montage music swells."
+  ],
+  "firstEvo": [
+    "EVOLUTION! The budget for this episode has been spent.",
+    "{weapon} has evolved! Merchandise sales are up 400%!",
+    "A glow-up! Somewhere, a toy company rejoices."
+  ],
+  "bossWarn": [
+    "Uh oh. That music means a boss.",
+    "This is the part of the episode where the villain arrives.",
+    "Brace yourself! Here comes the mid-season antagonist!",
+    "The ground shakes. The budget shakes harder."
+  ],
+  "lowHp": [
+    "Is this... the end of our hero?!",
+    "Oh no! Not like this! Not before the opening theme!",
+    "Our hero is in danger! Quick, someone cue the flashback!"
+  ],
+  "revive": [
+    "AND WE'RE BACK FROM THE BREAK!",
+    "Plot armor: activated!",
+    "Nobody stays down in this show. It's in the contract."
+  ],
+  "ult": [
+    "Here it comes — the attack name!",
+    "Everybody shout it with them!"
+  ],
+  "finalBoss": [
+    "The season finale! Everything has led to this!",
+    "This is it! The last boss! (Of this stage!)"
   ],
   "bossDown": [
     "{boss} has been defeated! They'll be back in the movie.",

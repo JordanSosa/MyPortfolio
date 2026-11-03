@@ -15,6 +15,7 @@ import type { Renderer } from "../render/renderer";
 import { RELICS } from "../game/registry";
 import type { World } from "../game/world";
 import type { FeedbackHooks } from "./feedback";
+import { MerchFx } from "./merch-fx";
 import type { WorldTexts } from "./texts";
 
 /** Seconds from the final killing blow to "TO BE CONTINUED..." (matches the dawn flash beat). */
@@ -75,18 +76,23 @@ export class RelicFx {
   /** SAKUGA MODE seconds left (gold border + hit sparkles) and this frame's sparkle budget. */
   private sakugaT = 0;
   private sparkBudget = 0;
+  /** The Season 2 merch line's own looks (docs/content/relics.md): per-relic procs, A Real Friend, NANI?! pops. */
+  readonly merch: MerchFx;
 
   constructor(
     private readonly r: Renderer,
     private readonly fx: Fx,
     private readonly texts: WorldTexts,
-  ) {}
+  ) {
+    this.merch = new MerchFx(r, fx, texts);
+  }
 
-  setWorld(_w: World): void {
+  setWorld(w: World): void {
     this.later.length = 0;
     this.named.clear();
     this.fillerT = -1;
     this.sakugaT = 0;
+    this.merch.setWorld(w);
   }
 
   private after(sec: number, fn: () => void): void {
@@ -116,6 +122,7 @@ export class RelicFx {
         }
       }
     }
+    this.merch.draw(time, realDt);
     if (this.fillerT >= 0) {
       this.fillerT += realDt;
       // "TO BE CONTINUED" freeze-frame: a sepia-ish dim + letterbox bars until the punchline
@@ -135,6 +142,7 @@ export class RelicFx {
   /** Subscribe to the world's Season 2 events (called from Feedback.bind). Returns the unsubscribers. */
   bind(w: World, o: RelicBindOpts): (() => void)[] {
     this.o = o;
+    this.merch.bind(o);
     const bus = w.bus;
     const fx = this.fx;
     const juice = fx.juice;
@@ -142,8 +150,11 @@ export class RelicFx {
       () => {
         this.later.length = 0;
         this.fillerT = -1;
+        this.merch.reset();
       },
       bus.on("relicProc", (e) => this.proc(e.id, e.x, e.y, e.v)),
+      // (A Real Friend: its weapon's shots get an attack pose at the Friend)
+      bus.on("weaponFire", (e) => this.merch.weaponFire(e.x, e.y)),
       bus.on("enemyHit", (e) => {
         // SAKUGA MODE: every hit sparkles (budgeted per frame)
         if (this.sakugaT > 0 && this.sparkBudget-- > 0) fx.ps.emit(P.sparkle, e.x, e.y, 2, NaN, C.yellow, 0.9, 1.2);
@@ -225,6 +236,8 @@ export class RelicFx {
   private proc(id: string, x: number, y: number, v: number): void {
     const o = this.o;
     if (!o) return;
+    // (the merch line's own looks first: src/view/merch-fx.ts)
+    if (this.merch.proc(id, x, y, v)) return;
     const fx = this.fx;
     const juice = fx.juice;
     switch (id) {

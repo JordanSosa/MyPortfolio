@@ -188,7 +188,7 @@ describe("RunStats", () => {
 });
 
 // ------------------------------------------------------------------ the view's stage look
-function lookRig(): { look: StageLook; post: PostFx; amb: { petals: number; motes: number; fireflies: number }; dpr: number[] } {
+function lookRig(): { look: StageLook; post: PostFx; amb: { petals: number; motes: number; fireflies: number }; dpr: number[]; r: Renderer } {
   const post = new PostFx();
   const amb = { petals: -1, motes: -1, fireflies: -1 };
   const dpr: number[] = [];
@@ -196,6 +196,7 @@ function lookRig(): { look: StageLook; post: PostFx; amb: { petals: number; mote
   const r = {
     post,
     clearColor: 0,
+    sceneScale: 1,
     quality,
     setQuality(q: { dprCap?: number }) {
       if (q.dprCap !== undefined) {
@@ -207,7 +208,7 @@ function lookRig(): { look: StageLook; post: PostFx; amb: { petals: number; mote
     camera: { view: { x: 0, y: 0, w: 216, h: 384 }, x: 0, y: 0 },
   } as unknown as Renderer;
   const fx = { ambient: { set: (d: typeof amb) => Object.assign(amb, d) }, speed: { radial() {}, stop() {} } } as unknown as Fx;
-  return { look: new StageLook(r, fx), post, amb, dpr };
+  return { look: new StageLook(r, fx), post, amb, dpr, r };
 }
 
 describe("stage look (view)", () => {
@@ -231,21 +232,23 @@ describe("stage look (view)", () => {
   });
 
   test("sim stageFx directives: grade override, render scale, animation fps cap, reset", () => {
-    const { look, post, dpr } = lookRig();
+    const { look, post, dpr, r } = lookRig();
     const w = new World({ hero: "hoshi", seed: 1, director: false });
     look.setWorld(w);
     look.directive({ kind: "grade", value: 1, seconds: 0, id: "dim" });
     look.frame(1 / 60);
     expect(post.grade.saturation).toBeCloseTo(GRADES.dim.saturation, 9);
     look.directive({ kind: "renderScale", value: 0.5, seconds: 0, id: "" });
-    expect(dpr[dpr.length - 1]).toBeLessThan(3);
+    // (the scene FBO renders at half the art resolution; the canvas DPR is left alone)
+    expect(r.sceneScale).toBe(0.5);
+    expect(dpr.length).toBe(0);
     look.directive({ kind: "animFps", value: 4, seconds: 0, id: "" });
     expect(look.animFps).toBe(4);
     look.directive({ kind: "reset", value: 0, seconds: 0, id: "" });
     look.frame(1 / 60);
     expect(post.grade).toEqual(GRADES.day);
     expect(look.animFps).toBe(0);
-    expect(dpr[dpr.length - 1]).toBe(3);
+    expect(r.sceneScale).toBe(1);
     void CFG;
   });
 });

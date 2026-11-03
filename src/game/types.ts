@@ -64,6 +64,8 @@ export interface EnemyDef {
   tint?: number;
   /** Never part of a phase mix / random pick (twist and event-only enemies). */
   special?: boolean;
+  /** Not a codex / wiki entry (an implementation actor such as the Animation Error's dropped frames). */
+  noCodex?: boolean;
   /** Called once after spawn (stats already set). */
   init?(e: Enemy, w: World): void;
   /** Set the desired velocity e.vx / e.vy (px/s) for this step. Knockback and separation are applied after. */
@@ -134,6 +136,11 @@ export interface Enemy {
    * progress) and no movement of its own; knockback still applies (Baka Harisen daze, bull bars...).
    */
   stun: number;
+  /**
+   * Skipped by homing / auto-aim target picks (World.homingTarget / nearestEnemy / nearestEnemies /
+   * randomEnemyInView) while true; area damage still hits. Tiny Shark's fin, Sandcastle Golem's sand pile.
+   */
+  untargetable: boolean;
 }
 
 // ---------------------------------------------------------------- projectiles
@@ -257,6 +264,8 @@ export interface Bullet {
   accel: number;
   /** Enemy id that fired it ("" = unknown: RunStats.killedBy falls back to the sprite). */
   from: string;
+  /** Sprite + glow tint (0xffffff = the sprite's own colours): firework stars, Shadow Clone orbs. Reset by spawnBullet. */
+  tint: number;
   dead: boolean;
 }
 
@@ -414,6 +423,12 @@ export interface PassiveDef {
   /** Per-level effect text (index 0 = level 1). */
   levels: string[];
   apply(s: Stats, level: number): void;
+  /**
+   * Optional run-state behaviour, called once when the passive is first taken (World.addPassive),
+   * e.g. a `World.statMods` entry that reads the build (Friendship Bracelet: damage per weapon held).
+   * Read `inst.level` live: later level-ups recompute the stats.
+   */
+  install?(w: World, inst: PassiveInstance): void;
 }
 
 export interface PassiveInstance {

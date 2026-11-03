@@ -155,3 +155,12 @@ export const TRUCK_KUN: HeroDef = {
 
 /** Senpai, Magical Girl #47, Isekai-kun, Truck-kun (roster order 8-11). */
 export const HEROES_B: HeroDef[] = [SENPAI, MAGICAL_GIRL_47, ISEKAI_KUN, TRUCK_KUN];
+
+/**
+ * The cut-in subtitle for this run's ultimate: the hero's line, or a talent's
+ * rewrite (Magical Girl #47's "Finally Has a Name!": "It's... Mahou— wait—").
+ */
+export function cutinLine(w: World): string | undefined {
+  if (w.hero.id === "magical_girl_47" && w.talentRank("mg47_has_a_name") > 0) return "It's... Mahou— wait—";
+  return w.hero.cutinLine;
+}

@@ -1,0 +1,910 @@
+/* Kira Kira Overdrive - EPISODE RESULTS (src/ui/screens/results.ts). docs/EXPANSION.md §4, docs/content/satire.md §3-4, §9.
+   Animation = transform / opacity only; large layers never animate box-shadow / filter. */
+
+/* ============================================================= EPISODE RESULTS (v2) */
+.scr.ep-res {
+  padding: 0;
+  justify-content: flex-start;
+  align-items: stretch;
+  background: radial-gradient(ellipse at 50% 25%, rgba(75, 52, 112, 0.84), rgba(20, 12, 34, 0.96));
+}
+.ep-res.won {
+  background: radial-gradient(ellipse at 50% 110%, rgba(255, 154, 61, 0.5), rgba(75, 52, 112, 0.86) 45%, rgba(20, 12, 34, 0.96));
+}
+.er-top {
+  flex: none;
+  display: flex;
+  justify-content: center;
+  padding: calc(8px + var(--sat)) calc(10px + var(--sar)) 4px calc(10px + var(--sal));
+}
+.er-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 0.2em calc(12px + var(--sar)) 1em calc(12px + var(--sal));
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.8em;
+}
+.er-main,
+.er-side {
+  width: min(36em, 100%);
+  display: flex;
+  flex-direction: column;
+  gap: 0.8em;
+}
+.er-head {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.45em;
+}
+.er-ep {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+.er-title {
+  animation: er-up 0.4s 0.55s both;
+}
+@keyframes er-up {
+  from {
+    transform: translateY(10px);
+    opacity: 0;
+  }
+}
+.er-ep small {
+  font-family: var(--mono);
+  font-size: max(9px, 0.72em);
+  letter-spacing: 0.16em;
+  color: var(--aqua);
+  text-shadow: var(--ol1);
+}
+.er-ep .eltr {
+  display: inline-block;
+  animation: er-ltr 0.45s cubic-bezier(0.2, 1.8, 0.4, 1) both;
+  animation-delay: var(--d);
+}
+@keyframes er-ltr {
+  from {
+    transform: translateY(-0.8em) scale(2) rotate(12deg);
+    opacity: 0;
+  }
+}
+.er-ep b {
+  font-size: clamp(2.2em, 10vmin, 3.6em);
+  line-height: 1;
+  letter-spacing: 0.04em;
+  color: var(--white);
+  text-shadow: var(--ol), 0 6px 0 var(--outline), 0 0 24px rgba(255, 122, 184, 0.7);
+  transform: rotate(-3deg);
+}
+.er-title {
+  margin-top: 0.3em;
+  font-size: max(11px, 1em);
+  line-height: 1.25;
+  color: var(--pinkl);
+  text-shadow: var(--ol1);
+}
+/* debug / deep-link runs: the payout is a preview, the account is untouched */
+.er-practice {
+  margin-top: 0.4em;
+}
+@keyframes ep-stamp {
+  from {
+    transform: scale(2.2) rotate(6deg);
+    opacity: 0;
+  }
+}
+.er-sting {
+  min-height: 2.6em;
+  display: flex;
+  justify-content: center;
+}
+.er-finale {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  font-weight: 700;
+  font-size: clamp(1.7em, 7.5vmin, 2.8em);
+  color: var(--yellow);
+  text-shadow: var(--ol), 0 5px 0 var(--outline), 0 0 26px rgba(255, 225, 77, 0.85);
+  animation: ep-stamp 0.6s 0.3s cubic-bezier(0.2, 1.6, 0.4, 1) both;
+}
+/* the stamped title is one line of letter spans (the column stacks it over the small print) */
+.er-finale .erf-t {
+  display: block;
+  text-align: center;
+  line-height: 1.05;
+}
+.er-finale small {
+  font-family: var(--mono);
+  font-size: max(9px, 0.32em);
+  color: var(--aqua);
+}
+.er-dropped {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5em;
+  animation: er-up 0.5s 0.3s both;
+  font-family: var(--mono);
+  font-size: max(11px, 1.05em);
+  padding: 0.3em 0.9em;
+  border-radius: 6px;
+  background: #3b2a1a;
+  border: 2px solid #c9a46a;
+  color: #f2d9a6;
+  transform: rotate(-2deg);
+}
+/* a little ejected cassette */
+.cass {
+  position: relative;
+  width: 1.6em;
+  height: 1.05em;
+  border-radius: 3px;
+  background: #c9a46a;
+  border: 2px solid #3b2a1a;
+  animation: cass-eject 0.6s 0.35s cubic-bezier(0.2, 1.6, 0.4, 1) both;
+}
+.cass::before,
+.cass::after {
+  content: "";
+  position: absolute;
+  top: 0.22em;
+  width: 0.34em;
+  height: 0.34em;
+  border-radius: 50%;
+  background: #3b2a1a;
+}
+.cass::before {
+  left: 0.2em;
+}
+.cass::after {
+  right: 0.2em;
+}
+@keyframes cass-eject {
+  from {
+    transform: translateY(0.8em) rotate(-20deg);
+    opacity: 0;
+  }
+}
+.er-conf {
+  z-index: 0;
+}
+.er-hero {
+  display: flex;
+  align-items: center;
+  gap: 1.1em;
+}
+.er-hero .por {
+  position: relative;
+  width: 5.6em;
+  height: 5.6em;
+  border-radius: 14px;
+  border: 3px solid var(--white);
+  box-shadow: 0 0 0 3px var(--outline);
+  background: radial-gradient(circle at 50% 40%, var(--hc, var(--pink)), #4b3470 75%);
+  overflow: hidden;
+}
+.er-hero .por .pimg {
+  width: 100%;
+  height: 100%;
+  display: block;
+}
+.por.lost .pimg {
+  filter: grayscale(0.6) brightness(0.85);
+}
+.er-grade {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  max-width: 14em;
+}
+.er-grade .grade {
+  width: auto;
+  opacity: 0;
+  animation: none;
+}
+.er-grade .grade .burst {
+  animation: none;
+}
+.er-grade.in .grade {
+  opacity: 1;
+  animation: er-slam 0.5s cubic-bezier(0.2, 1.7, 0.4, 1) both;
+}
+.er-grade.in .grade.S,
+.er-grade.in .grade.SS,
+.er-grade.in .grade.A {
+  animation: er-slam 0.5s cubic-bezier(0.2, 1.7, 0.4, 1) both, grade-shine 0.9s 0.45s ease-in-out both;
+}
+.er-grade.in .grade .burst {
+  animation: grade-burst 0.8s 0.22s ease-out both;
+}
+@keyframes er-slam {
+  from {
+    transform: scale(3.2) rotate(18deg);
+    opacity: 0;
+  }
+  55% {
+    transform: scale(0.88) rotate(-3deg);
+    opacity: 1;
+  }
+}
+/* SS: the rainbow S glyph, bigger still */
+.grade.SS {
+  font-size: 4.6em;
+  letter-spacing: -0.08em;
+  background:
+    linear-gradient(100deg, transparent 38%, rgba(255, 255, 255, 0.95) 50%, transparent 62%) 130% 0 / 250% 100% no-repeat,
+    linear-gradient(170deg, #fff7b0 0%, #ffe14d 22%, #ff9a3d 40%, #ff7ab8 58%, #4fe6df 78%, #b47cff 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  text-shadow: none;
+  filter: drop-shadow(0 4px 0 var(--outline)) drop-shadow(3px 0 0 var(--outline)) drop-shadow(-3px 0 0 var(--outline)) drop-shadow(0 -3px 0 var(--outline)) drop-shadow(0 0 14px rgba(255, 225, 77, 0.8));
+}
+.eg-k {
+  font-family: var(--mono);
+  font-size: max(8px, 0.6em);
+  letter-spacing: 0.2em;
+  color: var(--lav2);
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+.er-grade.in .eg-k {
+  opacity: 1;
+}
+.eg-w {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 4.4em;
+}
+/* the stamp's shockwave ring */
+.eg-ring {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 4.2em;
+  height: 4.2em;
+  margin: -2.1em 0 0 -2.1em;
+  border-radius: 50%;
+  border: 4px solid var(--yellow);
+  opacity: 0;
+  pointer-events: none;
+}
+.er-grade.in .eg-ring {
+  animation: eg-ring 0.6s 0.18s ease-out both;
+}
+.er-grade.g-D .eg-ring,
+.er-grade.g-C .eg-ring {
+  border-color: var(--lav);
+}
+@keyframes eg-ring {
+  from {
+    transform: scale(0.3);
+    opacity: 1;
+  }
+  to {
+    transform: scale(2.3);
+    opacity: 0;
+  }
+}
+.er-gc {
+  min-height: 2.5em;
+  font-size: max(10px, 0.82em);
+  line-height: 1.25;
+  text-align: center;
+  color: var(--lav);
+}
+.er-stats {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 0.45em;
+  width: 100%;
+}
+.er-stat {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0.45em 0.2em 0.4em;
+  border-radius: 12px;
+  background: rgba(20, 12, 34, 0.55);
+  border: 2px solid rgba(221, 198, 255, 0.28);
+  animation: card-pop 0.35s cubic-bezier(0.2, 1.6, 0.4, 1) both;
+  animation-delay: calc(var(--i) * 0.07s + 0.4s);
+}
+.er-stat small {
+  font-family: var(--mono);
+  font-size: max(8px, 0.64em);
+  color: var(--lav);
+}
+.er-stat b {
+  font-size: 1.15em;
+  text-shadow: var(--ol1);
+}
+.er-stat .ktag {
+  position: absolute;
+  top: -1.25em;
+  right: -0.2em;
+  transform: rotate(6deg);
+  font-size: max(8px, 0.52em);
+}
+.er-stats:has(.ktag) {
+  margin-top: 0.5em;
+}
+.er-pay {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 0.7em;
+}
+.pay-col {
+  padding: 0.55em 0.75em 0.6em;
+  border-radius: 16px;
+  border: 3px solid var(--lav);
+  background: linear-gradient(180deg, rgba(75, 52, 112, 0.96), rgba(45, 27, 69, 0.97));
+  box-shadow: 0 0 0 3px var(--outline), 0 5px 0 3px var(--outline);
+}
+.pay-col.c-coins {
+  border-color: var(--yellow);
+}
+.pay-col.c-gems {
+  border-color: var(--pink);
+}
+.pay-h {
+  display: flex;
+  align-items: center;
+  gap: 0.45em;
+  margin-bottom: 0.3em;
+  font-family: var(--mono);
+  font-size: max(10px, 0.82em);
+  letter-spacing: 0.12em;
+  text-shadow: var(--ol1);
+}
+.pico {
+  width: 1.8em;
+  height: 1.8em;
+}
+.pl {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  min-height: 1.9em;
+  padding: 0.15em 0;
+  border-bottom: 1px dashed rgba(221, 198, 255, 0.18);
+  /* a faint skeleton of the lines to come (the column never jumps), each one pops in on its beat */
+  opacity: 0.12;
+  transform: translateX(-12px);
+  transition: opacity 0.25s, transform 0.3s cubic-bezier(0.2, 1.6, 0.4, 1);
+}
+.pl.in {
+  opacity: 1;
+  transform: none;
+}
+.pl.in .pl-v {
+  animation: pl-tick 0.35s cubic-bezier(0.2, 1.8, 0.4, 1);
+}
+@keyframes pl-tick {
+  40% {
+    transform: scale(1.3);
+  }
+}
+.pl-l {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+}
+.pl-l b {
+  font-size: max(10px, 0.95em);
+  font-weight: 400;
+}
+.pl-l small {
+  font-size: max(9px, 0.72em);
+  color: var(--lav2);
+}
+.pl-m {
+  display: inline-block;
+  padding: 0.05em 0.35em;
+  border-radius: 6px;
+  border: 2px solid var(--pink);
+  font-family: var(--mono);
+  font-size: max(10px, 0.8em);
+  color: var(--pinkl);
+  transform: rotate(-4deg);
+}
+.pl-v {
+  flex: none;
+  min-width: 4em;
+  text-align: right;
+  font-family: var(--mono);
+  font-variant-numeric: tabular-nums;
+  font-size: max(10px, 0.9em);
+  color: var(--white);
+  text-shadow: var(--ol1);
+}
+.c-coins .pl-v {
+  color: var(--yellow);
+}
+.c-gems .pl-v {
+  color: #ffd6ec;
+}
+.pl.mul .pl-l b {
+  color: var(--pinkl);
+}
+.pay-tot {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-top: 0.35em;
+  opacity: 0.5;
+}
+.pay-tot.in {
+  opacity: 1;
+}
+.pay-tot.in b {
+  animation: tot-glow 0.7s ease-out;
+}
+@keyframes tot-glow {
+  30% {
+    transform: scale(1.18) rotate(-2deg);
+  }
+}
+.pay-tot span {
+  font-family: var(--mono);
+  font-size: max(10px, 0.8em);
+  letter-spacing: 0.14em;
+  color: var(--lav);
+}
+.pay-tot b {
+  font-size: 1.7em;
+  font-variant-numeric: tabular-nums;
+  text-shadow: var(--ol), 0 3px 0 var(--outline);
+}
+.c-coins .pay-tot b {
+  color: var(--yellow);
+}
+.c-gems .pay-tot b {
+  color: #ffd6ec;
+}
+.er-xp {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5em;
+  padding: 0.6em 0.75em;
+  border-radius: 16px;
+  background: rgba(20, 12, 34, 0.5);
+  border: 2px solid rgba(221, 198, 255, 0.3);
+}
+.xp-row,
+.ms-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
+}
+.ms-row {
+  opacity: 0.45;
+  transition: opacity 0.3s;
+}
+.ms-row.in {
+  opacity: 1;
+}
+.xp-por {
+  flex: none;
+  width: 2.8em;
+  height: 2.8em;
+  border-radius: 10px;
+  border: 2px solid var(--white);
+  box-shadow: 0 0 0 2px var(--outline);
+  background: radial-gradient(circle at 50% 40%, var(--hc, var(--pink)), #4b3470 80%);
+}
+.ms-ic {
+  flex: none;
+  width: 2.2em;
+  height: 2.2em;
+}
+.xp-tx {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2em;
+}
+.xp-tx b {
+  font-size: max(10px, 0.92em);
+  text-shadow: var(--ol1);
+}
+.xp-lv,
+.ms-rk {
+  font-family: var(--mono);
+  font-size: 0.85em;
+  color: var(--yellow);
+}
+.xp-tx .pbar {
+  height: 1em;
+}
+.xp-tx .pbar > i {
+  transition-duration: 0.5s;
+}
+.xp-pop,
+.ms-tag {
+  flex: none;
+}
+.lvup {
+  position: relative;
+  display: inline-block;
+}
+/* LEVEL UP! burst: rays behind the tag (one shot) */
+.lvup-burst {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 4em;
+  height: 4em;
+  margin: -2em 0 0 -2em;
+  z-index: -1;
+  border-radius: 50%;
+  background: repeating-conic-gradient(rgba(255, 225, 77, 0.9) 0 10deg, transparent 10deg 30deg);
+  -webkit-mask: radial-gradient(circle, #000 20%, transparent 70%);
+  mask: radial-gradient(circle, #000 20%, transparent 70%);
+  animation: lvup-burst 0.7s ease-out both;
+  pointer-events: none;
+}
+@keyframes lvup-burst {
+  from {
+    transform: scale(0.2) rotate(0);
+    opacity: 1;
+  }
+  to {
+    transform: scale(1.6) rotate(40deg);
+    opacity: 0;
+  }
+}
+.er-sec {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  font-family: var(--mono);
+  font-size: max(10px, 0.82em);
+  letter-spacing: 0.14em;
+  color: var(--yellow);
+  text-shadow: var(--ol1);
+  margin-bottom: 0.4em;
+}
+.er-sec .es-ic {
+  width: 1.5em;
+  height: 1.5em;
+}
+.er-sec small {
+  padding: 0.05em 0.4em;
+  border-radius: 999px;
+  background: var(--red);
+  color: var(--white);
+  letter-spacing: 0;
+}
+.er-ach {
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+.er-ach.in {
+  opacity: 1;
+}
+.ach-card {
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
+  margin-bottom: 0.4em;
+  padding: 0.5em 0.6em;
+  border-radius: 14px;
+  border: 2px solid var(--yellow);
+  background: linear-gradient(90deg, rgba(224, 160, 32, 0.35), rgba(20, 12, 34, 0.55));
+  box-shadow: 0 0 0 2px var(--outline), 0 0 14px rgba(255, 225, 77, 0.3);
+}
+.er-ach .ach-card {
+  opacity: 0;
+}
+.er-ach.in .ach-card {
+  opacity: 1;
+  animation: ac-deal 0.45s cubic-bezier(0.2, 1.5, 0.4, 1) both;
+  animation-delay: calc(var(--i) * 0.12s);
+}
+@keyframes ac-deal {
+  from {
+    transform: translateX(40px) rotate(4deg) scale(0.9);
+    opacity: 0;
+  }
+}
+.ach-card.claimed {
+  border-color: var(--lime);
+}
+.ac-ic {
+  position: relative;
+  flex: none;
+  width: 2.4em;
+  height: 2.4em;
+  overflow: hidden;
+  border-radius: 8px;
+}
+.ach-card .aico {
+  width: 100%;
+  height: 100%;
+}
+.ac-shine {
+  position: absolute;
+  top: -20%;
+  bottom: -20%;
+  width: 40%;
+  background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.8), transparent);
+  transform: translateX(-160%) skewX(-18deg);
+}
+.er-ach.in .ac-shine {
+  animation: ac-shine 0.7s ease-in-out both;
+  animation-delay: calc(var(--i) * 0.12s + 0.35s);
+}
+@keyframes ac-shine {
+  to {
+    transform: translateX(360%) skewX(-18deg);
+  }
+}
+.ac-k {
+  font-family: var(--mono);
+  font-size: max(8px, 0.6em) !important;
+  letter-spacing: 0.12em;
+  color: var(--yellow) !important;
+}
+.ac-tx {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.ac-tx b {
+  text-shadow: var(--ol1);
+}
+.ac-tx small {
+  font-size: max(10px, 0.8em);
+  color: var(--lav);
+}
+.ac-rw {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.15em;
+}
+.ac-claim {
+  display: flex;
+  justify-content: center;
+}
+.er-recs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4em;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+.er-recs.in {
+  opacity: 1;
+}
+.er-recs.in .rc {
+  display: inline-block;
+  animation: card-pop 0.35s cubic-bezier(0.2, 1.6, 0.4, 1) both;
+  animation-delay: calc(var(--i) * 0.08s);
+}
+/* "Next time on Kira Kira Overdrive..." - an anime next-episode preview card */
+.er-next {
+  position: relative;
+  overflow: hidden;
+  padding: 0.55em 0.85em 0.7em;
+  border-radius: 14px;
+  background: linear-gradient(135deg, #2b1a4a, #4b3470 60%, #743fd1);
+  border: 3px solid var(--white);
+  box-shadow: 0 0 0 3px var(--outline), 0 5px 0 3px var(--outline);
+  opacity: 0;
+  transform: translateY(10px) rotate(-1deg);
+  transition: opacity 0.35s, transform 0.45s cubic-bezier(0.2, 1.5, 0.4, 1);
+}
+.er-next::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(-55deg, rgba(255, 255, 255, 0.05) 0 10px, transparent 10px 22px);
+  pointer-events: none;
+}
+.er-next.in {
+  opacity: 1;
+  transform: none;
+}
+.nt-head {
+  position: relative;
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 0.2em 0.5em;
+}
+.nt-k {
+  font-family: var(--mono);
+  font-size: max(9px, 0.7em);
+  letter-spacing: 0.14em;
+  color: var(--aqua);
+  text-shadow: var(--ol1);
+}
+.nt-logo {
+  font-weight: 700;
+  font-size: max(11px, 0.95em);
+  letter-spacing: 0.04em;
+  color: var(--yellow);
+  text-shadow: var(--ol1), 0 2px 0 var(--outline);
+}
+.nt-logo i {
+  display: inline-block;
+  font-style: normal;
+  color: var(--pinkl);
+}
+.er-next.in .nt-logo i {
+  animation: nt-spin 1.6s ease-in-out infinite;
+}
+@keyframes nt-spin {
+  50% {
+    transform: rotate(180deg) scale(1.25);
+  }
+}
+.nt-line {
+  position: relative;
+  min-height: 2.6em;
+  margin: 0.3em 0 0;
+  font-size: max(11px, 1.05em);
+  line-height: 1.3;
+  color: var(--white);
+  text-shadow: var(--ol1);
+}
+.nt-caret {
+  display: inline-block;
+  width: 0.5em;
+  height: 1em;
+  margin-left: 0.1em;
+  vertical-align: -0.12em;
+  background: var(--yellow);
+  animation: nt-caret 0.8s steps(1, end) infinite;
+}
+@keyframes nt-caret {
+  50% {
+    opacity: 0;
+  }
+}
+.er-afford {
+  text-align: center;
+  font-size: max(10px, 0.9em);
+  color: var(--lav);
+  opacity: 0;
+  transition: opacity 0.4s;
+}
+.er-afford.in {
+  opacity: 1;
+}
+.er-afford b {
+  color: var(--yellow);
+}
+.er-dmg {
+  border-radius: 12px;
+  background: rgba(20, 12, 34, 0.4);
+  padding: 0.2em 0.7em;
+}
+.er-dmg summary {
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  font-family: var(--mono);
+  font-size: max(10px, 0.8em);
+  color: var(--lav);
+  cursor: pointer;
+}
+.er-dmg .dmg-list {
+  padding-bottom: 0.6em;
+}
+.er-btns {
+  flex: none;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.55em;
+  padding: 0.55em calc(10px + var(--sar)) calc(0.6em + var(--sab)) calc(10px + var(--sal));
+  background: linear-gradient(180deg, rgba(29, 18, 50, 0.4), rgba(20, 12, 34, 0.96) 30%);
+  border-top: 2px solid rgba(221, 198, 255, 0.25);
+}
+.er-btns .btn {
+  min-width: 0;
+  font-size: 1.12em;
+  padding-left: 0.5em;
+  padding-right: 0.5em;
+}
+.btn.pulse {
+  animation: btn-pulse 1.2s ease-in-out infinite;
+}
+@keyframes btn-pulse {
+  50% {
+    transform: scale(1.05);
+  }
+}
+.er-stat.best {
+  border-color: var(--red);
+}
+@media (orientation: landscape) {
+  .er-scroll {
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 1.2em;
+  }
+  .er-main,
+  .er-side {
+    width: min(30em, 48%);
+  }
+  .er-btns {
+    grid-template-columns: repeat(3, minmax(0, 14em));
+    justify-content: center;
+  }
+}
+/* phones: three buttons side by side leave no room for the second line */
+@media (max-width: 560px) {
+  .er-btns .btn .bsub {
+    display: none;
+  }
+  .er-btns .btn {
+    min-height: 3em;
+  }
+}
+@media (orientation: landscape) and (max-height: 520px) {
+  .er-ep b {
+    font-size: 1.9em;
+  }
+  .er-hero .por {
+    width: 4.2em;
+    height: 4.2em;
+  }
+  .er-btns .btn .bsub {
+    display: none;
+  }
+  .er-btns {
+    padding-top: 0.35em;
+  }
+}
+@media (min-width: 700px) {
+  .er-pay {
+    grid-template-columns: 1fr 1fr;
+  }
+  .ep-res.won .er-pay,
+  .er-pay {
+    align-items: start;
+  }
+}
+@media (orientation: landscape) and (max-width: 1100px) {
+  .er-pay {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ============================================================= reduced motion: the end state, no motion */
+@media (prefers-reduced-motion: reduce) {
+  .er-ep .eltr,
+  .er-title,
+  .er-dropped,
+  .cass,
+  .er-grade.in .grade,
+  .er-grade.in .eg-ring,
+  .er-grade.in .grade .burst,
+  .pl.in .pl-v,
+  .pay-tot.in b,
+  .lvup-burst,
+  .er-ach.in .ach-card,
+  .er-ach.in .ac-shine,
+  .er-recs.in .rc,
+  .er-next.in .nt-logo i,
+  .nt-caret,
+  .btn.pulse {
+    animation: none !important;
+  }
+}

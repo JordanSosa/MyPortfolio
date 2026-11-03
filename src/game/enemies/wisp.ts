@@ -43,7 +43,7 @@ function explode(e: Enemy, w: World, armed: boolean): void {
   const R = wispRadius(e);
   const cx = e.x;
   const cy = e.y - e.cy;
-  if (armed && distToPlayer(e, w) < R + CFG.playerRadius - 1) w.hurtPlayer(e.d, cx, cy);
+  if (armed && distToPlayer(e, w) < R + CFG.playerRadius - 1) w.hurtPlayer(e.d, cx, cy, e.def.id);
   efx(w, EFX_WISP_BOOM, cx, cy, armed ? 1 : 0, 0, R, e);
   // chain reaction: scorch the neighbours (enough to pop other wisps, a scratch for the big ones)
   w.explode(cx, cy, R, Math.max(6, e.maxHp * 1.5), null, 50, "wisp", C.violet);

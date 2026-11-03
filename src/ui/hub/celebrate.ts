@@ -1,16 +1,23 @@
 /**
  * Full-screen moments shared by the hub and Episode Results:
  *
- *  - `celebrateUnlocks` - "NEW WEAPON UNLOCKED!" cards (rays, sparkles, the
- *    item's art, the unlock hint), one per unlock, tap / OK for the next.
+ *  - `celebrateUnlocks` - "NEW WEAPON UNLOCKED!" cards (satire.md §8 titles):
+ *    a burst flash, spinning rays, confetti, the item's art popping out of a
+ *    glow with a shine sweep, the title stamped in word by word (never broken
+ *    mid-word), the name, the unlock hint and the narrator's line; one card
+ *    per unlock, tap / OK for the next.
  *  - `bootNotices` - once per session, when the hub first shows its home page:
  *    the "WELCOME TO SEASON 2!" card for a migrated v1 save (old Dream Shop
  *    refund, the 10-pull gift, Rin + Mochi), a notice when an unreadable save
  *    had to be set aside, a celebration for content the boot reconciliation
  *    unlocked, and Plot Points the profile already qualifies for (imported /
  *    migrated saves) as one "claim them in the Wiki" toast.
+ *  - `flyCurrency` - reward icons arcing from a chip into the currency bar pill
+ *    (Plot Point claims, the results payout), `wordLetters` (letter spans
+ *    grouped per word) and `confetti` (CSS-only pieces).
  *
- * Both are overlays: they push a NavLayer and count for the Back guard.
+ * The overlays push a NavLayer and count for the Back guard. Animation is
+ * transform / opacity only; reduced motion skips the flights and the confetti.
  */
 import type { Rarity } from "../../game/defs";
 import { HEROES } from "../../game/heroes";
@@ -18,34 +25,118 @@ import { PASSIVES } from "../../game/passives";
 import { RELICS, WEAPONS } from "../../game/registry";
 import { evaluateAchievements } from "../../meta/achievements/engine";
 import type { UnlockEvent } from "../../meta/unlocks";
-import { esc, fmtInt, h, hasArt, img, letters } from "../dom";
-import { currencyIcon, money, portrait, RARITY_CLS, relicIcon, trophyIcon, twistIcon } from "../kit/art";
+import { esc, fmtInt, h, hasArt, img } from "../dom";
+import { currencyIcon, money, portrait, RARITY_CLS, relicIcon, trophyIcon, twistIcon, type CurrencyId } from "../kit/art";
 import { confirmDialog, trackOverlay, type KitHost } from "../kit/overlay";
+import { reducedMotion } from "../kit/ticker";
 import type { NavLayer } from "../nav";
 import { save } from "../save";
 import { markBorn, onTap, sparkles, tooSoon } from "../screens/common";
-import { UNLOCK_TITLE } from "./copy";
+import { narratorLine, UNLOCK_TITLE } from "./copy";
 import type { Hub } from "./hub";
+import "./celebrate.css";
+
+/** Per-letter spans grouped per word (a title wraps between words, never inside one). */
+export function wordLetters(text: string, cls = "ltr", step = 0.05, delay = 0): string {
+  let i = 0;
+  return text
+    .split(" ")
+    .map((w) => `<span class="ww">${[...w].map((ch) => `<span class="${cls}" style="--i:${i};--d:${(delay + i++ * step).toFixed(2)}s">${esc(ch)}</span>`).join("")}</span>`)
+    .join(" ");
+}
+
+const CONFETTI = ["#ff7ab8", "#ffe14d", "#4fe6df", "#b47cff", "#94e85e", "#ffffff", "#ff9a3d"];
+
+/** CSS confetti pieces (transform / opacity keyframes in celebrate.css). */
+export function confetti(n: number, cls = ""): string {
+  if (reducedMotion()) return "";
+  let s = `<div class="kconf ${cls}" aria-hidden="true">`;
+  for (let i = 0; i < n; i++) {
+    const x = (Math.random() * 100).toFixed(1);
+    const dx = ((Math.random() - 0.5) * 30).toFixed(1);
+    const r = Math.round((Math.random() - 0.5) * 1440);
+    const d = (Math.random() * 0.9).toFixed(2);
+    const t = (1.6 + Math.random() * 1.4).toFixed(2);
+    const c = CONFETTI[i % CONFETTI.length];
+    s += `<i style="left:${x}%;--dx:${dx}vw;--r:${r}deg;--c:${c};animation-delay:${d}s;animation-duration:${t}s"${i % 3 === 0 ? ' class="o"' : ""}></i>`;
+  }
+  return s + "</div>";
+}
+
+/**
+ * Reward icons arcing from `from` into `to` (a currency pill). `onLand` runs when the first one arrives
+ * (bump the pill / count up). Fixed-position clones in `parent`, WAAPI transform + opacity, removed at the end.
+ */
+export function flyCurrency(parent: HTMLElement, from: Element | null, to: Element | null, cur: CurrencyId, n = 6, onLand?: () => void): void {
+  if (!from || !to || reducedMotion() || typeof (from as HTMLElement).animate !== "function") {
+    onLand?.();
+    return;
+  }
+  const a = from.getBoundingClientRect();
+  const b = to.getBoundingClientRect();
+  if (!a.width || !b.width) {
+    onLand?.();
+    return;
+  }
+  const x0 = a.left + a.width / 2;
+  const y0 = a.top + a.height / 2;
+  const x1 = b.left + Math.min(b.width, b.height) / 2 + 4;
+  const y1 = b.top + b.height / 2;
+  let landed = false;
+  for (let i = 0; i < n; i++) {
+    const el = h("span", "kfly", currencyIcon(cur, true, "kfly-ic"));
+    el.style.left = `${x0}px`;
+    el.style.top = `${y0}px`;
+    parent.appendChild(el);
+    const sx = (Math.random() - 0.5) * 70;
+    const sy = -30 - Math.random() * 50;
+    const dx = x1 - x0;
+    const dy = y1 - y0;
+    const anim = el.animate(
+      [
+        { transform: "translate(-50%, -50%) scale(0.4)", opacity: 0 },
+        { transform: `translate(calc(-50% + ${sx}px), calc(-50% + ${sy}px)) scale(1.15)`, opacity: 1, offset: 0.3 },
+        { transform: `translate(calc(-50% + ${dx * 0.6 + sx * 0.3}px), calc(-50% + ${dy * 0.5 + sy}px)) scale(0.95)`, opacity: 1, offset: 0.62 },
+        { transform: `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) scale(0.55)`, opacity: 0.2 },
+      ],
+      { duration: 620 + i * 25, delay: i * 55, easing: "cubic-bezier(0.45, 0, 0.6, 1)", fill: "both" },
+    );
+    anim.onfinish = () => {
+      el.remove();
+      if (!landed) {
+        landed = true;
+        onLand?.();
+      }
+    };
+  }
+}
 
 /** Full-screen "NEW WEAPON UNLOCKED!" cards, one per unlock (tap / OK for the next). `done` runs after the last. */
 export function celebrateUnlocks(host: KitHost, list: UnlockEvent[], done?: () => void): void {
   const queue = list.filter((u) => !u.start);
+  const total = queue.length;
   const next = () => {
     const ev = queue.shift();
     if (!ev) {
       done?.();
       return;
     }
-    const el = h("div", "kover unlock-cele");
+    const idx = total - queue.length;
+    const title = ev.kind === "passive" ? `NEW PASSIVE: ${ev.name}!` : (UNLOCK_TITLE[ev.kind] ?? "NEW UNLOCK!");
+    const narr = ev.kind === "passive" ? "(It's an accessory.)" : ev.kind === "hero" ? "A new character joins the cast! Ratings are up!" : ev.kind === "stage" ? "A new episode is airing! The network is thrilled!" : narratorLine("unlock", {}) || "New merchandise has been approved!";
+    const el = h("div", `kover unlock-cele k-${ev.kind}`);
     el.innerHTML = `
+      <i class="uc-flash" aria-hidden="true"></i>
       <div class="rays"></div>
-      ${sparkles(24)}
-      <div class="uc-card">
-        <div class="uc-t">${letters(UNLOCK_TITLE[ev.kind] ?? "NEW UNLOCK!", "ltr", 0.04)}</div>
-        <div class="uc-ic">${unlockIcon(ev)}</div>
-        <b class="uc-name">${esc(ev.name)}</b>
-        ${ev.hint ? `<small class="uc-hint">${esc(ev.hint)}</small>` : ""}
-        <small class="uc-narr">${ev.kind === "hero" ? "A new character joins the cast! Ratings are up!" : ev.kind === "stage" ? "A new episode is airing! The network is thrilled!" : "New merchandise has been approved!"}</small>
+      ${sparkles(18)}
+      ${confetti(36)}
+      <div class="uc-card" role="alertdialog" aria-label="${esc(title)} ${esc(ev.name)}">
+        ${total > 1 ? `<small class="uc-count">${idx} / ${total}</small>` : ""}
+        <div class="uc-t">${wordLetters(title, "ltr", 0.035, 0.15)}</div>
+        <div class="uc-ic"><i class="uc-glow" aria-hidden="true"></i>${unlockIcon(ev)}<i class="uc-shine" aria-hidden="true"></i></div>
+        ${ev.kind === "passive" ? "" : `<b class="uc-name">${esc(ev.name)}</b>`}
+        ${ev.hint ? `<small class="uc-hint">✓ ${esc(ev.hint)}</small>` : ""}
+        <small class="uc-narr">${esc(narr)}</small>
         <button class="btn gold small" data-nav data-nav-default data-act="ok">${queue.length ? "NEXT ▶" : "AMAZING!"}</button>
       </div>`;
     host.ui.appendChild(el);
@@ -159,6 +250,11 @@ export function bootNotices(hub: Hub): void {
     next();
   });
   const run = () => {
+    // (a run started from the hub before the notices finished: the rest waits for the next hub visit)
+    if (app.screen !== "hub") {
+      noticesShown = false;
+      return;
+    }
     const s = steps.shift();
     if (s) s(run);
   };

@@ -36,8 +36,8 @@ describe("applyRunToProfile", () => {
     // mastery: the evolution feeds its base weapon; ultimates are not weapons
     expect(r.mastery.map((m) => m.weapon)).toEqual(["star_shot"]);
     expect(p.mastery.star_shot).toBe(Math.floor(20000 * TUNING.mastery.xpPerDamage));
-    // codex: hero, stage, enemies, weapon, passive (with a gems line)
-    expect(r.codex.map((c) => c.id).sort()).toEqual(["boo", "dream_meadow", "hoshi", "puff", "star_shot", "wish_charm"]);
+    // codex: hero, stage, enemies, weapon, its evolution, passive (with a gems line)
+    expect(r.codex.map((c) => c.id).sort()).toEqual(["boo", "dream_meadow", "galaxy_barrage", "hoshi", "puff", "star_shot", "wish_charm"]);
     expect(r.gems.lines.at(-1)!.id).toBe("codex");
     expect(r.achievements.map((a) => a.def.id)).toContain("pilot_episode");
     expect(r.affordable.boardNodes).toBeGreaterThan(0);

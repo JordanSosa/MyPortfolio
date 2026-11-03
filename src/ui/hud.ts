@@ -19,6 +19,7 @@ import type { Enemy } from "../game/types";
 import type { World } from "../game/world";
 import type { FeedbackHooks } from "../view/feedback";
 import { Bump, fmtNum, fmtTime, h, img, sprite } from "./dom";
+import { HudArsenal2 } from "./hud-arsenal2";
 
 /** Pre-built `scaleX(i / 400)` strings (bars are quantised to 1/400). */
 const SCALE: string[] = Array.from({ length: 401 }, (_, i) => `scaleX(${i / 400})`);
@@ -139,6 +140,8 @@ export class Hud implements FeedbackHooks {
   private bSweep: Bump;
   // reused build slots
   private wSlots: Slot[] = [];
+  /** Lightstick beat pulse + Thousand Crane Wish counter on the weapon slots (hud-arsenal2.ts). */
+  private readonly a2 = new HudArsenal2();
   private pSlots: Slot[] = [];
   // diff cache
   private c = { lvl: -1, sec: -1, kills: -1, coins: -1, bv: -1, combo: -1, comboShown: -1, rank: -2, xpk: -1, full: false, barQ: -1, hot: false, bossQ: -1, ghostQ: -1, warn: false, dirWarn: false, danger: false, sss: false };
@@ -311,6 +314,7 @@ export class Hud implements FeedbackHooks {
         return [p.def.id, p.def.icon, String(p.level), "slot ps"];
       });
     }
+    this.a2.update(w, this.wSlots, realDt);
     // combo
     const cb = w.combo;
     if (cb >= 3) {

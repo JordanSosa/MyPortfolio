@@ -7,12 +7,22 @@
  *
  * Input:
  *  - touch: one-finger drag (with inertia), two-finger pinch (zoom around the
- *    fingers' midpoint, pan with it);
- *  - mouse: drag, wheel = zoom around the cursor (horizontal wheel pans);
- *  - keyboard: + / - zoom, 0 = reset (arrows move the menu focus: the page
- *    calls `ensureVisible` on navfocus so the focused node is always on screen);
+ *    fingers' midpoint, pan with it), double-tap on empty space zooms in
+ *    (zooms back out when already close);
+ *  - mouse: drag, wheel = zoom around the cursor (horizontal wheel pans),
+ *    double-click on empty space = the double-tap;
+ *  - keyboard: + / - zoom (arrows move the menu focus: the page calls
+ *    `ensureVisible` on navfocus so the focused node is always on screen);
  *  - gamepad: right stick pans, LB / RB zoom.
- * A drag never clicks: a click right after a drag is swallowed.
+ * A drag never clicks: a click right after a drag is swallowed. A plain tap on
+ * empty space goes to `onTap` first (the board snaps it to the nearest node).
+ *
+ * Raster quality vs speed: while the zoom moves the layer keeps
+ * `will-change: transform` (the compositor scales the last bitmap: 60 fps,
+ * slightly soft); `crispDelay` seconds after the zoom settles the hint is
+ * dropped for that layer (it stays composited through its 3D transform), so
+ * the browser re-rasters it once, sharp, at the new scale. Pans never
+ * re-raster.
  */
 import { reducedMotion } from "./ticker";
 
@@ -37,10 +47,21 @@ export interface ViewportOpts {
   /** Zoom LOD thresholds: the content gets `.z-far` below `far`, `.z-near` above `near`. */
   far?: number;
   near?: number;
+  /**
+   * A tap (no drag) on the host outside any button, in host pixels. Return true
+   * when the page handled it (then it never counts toward a double-tap).
+   */
+  onTap?: (sx: number, sy: number) => boolean;
+  /** Double-tap / double-click zoom on empty space (default on). */
+  doubleTap?: boolean;
+  /** Seconds after the zoom settles before the layer is re-rastered sharp (default 0.22; 0 = never). */
+  crispDelay?: number;
 }
 
 const SLOP = 7;
 const FRICTION = 5.5;
+const DOUBLE_MS = 320;
+const DOUBLE_PX = 34;
 
 interface Ptr {
   id: number;
@@ -54,6 +75,8 @@ export class PanZoom {
   cy: number;
   readonly minZ: number;
   readonly maxZ: number;
+  /** Bumps whenever the view moved (centre or zoom): cheap change detection for minimaps / parallax. */
+  version = 0;
   private w = 1;
   private h = 1;
   private dirty = true;
@@ -69,6 +92,11 @@ export class PanZoom {
   private tween: { t: number; dur: number; fz: number; fx: number; fy: number; tz: number; tx: number; ty: number } | null = null;
   private lod = "";
   private gpPrev = 0;
+  private lastTap = { t: -1e9, x: 0, y: 0 };
+  /** Zoom the layer was last rastered sharp at; seconds the current zoom has held. */
+  private crispZ = NaN;
+  private zoomHeld = 0;
+  private hinted = true;
   private readonly ro: ResizeObserver | null = null;
   private readonly offs: (() => void)[] = [];
 
@@ -102,8 +130,8 @@ export class PanZoom {
     on("pointerdown", (e) => this.down(e));
     on("pointermove", (e) => this.move(e));
     on("pointerup", (e) => this.up(e));
-    on("pointercancel", (e) => this.up(e));
-    on("lostpointercapture", (e) => this.up(e));
+    on("pointercancel", (e) => this.up(e, true));
+    on("lostpointercapture", (e) => this.up(e, true));
     on("wheel", (e) => this.wheel(e), { passive: false });
     // a click that ends a drag must not press the node under the finger
     on(
@@ -116,6 +144,14 @@ export class PanZoom {
       },
       { capture: true },
     );
+    // keyboard / gamepad focus calls scrollIntoView on far nodes: an overflow-hidden host still scrolls
+    // programmatically, which would shift the whole map under the transform - the camera pans instead
+    on("scroll", () => {
+      if (this.host.scrollLeft || this.host.scrollTop) {
+        this.host.scrollLeft = 0;
+        this.host.scrollTop = 0;
+      }
+    });
     const key = (e: KeyboardEvent) => this.key(e);
     window.addEventListener("keydown", key);
     this.offs.push(() => window.removeEventListener("keydown", key));
@@ -134,6 +170,10 @@ export class PanZoom {
   }
   get viewH(): number {
     return this.h;
+  }
+  /** A finger / mouse is down on the map, or the camera glides. */
+  get busy(): boolean {
+    return this.ptrs.length > 0 || !!this.tween || this.vx !== 0 || this.vy !== 0;
   }
 
   // ---------------------------------------------------------------- pointer
@@ -216,9 +256,10 @@ export class PanZoom {
     this.dirty = true;
   }
 
-  private up(e: PointerEvent): void {
+  private up(e: PointerEvent, cancelled = false): void {
     const i = this.ptrs.findIndex((q) => q.id === e.pointerId);
     if (i < 0) return;
+    const p = this.ptrs[i];
     this.ptrs.splice(i, 1);
     if (this.pinch) {
       this.pinch = null;
@@ -233,8 +274,34 @@ export class PanZoom {
     if (this.ptrs.length === 0) {
       // a pause before lifting the finger means no fling
       if (performance.now() - this.lastT > 90 || reducedMotion()) this.vx = this.vy = 0;
+      const wasDrag = this.dragging;
       this.dragging = false;
+      if (!wasDrag && !cancelled && e.type === "pointerup") this.tap(p.x, p.y, e);
     }
+  }
+
+  /** A tap that was not a drag: the page's onTap, else a double-tap zoom. */
+  private tap(x: number, y: number, e: PointerEvent): void {
+    if ((e.target as Element | null)?.closest?.("button, a, input")) {
+      this.lastTap.t = -1e9;
+      return;
+    }
+    if (this.o.onTap?.(x, y)) {
+      this.lastTap.t = -1e9;
+      return;
+    }
+    if (this.o.doubleTap === false) return;
+    const now = performance.now();
+    if (now - this.lastTap.t < DOUBLE_MS && Math.hypot(x - this.lastTap.x, y - this.lastTap.y) < DOUBLE_PX) {
+      this.lastTap.t = -1e9;
+      // close to the max: back out to an overview; else 1.8x in around the tap
+      const target = this.z > this.maxZ * 0.8 ? Math.max(this.minZ, this.z / 2.6) : this.z * 1.8;
+      const [wx, wy] = this.toWorld(x, y);
+      const tz = this.clampZ(target);
+      this.go(wx - (x - this.w / 2) / tz, wy - (y - this.h / 2) / tz, tz, 0.32);
+      return;
+    }
+    this.lastTap = { t: now, x, y };
   }
 
   private wheel(e: WheelEvent): void {
@@ -266,6 +333,11 @@ export class PanZoom {
   /** Content point (x, y) at screen position (sx, sy) inside the host. */
   toWorld(sx: number, sy: number): [number, number] {
     return [this.cx + (sx - this.w / 2) / this.z, this.cy + (sy - this.h / 2) / this.z];
+  }
+
+  /** Host position of the content point (x, y). */
+  toScreen(x: number, y: number): [number, number] {
+    return [(x - this.cx) * this.z + this.w / 2, (y - this.cy) * this.z + this.h / 2];
   }
 
   /** Zoom to `z` keeping the content point under host position (sx, sy) fixed. */
@@ -301,19 +373,24 @@ export class PanZoom {
     this.tween = { t: 0, dur, fz: this.z, fx: this.cx, fy: this.cy, tz, tx, ty };
   }
 
-  /** Pan (animated) so the content point is inside the view with `margin` px to spare. */
-  ensureVisible(x: number, y: number, margin = 64): void {
-    const sx = (x - this.cx) * this.z + this.w / 2;
-    const sy = (y - this.cy) * this.z + this.h / 2;
-    const m = Math.min(margin, this.w / 3, this.h / 3);
-    if (sx >= m && sx <= this.w - m && sy >= m && sy <= this.h - m) return;
-    let ncx = this.cx;
-    let ncy = this.cy;
-    if (sx < m) ncx = x - (m - this.w / 2) / this.z;
-    else if (sx > this.w - m) ncx = x - (this.w - m - this.w / 2) / this.z;
-    if (sy < m) ncy = y - (m - this.h / 2) / this.z;
-    else if (sy > this.h - m) ncy = y - (this.h - m - this.h / 2) / this.z;
-    this.go(ncx, ncy, this.z, 0.28);
+  /**
+   * Pan (animated) so the content point is inside the view with `margin` px to
+   * spare. `area` narrows the usable part of the host (a bottom sheet covering
+   * the lower half, a side panel on the right).
+   */
+  ensureVisible(x: number, y: number, margin = 64, area?: { x0: number; y0: number; x1: number; y1: number }): void {
+    const A = area ?? { x0: 0, y0: 0, x1: this.w, y1: this.h };
+    const [sx, sy] = this.toScreen(x, y);
+    const mx = Math.min(margin, (A.x1 - A.x0) / 3);
+    const my = Math.min(margin, (A.y1 - A.y0) / 3);
+    if (sx >= A.x0 + mx && sx <= A.x1 - mx && sy >= A.y0 + my && sy <= A.y1 - my) return;
+    let dx = 0;
+    let dy = 0;
+    if (sx < A.x0 + mx) dx = sx - (A.x0 + mx);
+    else if (sx > A.x1 - mx) dx = sx - (A.x1 - mx);
+    if (sy < A.y0 + my) dy = sy - (A.y0 + my);
+    else if (sy > A.y1 - my) dy = sy - (A.y1 - my);
+    this.go(this.cx + dx / this.z, this.cy + dy / this.z, this.z, 0.28);
   }
 
   /** Zoom that fits a content rectangle in the view with `pad` px around it. */
@@ -321,6 +398,13 @@ export class PanZoom {
     const zw = (this.w - pad * 2) / Math.max(1, r.x1 - r.x0);
     const zh = (this.h - pad * 2) / Math.max(1, r.y1 - r.y0);
     return this.clampZ(Math.min(zw, zh));
+  }
+
+  /** Content rectangle currently on screen. */
+  visible(): Bounds {
+    const [x0, y0] = this.toWorld(0, 0);
+    const [x1, y1] = this.toWorld(this.w, this.h);
+    return { x0, y0, x1, y1 };
   }
 
   private clampZ(z: number): number {
@@ -335,8 +419,11 @@ export class PanZoom {
     else if (this.cy > b.y1) this.cy = b.y1;
   }
 
-  /** Per frame (the owning page's update): inertia, tweens, gamepad, then one transform write. */
-  update(dt: number): void {
+  /**
+   * Per frame (the owning page's update): inertia, tweens, gamepad, then one
+   * transform write. Returns true when the view moved this frame.
+   */
+  update(dt: number): boolean {
     if (this.tween) {
       const t = this.tween;
       t.t += dt;
@@ -359,7 +446,30 @@ export class PanZoom {
       this.dirty = true;
     }
     if (!this.o.active || this.o.active()) this.pollPad(dt);
+    const moved = this.dirty;
     if (this.dirty) this.apply();
+    this.crisp(dt);
+    return moved;
+  }
+
+  /** Drop the will-change hint once the zoom has held still (one sharp re-raster), restore it when it moves. */
+  private crisp(dt: number): void {
+    const delay = this.o.crispDelay ?? 0.22;
+    if (delay <= 0) return;
+    if (this.z !== this.crispZ) {
+      if (!this.hinted) {
+        this.content.style.willChange = "transform";
+        this.hinted = true;
+      }
+      if (this.pinch || this.tween) this.zoomHeld = 0;
+      else this.zoomHeld += dt;
+      if (this.zoomHeld >= delay) {
+        this.crispZ = this.z;
+        this.zoomHeld = 0;
+        this.content.style.willChange = "auto";
+        this.hinted = false;
+      }
+    }
   }
 
   private pollPad(dt: number): void {
@@ -392,6 +502,7 @@ export class PanZoom {
 
   private apply(): void {
     this.dirty = false;
+    this.version++;
     const b = this.o.bounds;
     const tx = this.w / 2 - (this.cx - b.x0) * this.z;
     const ty = this.h / 2 - (this.cy - b.y0) * this.z;

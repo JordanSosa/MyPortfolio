@@ -24,7 +24,7 @@ import { badge, bindActs, btn, card, pbar, pop, sectionTitle, shake, tag, type C
 import { openSheet, type SheetHandle } from "../kit/overlay";
 import { save } from "../save";
 import { pageLayer, type Hub, type HubPage } from "./hub";
-import { clock, relicTile, stageThumb, starPips, toggle } from "./parts";
+import { clock, ratingMul, relicTile, stageThumb, starPips, toggle } from "./parts";
 
 const MAX_SLOTS = TUNING.relics.maxSlots;
 const BADGES = TUNING.payout.heatBadges;
@@ -132,7 +132,7 @@ export function loadoutPage(hub: Hub): HubPage {
       <div class="lo-scroll kscroll"><div class="lo-cols"><div class="lo-col a">
         <button class="lo-stage" data-nav data-act="stage" aria-label="Change episode">
           <span class="lo-thumb">${stageThumb(stage)}</span>
-          <span class="lo-st"><small>${esc((stage?.name ?? "").toUpperCase())}${stage ? ` · RATINGS ×${stage.rewardMul.toFixed(1)}` : ""}</small><b>${esc(stage?.subtitle ?? "")}</b></span>
+          <span class="lo-st"><small>${esc((stage?.name ?? "").toUpperCase())}${stage ? ` · RATINGS ×${ratingMul(stage.rewardMul)}` : ""}</small><b>${esc(stage?.subtitle ?? "")}</b></span>
           <span class="lo-chg">CHANGE</span>
         </button>
 
@@ -325,6 +325,9 @@ export function loadoutPage(hub: Hub): HubPage {
           app.sfx("equip");
           change({ relics: relics.filter((x, k) => relics.indexOf(x) === k) });
           s.close();
+          // docs/content/relics.md, relic card copy: "<name> equipped! (+1 to your aesthetic)"
+          const def = RELICS.get(id);
+          if (def) hub.toast(`${def.name} equipped!`, { kind: "good", sub: "(+1 to your aesthetic)" });
           pop(el.querySelector(`.rslot[data-i="${Math.min(i, save.profile.loadout.relics.length - 1)}"]`));
         },
         unequip: () => {

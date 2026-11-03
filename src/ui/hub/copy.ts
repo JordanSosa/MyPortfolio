@@ -55,7 +55,12 @@ export function nextTimeLine(clear: boolean, f: Fill): string {
 /** TO BE CONTINUED subtitle: speedrun < 10 s, the killing boss's line, else a generic one. */
 export function deathLine(time: number, bossName: string | undefined, f: Fill): string {
   if (time < 10) return SPEEDRUN_DEATH;
-  if (bossName && BOSS_DEATH_LINES[bossName]) return BOSS_DEATH_LINES[bossName];
+  if (bossName) {
+    // (registry names and the bible's keys differ in case / length: "CANCEL-SAMA", "Summer Festival Firework Dragon")
+    const low = bossName.toLowerCase();
+    const key = BOSS_DEATH_LINES[bossName] ? bossName : Object.keys(BOSS_DEATH_LINES).find((k) => k.toLowerCase() === low || low.includes(k.toLowerCase()));
+    if (key) return BOSS_DEATH_LINES[key];
+  }
   return fill(pick("death", DEATH_LINES), f);
 }
 

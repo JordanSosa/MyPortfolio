@@ -245,6 +245,8 @@ export function applyRunToProfile(p: Profile, summary: RunInput, ctx: MetaConten
   for (const w of used) {
     const base = baseWeaponId(w, ctx);
     if (ctx.weapons.has(base) && !ctx.weapons.get(base)!.evolved) find("weapons", base);
+    // an evolution is its own discovery (the wiki's recipe card; "Evolve X" Plot Points)
+    if (base !== w && ctx.weapons.get(w)?.evolved) find("weapons", w);
   }
   for (const id of s.passivesUsed ?? []) if (ctx.passives.has(id)) find("passives", id);
   const codexGems = codex.reduce((a, c) => a + c.gems, 0);

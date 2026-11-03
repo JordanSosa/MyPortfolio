@@ -273,31 +273,41 @@ export class Feedback {
     const juice = fx.juice;
     const calm = !!this.opts.calm;
     const sub = this.offs;
+    // ONE bind-options object for every content view group (each takes the fields it needs: sfx, haptic,
+    // sound, calm, hooks), built once per run
+    const o = {
+      sfx: (id: SfxId, vol?: number, pitch?: number, x?: number) => this.sfx(id, vol, pitch, x),
+      haptic: (ms: number) => this.haptic(ms),
+      sound: this.opts.sound,
+      calm,
+      hooks: this.opts.hooks,
+    };
     // arsenal weapon visuals (lightning, bursts, candy confetti, bubble pops): src/view/weapon-fx.ts
-    sub.push(...this.view.weaponFx.bind(w, (id, vol, pitch, x) => this.sfx(id, vol, pitch, x), calm));
+    sub.push(...this.view.weaponFx.bind(w, o.sfx, calm));
+    // Season 2 heroes Kuro / Pudding / Aoi / Akane (heroFx cues, BAKA! pops): src/view/heroes-a-fx.ts
+    sub.push(...this.view.heroesA.bind(w, o));
+    // Season 2 heroes Senpai / Magical Girl #47 / Isekai-kun / Truck-kun (heroFx cues, HONK pops): src/view/heroes-b-fx.ts
+    sub.push(...this.view.heroesB.bind(w, o));
+    // Season 2 general weapons (Bubble Tea / Paper Cranes / Lightsticks / Kotatsu "a2_*" cues): src/view/arsenal2-fx.ts
+    sub.push(...this.view.arsenal2.bind(w, o));
     // bestiary cues, boss phases / enrage, death throes and the VICTORY dawn sequence: src/view/bestiary-fx.ts
-    sub.push(
-      ...this.view.bestiary.bind(w, {
-        sfx: (id, vol, pitch, x) => this.sfx(id, vol, pitch, x),
-        haptic: (ms) => this.haptic(ms),
-        sound: this.opts.sound,
-        calm,
-        hooks: this.opts.hooks,
-      }),
-    );
+    sub.push(...this.view.bestiary.bind(w, o));
     // Season 2: relic / talent / twist procs, shields, Plot Armor, encores, the Filler Arc: src/view/relic-fx.ts
     sub.push(
       ...this.view.relics.bind(w, {
-        sfx: (id, vol, pitch, x) => this.sfx(id, vol, pitch, x),
-        haptic: (ms) => this.haptic(ms),
-        calm,
-        hooks: this.opts.hooks,
+        ...o,
         battleMusicIn: (delay) => {
           this.musicBackAt = w.t + delay;
         },
       }),
       bus.on("stageFx", (e) => this.view.stage.directive(e)),
     );
+    // enemy speech bubbles (scripted `enemySay` lines, free-standing boss lines; ambient chatter runs in the view): src/view/speech.ts
+    sub.push(...this.view.speech.bind(w));
+    // Candy Kingdom / Shoujo Academy content looks (stageCue candy_* / academy_*, boss deaths, props): candy-fx.ts, academy-fx.ts
+    sub.push(...this.view.candy.bind(w, o), ...this.view.academy.bind(w, o));
+    // Beach Episode / The Final Arc looks (enemyFx 400-499, boss death scenes, props, the cancel theme's degrade): s45-fx.ts
+    sub.push(...this.view.s45.bind(w, o));
 
     sub.push(
       bus.on("enemyHit", (e) => {
@@ -340,7 +350,10 @@ export class Feedback {
             this.numUid[slot] = uid;
             this.numAt[slot] = this.now;
             this.nums++;
-            fx.dmg.spawn(e.x + (Math.random() - 0.5) * 4, e.y - 8, e.dmg, e.crit ? "crit" : "normal");
+            // (STATUS SCREEN!! prints its fake "9999999" instead of the real number)
+            const fake = this.view.heroesB.numberText(e);
+            if (fake) fx.dmg.text(e.x + (Math.random() - 0.5) * 4, e.y - 8, fake, C.yellow, e.crit ? 1.4 : 1.1);
+            else fx.dmg.spawn(e.x + (Math.random() - 0.5) * 4, e.y - 8, e.dmg, e.crit ? "crit" : "normal");
           }
         }
         if (this.hitSfx < 2) {
@@ -360,6 +373,13 @@ export class Feedback {
         const cb = w.combo;
         if (cb >= 25 && cb % 25 === 0 && rankFor(cb) === rankFor(cb - 1)) this.sfx("comboUp", 0.8, Math.min(12, cb / 25));
         if (e.boss) return;
+        // (a hero effect can own the death look: ETERNAL ABYSS feathers)
+        if (this.view.heroesA.killFx(e)) {
+          this.sfx("enemyDie", 0.45, ((Math.random() * 3) | 0) - 3, e.x);
+          return;
+        }
+        // (isekai'd by Truck-kun: a light pillar instead of confetti)
+        if (this.view.heroesB.death(e)) return;
         if (e.elite) {
           fxEliteDeath(fx, e.x, e.y, en.def.colors);
           if (!calm) juice.flash(C.white, 0.15, 0.12);

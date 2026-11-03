@@ -108,6 +108,8 @@ export interface SimHooks {
   endless: { t: number };
   /** Every simulation step, after everything moved (cheap listeners only). */
   step: { dt: number };
+  /** An area blast went off (World.explode, ground point + radius): Sandcastle Golem piles crumble in one. */
+  blast: { x: number; y: number; r: number };
 }
 
 /**

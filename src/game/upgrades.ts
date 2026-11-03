@@ -75,13 +75,13 @@ function weaponUpText(def: WeaponDef, from: number, to: number): string {
   return parts.join(" · ") || def.desc;
 }
 
-/** Evolution cards currently eligible. */
-export function evolutionCards(w: World): UpgradeCard[] {
+/** Evolution cards currently eligible (`early`: levels below max that already qualify - chests with the Golden Gacha Ticket). */
+export function evolutionCards(w: World, early = 0): UpgradeCard[] {
   const out: UpgradeCard[] = [];
   for (const inst of w.weapons) {
     const def = inst.def;
     if (def.evolved || !def.evolution) continue;
-    if (inst.level < def.levels.length) continue;
+    if (inst.level < def.levels.length - early) continue;
     if (w.banished.has(def.evolution.into)) continue;
     if (w.passiveLevel(def.evolution.with) <= 0) continue;
     const evo = WEAPONS.get(def.evolution.into);
@@ -268,14 +268,15 @@ export function applyCard(w: World, card: UpgradeCard): void {
  */
 export function rollChest(w: World, golden: boolean): ChestResult {
   const cl = Math.max(0, Math.min(1, w.run.flags.chestLuck ?? 0));
-  const jackpot = w.rng.next() < 0.05 * w.stats.luck * (1 + cl);
+  // (w.jackpotBonus: relics - Waving Lucky Cat, Pity Counter Keychain)
+  const jackpot = w.rng.next() < 0.05 * w.stats.luck * (1 + cl) + w.jackpotBonus;
   // chest luck: a plain chest may roll like a golden one (no extra RNG draw without it)
   const n = jackpot ? 5 : golden || (cl > 0 && w.rng.next() < cl) ? 3 : 1;
   const rewards: UpgradeCard[] = [];
   const bonus = Math.round((golden ? 60 : 15 + w.rng.int(0, 15)) * (jackpot ? 3 : 1) * w.stats.greed);
   const before = w.coins;
   for (let i = 0; i < n; i++) {
-    let card: UpgradeCard | null = evolutionCards(w)[0] ?? null;
+    let card: UpgradeCard | null = evolutionCards(w, w.chestEvoEarly)[0] ?? null;
     if (!card) {
       const owned = candidates(w, true);
       card = pickWeighted(w, owned)?.card ?? null;

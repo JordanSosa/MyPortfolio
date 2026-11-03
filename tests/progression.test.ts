@@ -3,6 +3,7 @@ import { RANKS, rankFor, xpToNext, CFG, bossHpScale, enemyHpScale, gemXpScale } 
 import { World } from "../src/game/world";
 import { COINS_CARD, HEAL_CARD, makeOffer } from "../src/game/upgrades";
 import { PASSIVES } from "../src/game/passives";
+import { defaultRunConfig } from "../src/game/run-config";
 import { WEAPONS, baseWeapons } from "../src/game/registry";
 import { HERO_IDS } from "../src/game/heroes";
 import { META, metaCost } from "../src/game/meta";
@@ -318,7 +319,8 @@ describe("pacing mechanics (balance pass)", () => {
 
 /** Late game: 6 evolutions + 6 maxed passives (level-ups / chests fall back to Heal / Star Pouch). */
 function maxedWorld(): World {
-  const w = new World({ hero: "rin", seed: 9, god: true, director: false });
+  // (the shipped slice's 8 passives: Season 2's unlockable passives would add unowned ones to every offer)
+  const w = new World({ hero: "rin", seed: 9, god: true, director: false, run: defaultRunConfig({ passivePool: PASSIVES.slice(0, 8).map((p) => p.id) }) });
   w.weapons.length = 0;
   for (const b of baseWeapons().slice(0, CFG.weaponSlots)) w.evolveWeapon(w.addWeapon(b.id, 5)!);
   for (const p of PASSIVES.slice(0, CFG.passiveSlots)) w.addPassive(p.id, p.levels.length);

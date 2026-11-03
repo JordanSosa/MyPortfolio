@@ -66,6 +66,7 @@ automatically on the next `beginFrame`. `r.onResize = (r) => …` fires after on
 | `r.cssW / cssH / dpr / sceneW / sceneH` | viewport info |
 | `r.H.px / glow / glowS / shadow / ring / ringThick / circle / streak` | handles of the utility sprites |
 | `r.setQuality({ dprCap, glowScale, bloom })` | quality tier (see `QUALITY`, `AutoQuality`, `guessTier`) |
+| `r.sceneScale` | scene buffer resolution scale, 0.25..1 (default 1): below 1 the world renders into a smaller scene target (genuinely fewer, bigger pixels) while the protected layers render crisp (section 9) |
 | `r.stats` | `{ instances, glow, drawCalls, sceneW, sceneH, scale, dpr }` from the last frame |
 | `r.onRestore` | called after a lost WebGL context has been rebuilt (automatic). `r.debugLoseContext()` simulates a loss |
 
@@ -82,6 +83,7 @@ r.sprite({ id: "chest", frame: 1, x, y, layer: Layer.Entity, scale: 1.5, flipX: 
 ```
 
 - **Pivot:** comes from the sprite def (`feet` actors: `(w/2, h-1)`, everything else is centred). Override it with `r.batch.drawP(..., px, py)` or `sprite({ pivotX, pivotY })`.
+- **Sub-rectangles:** `r.batch.drawSub(layer, handle, rx, ry, rw, rh, x, y, sx, sy, color, alpha, flash, flags, px, py)` draws only part of a frame (pivot relative to the sub-rect). Used to re-draw lettering un-mirrored over a flipped sprite (boss Truck-kun's cargo box, `src/view/finale-fx.ts`).
 - **Flash** lerps the sprite toward its **tint colour**. With the default white tint that is the white hit flash; with `tint = C.cyan` and `flash = 1` you get a solid cyan silhouette.
 - **Flags** (`Flag`): `Add` (additive), `Glow` (also drawn into the bloom buffer), `GlowOnly` (only in bloom: halos), `NoSnap` (skip pixel-grid snapping).
 - **Snapping:** unrotated quads have their min corner snapped to the art-pixel grid, so sprites never shimmer. Rotated sprites are not snapped.
@@ -471,3 +473,32 @@ defaults, so new fields get defaults and fields whose type changed are dropped.
 ## 8. Changes made by the integration pass
 
 - `PostFx.dim` (0..1, `u_dim` in the composite): multiplies the final image after bloom. The world view sets it every frame (`0.55` ramping in during the ult cut-in, else `0`); `post.reset()` clears it.
+
+## 9. Reduced-resolution scene (`r.sceneScale`, Season 2: Cancel-sama's BUDGET CUTS)
+
+The stage look's `renderScale` directive (`src/view/stage-view.ts`) sets
+`r.sceneScale` instead of lowering the canvas DPR, so the *scene* resolution
+really drops while the canvas, the DOM HUD and the composite stay at full
+resolution:
+
+- `endFrame` sizes the scene target at `ceil(sceneW x s) x ceil(sceneH x s)`
+  texels and draws layers `Ground..FxAdd` + `Overlay` into it. The batch maps the
+  same world rect onto the smaller viewport, and `SpriteBatch.begin(..., snapX,
+  snapY)` (`u_snap`, texels per art px) snaps sprites to the coarse texel grid,
+  so at 0.5 every art pixel block is 2x2 and nothing shimmers. The glow / bloom
+  chain follows the scene size (blurrier glow, as intended).
+- The protected layers `Bullets..Text` (enemy bullets, in-world text, and the
+  hero, which `WorldView` redraws on `Layer.Bullets` while `sceneScale < 1`) are
+  drawn at art resolution into a second, transparent target
+  (`PostPipeline.top`, created on first use). The composite samples the scene with
+  `u_sceneK` (scene texels per art px) and puts the top target over the graded
+  scene (premultiplied, after bloom), so protected content is never downscaled,
+  desaturated or tinted by the scene grade.
+- At `sceneScale = 1` none of this runs: one scene pass, layers 0..9, exactly
+  the previous output (`u_snap = 1`, `u_sceneK = 1`, `u_topOn = 0`).
+- `StageLook` also takes an `animFps` cap (WorldView quantises the animation
+  clock of enemies, the boss and deco; the hero, bullets and gems keep the real
+  clock), a `particles` density scale (`fx.ps.density`) and `still` frames.
+  With "Reduce flashing" on, the show-degrading directives are ignored and the
+  boss's view draws a corner badge naming the phase instead.
+

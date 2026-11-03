@@ -14,6 +14,17 @@
  *
  * Grade / ambient keyframes are piecewise linear over normalized run time
  * t / StageDef.gradeSpan (default: the final boss's arrival).
+ *
+ * Directives: "grade" blends toward a GRADES preset, a DIRECTIVE_GRADES look
+ * ("ratings": Cancel-sama's RATINGS DROP) or a stage grade key; "renderScale"
+ * sets Renderer.sceneScale (the scene FBO genuinely renders at that fraction
+ * of the art resolution; bullets + text stay crisp - ENGINE.md); "animFps"
+ * caps the sprite animation clock (WorldView: enemies / boss / deco, never
+ * the hero, bullets or gems); "particles" scales the particle density;
+ * "speedLines" / "still" as documented in events.ts. With "Reduce flashing"
+ * on, the show-degrading ones (renderScale, animFps, particles, speedLines,
+ * still, the "ratings" grade) are ignored - the boss's view draws a corner
+ * badge instead (finale-fx.ts).
  */
 import type { MusicTrack } from "../audio";
 import { clamp, TAU } from "../core/math";
@@ -28,6 +39,31 @@ import type { Enemy } from "../game/types";
 import type { World } from "../game/world";
 
 const MAX_PARTS = 120;
+
+/** Looks a "grade" directive can ask for besides the GRADES presets. */
+export const DIRECTIVE_GRADES: Record<string, Grade> = {
+  // CANCEL-SAMA, RATINGS DROP: viewers are leaving (saturation 1.0 -> 0.25 as it blends in)
+  ratings: { tint: [0.97, 0.97, 0.99], lift: [0.03, 0.03, 0.04], saturation: 0.25, contrast: 0.93, brightness: 0.94, hue: 0 },
+};
+
+/** Directive kinds that degrade the show (skipped with "Reduce flashing"; restoring ones always pass). */
+function degrades(e: StageFxEvent): boolean {
+  switch (e.kind) {
+    case "renderScale":
+      return e.value < 0.999;
+    case "particles":
+      return e.value > 0 && e.value < 1;
+    case "animFps":
+    case "speedLines":
+      return e.value > 0;
+    case "still":
+      return true;
+    case "grade":
+      return e.id === "ratings" && e.value > 0;
+    default:
+      return false;
+  }
+}
 
 /** Grade preset by name, or inline values (copied into a render Grade). */
 function toGrade(g: string | StageGrade): Grade {
@@ -96,10 +132,8 @@ export class StageLook {
   private scaleTo = 1;
   private scaleT = 0;
   private scaleDur = 0;
-  /** Current render scale (1 = full resolution) and the DPR cap it was applied over. */
+  /** Current render scale (1 = full resolution): Renderer.sceneScale. */
   private scale = 1;
-  private baseDpr = NaN;
-  private appliedDpr = NaN;
   /** Sprite animation fps cap (0 = none) and still-frame seconds left: read by WorldView. */
   animFps = 0;
   stillT = 0;
@@ -137,6 +171,7 @@ export class StageLook {
     this.animFps = 0;
     this.stillT = 0;
     this.lines = 0;
+    if (this.fx.ps) this.fx.ps.density = 1;
     this.scaleFrom = this.scaleTo = this.scale;
     this.scaleT = this.scaleDur = 0;
     this.setScale(1);
@@ -155,8 +190,14 @@ export class StageLook {
     return this.music(fin ? "final" : "boss");
   }
 
+  /** "Reduce flashing" (juice settings): show-degrading directives become the boss view's corner badge. */
+  private reduced(): boolean {
+    return !!this.fx.juice?.settings?.reduceFlashing;
+  }
+
   /** A sim `stageFx` directive (events.ts StageFxEvent). */
   directive(e: StageFxEvent): void {
+    if (degrades(e) && this.reduced()) return;
     switch (e.kind) {
       case "grade": {
         const g = this.findGrade(e.id);
@@ -178,6 +219,9 @@ export class StageLook {
       case "animFps":
         this.animFps = Math.max(0, e.value);
         break;
+      case "particles":
+        if (this.fx.ps) this.fx.ps.density = clamp(e.value || 1, 0.1, 1);
+        break;
       case "speedLines":
         this.lines = Math.max(0, e.value);
         this.linesT = 0;
@@ -198,7 +242,7 @@ export class StageLook {
       const i = Number(id);
       if (id !== "" && Number.isInteger(i) && i >= 0 && i < this.grades.length) return this.grades[i];
     }
-    return GRADES[id as keyof typeof GRADES] ?? GRADES.neutral;
+    return DIRECTIVE_GRADES[id] ?? GRADES[id as keyof typeof GRADES] ?? GRADES.neutral;
   }
 
   /** Per frame (Feedback.frame): the stage grade at the current run time (+ any override) and the ambient targets. */
@@ -261,25 +305,18 @@ export class StageLook {
   }
 
   /**
-   * Render scale directive: the composite renders at `s` x the display
-   * resolution (the DPR cap is scaled; the canvas is upscaled pixelated by CSS),
-   * re-applied if the quality controller changed the cap meanwhile.
+   * Render scale directive: the scene FBO renders at `s` x the art resolution
+   * (Renderer.sceneScale: genuinely fewer, bigger pixels; the protected layers -
+   * bullets + text - keep full resolution). The canvas / DPR are untouched.
    */
   private setScale(s: number): void {
-    const q = this.r.quality;
-    if (s >= 0.999) {
-      if (this.scale < 0.999 && Number.isFinite(this.baseDpr) && q.dprCap === this.appliedDpr) this.r.setQuality({ dprCap: this.baseDpr });
-      this.scale = 1;
-      this.baseDpr = this.appliedDpr = NaN;
-      return;
-    }
-    // (the quality controller may have stepped the tier meanwhile: its cap becomes the new base)
-    if (!Number.isFinite(this.baseDpr) || q.dprCap !== this.appliedDpr) this.baseDpr = q.dprCap;
-    const dev = typeof devicePixelRatio === "number" ? devicePixelRatio : 1;
-    const want = Math.max(0.25, Math.min(this.baseDpr, dev) * s);
-    this.scale = s;
-    if (Math.abs(want - q.dprCap) > 0.01) this.r.setQuality({ dprCap: want });
-    this.appliedDpr = this.r.quality.dprCap;
+    this.scale = s >= 0.999 ? 1 : clamp(s, 0.25, 1);
+    this.r.sceneScale = this.scale;
+  }
+
+  /** Current scene render scale (1 = full). */
+  get renderScale(): number {
+    return this.scale;
   }
 
   // ================================================================ extra ambient layers

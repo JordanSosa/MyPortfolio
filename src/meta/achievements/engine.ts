@@ -32,8 +32,14 @@ export function lifetimeWithRun(L: Lifetime, run: RunStats, ctx: MetaContent = g
     out.damageByWeapon[base] = (out.damageByWeapon[base] ?? 0) + run.damageByWeapon[w];
     dmg += run.damageByWeapon[w];
   }
+  for (const w in run.killsByWeapon) {
+    const base = baseWeaponId(w, ctx);
+    out.killsByWeapon[base] = (out.killsByWeapon[base] ?? 0) + run.killsByWeapon[w];
+  }
   out.kills += runKills(run);
   out.eliteKills += run.eliteKills;
+  out.evolutions += run.evolutions.length;
+  if (run.stageCleared && !out.heroesCleared.includes(run.hero)) out.heroesCleared = [...out.heroesCleared, run.hero];
   out.damage += dmg;
   out.time += run.time;
   out.endlessTime += run.endlessTime;

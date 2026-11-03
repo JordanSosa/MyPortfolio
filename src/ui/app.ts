@@ -41,6 +41,7 @@ import { CFG } from "../game/config";
 import { heroDef } from "../game/heroes";
 import { AutoQuality, guessTier, isQualityTier, QUALITY, Renderer, type QualityTier } from "../render";
 import { showCutin, type CutinHandle } from "./cutin";
+import { cutinLine } from "../game/heroes-b";
 import { prewarmSprites, setAtlas } from "./dom";
 import { MANIFEST } from "../art/manifest";
 import { Hud } from "./hud";
@@ -62,6 +63,8 @@ import { episodeTitle } from "./hub/copy";
 import { clearRunToasts, kitTick, overlaysOpen, toast, trophyIcon, type KitHost, type ToastOpts } from "./kit";
 import { money } from "./kit/art";
 import { showEpisodeCard, type EpisodeCard } from "./stinger";
+import { RunNarrator } from "./narrator";
+import { PlotToasts } from "./plot-toast";
 import { AchievementWatch } from "../meta/achievements/engine";
 import type { RunReport } from "../meta/rewards";
 import { fmtInt } from "./dom";
@@ -139,6 +142,9 @@ export class App implements KitHost {
   private introReadyShown = false;
   private achWatch: AchievementWatch | null = null;
   private achT = 0;
+  /** In-run satire: the narrator caption strip and the Plot Point toasts (real account runs only). */
+  private narr: RunNarrator | null = null;
+  private ptoasts: PlotToasts | null = null;
   /** The ultimate cut-in overlay on screen (removed when the sim leaves its cut-in). */
   private cutin: CutinHandle | null = null;
   private unlocked = false;
@@ -451,8 +457,17 @@ export class App implements KitHost {
     // in-run Plot Point toasts (real players only)
     this.achWatch = this.account && !this.params.autoplay ? new AchievementWatch(save.profile) : null;
     this.achT = 0;
+    this.narr?.dispose();
+    this.ptoasts?.dispose();
+    this.narr = this.achWatch ? new RunNarrator(this, w, { hero: w.hero.name, stage: w.stage.name, n: this.episode.n }) : null;
+    this.ptoasts = this.achWatch ? new PlotToasts(this) : null;
+    // hub toasts still on screen (boot notices) step aside for the run
+    for (const t of this.ui.querySelectorAll(".ktoasts:not(.inrun) .ktoast")) t.classList.add("out");
     if (intro && !this.params.autoplay && this.params.skip <= 0) this.beginIntro(this.account);
-    else this.tut?.start();
+    else {
+      this.tut?.start();
+      this.narr?.runStart(this.episode.n);
+    }
     this.music(this.game.view.stage.music("battle"), 1.5);
     this.sfx("uiConfirm");
   }
@@ -478,7 +493,8 @@ export class App implements KitHost {
       ultReady: () => hud.ultReady(),
       cutin: (heroId: string, name: string) => {
         this.cutin?.end();
-        this.cutin = showCutin(document.body, heroId, heroDef(heroId).portrait, name);
+        const cw = this.game?.world;
+        this.cutin = showCutin(document.body, heroId, heroDef(heroId).portrait, name, cw ? cutinLine(cw) : undefined);
       },
       cutinEnd: () => this.endCutin(),
     };
@@ -501,6 +517,7 @@ export class App implements KitHost {
     this.tut?.dispose();
     this.tut = null;
     this.achWatch = null;
+    this.disposeRunSatire();
     this.pausePending = false;
     if (this.game) {
       this.game.dispose();
@@ -544,6 +561,7 @@ export class App implements KitHost {
     this.tut?.dispose();
     this.tut = null;
     this.achWatch = null;
+    this.disposeRunSatire();
     this.pausePending = false;
     this.wake.release();
     this.input.showTouchControls(false);
@@ -600,6 +618,7 @@ export class App implements KitHost {
       this.input.markTouchesStale();
       this.sfx("uiConfirm");
       this.tut?.start();
+      this.narr?.runStart(this.episode.n);
     }
     if (this.introT >= this.introCardT + INTRO_END) this.endIntro();
   }
@@ -765,6 +784,10 @@ export class App implements KitHost {
     const w = g.world;
     const inp = this.input;
     const cut = w.ult?.phase === "cutin";
+    // narrator captions / Plot Point toasts wait out modals, the cut-in and the run-start card
+    const satireHold = !!this.modal || cut || this.introT >= 0;
+    this.narr?.frame(dt, satireHold);
+    this.ptoasts?.frame(dt, satireHold || w.phase !== "play");
     // the overlay follows the sim (also covers muted fast-forwards that never emit ultStart)
     if (this.cutin && !cut) this.endCutin();
     if (this.introT >= 0) this.introFrame(dt);
@@ -862,9 +885,19 @@ export class App implements KitHost {
     if (this.achT < ACH_POLL) return;
     this.achT = 0;
     for (const def of watch.poll(w.runStats())) {
-      this.sfx("achievement", 0.7);
-      this.toast(def.name, { kind: "ach", kicker: "PLOT POINT!", icon: trophyIcon("kt-img"), inRun: true });
+      if (this.ptoasts) this.ptoasts.push(def);
+      else {
+        this.sfx("achievement", 0.7);
+        this.toast(def.name, { kind: "ach", kicker: "PLOT POINT!", icon: trophyIcon("kt-img"), inRun: true });
+      }
     }
+  }
+
+  private disposeRunSatire(): void {
+    this.narr?.dispose();
+    this.narr = null;
+    this.ptoasts?.dispose();
+    this.ptoasts = null;
   }
 
   /** After the game-over revive. */

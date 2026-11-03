@@ -5,7 +5,7 @@
  * them into juice in src/view/weapon-fx.ts. Payloads are reused module
  * objects: emitting never allocates.
  */
-import type { WeaponFxEvent } from "../events";
+import type { HeroFxEvent, WeaponFxEvent } from "../events";
 import type { Enemy, WeaponInstance } from "../types";
 import type { World } from "../world";
 
@@ -43,6 +43,27 @@ export function wfx(w: World, kind: number, x: number, y: number, x2 = x, y2 = y
   ev.r = r;
   ev.n = n;
   w.emit("weaponFx", ev);
+}
+
+const heroEv: HeroFxEvent = { kind: "", x: 0, y: 0, x2: 0, y2: 0, r: 0, n: 0, enemy: null };
+
+/**
+ * Emit a `heroFx` cue (no-op while muted). ONE reused payload for every hero / Season 2 weapon group
+ * (kinds are namespaced strings: "kuro_*", "hb_*", "a2_*" ...; each group's view file handles its own):
+ * listeners copy what they need. `_heroes-a.ts` / `_hb.ts` re-export it as `hfx`, `_arsenal2.ts` as `a2fx`.
+ */
+export function heroFx(w: World, kind: string, x: number, y: number, x2 = x, y2 = y, r = 0, n = 0, enemy: Enemy | null = null): void {
+  if (w.muted) return;
+  heroEv.kind = kind;
+  heroEv.x = x;
+  heroEv.y = y;
+  heroEv.x2 = x2;
+  heroEv.y2 = y2;
+  heroEv.r = r;
+  heroEv.n = n;
+  heroEv.enemy = enemy;
+  w.emit("heroFx", heroEv);
+  heroEv.enemy = null;
 }
 
 const fireEv = { id: "", sfx: "", x: 0, y: 0 };

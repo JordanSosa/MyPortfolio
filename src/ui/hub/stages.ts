@@ -18,7 +18,7 @@ import { bindActs, shake } from "../kit/controls";
 import { save } from "../save";
 import { SEASON } from "./copy";
 import { pageLayer, type Hub, type HubPage } from "./hub";
-import { stageRecords, stageThumb } from "./parts";
+import { ratingMul, stageRecords, stageThumb } from "./parts";
 
 interface Ep {
   order: number;
@@ -93,7 +93,7 @@ export function stagesPage(hub: Hub): HubPage {
     return `<button class="ep-card ${e.state}${selected && open ? " sel" : ""}" data-nav${selected && open ? " data-nav-default" : ""} data-act="ep" data-id="${esc(e.id)}" style="--i:${i}" aria-label="Episode ${e.order}: ${name}">
       <span class="ep-thumb">${stageThumb(info, !open)}
         <span class="ep-no">EP ${e.order}</span>
-        ${open && info ? `<span class="ep-rate">Ratings ×${info.rewardMul.toFixed(1)}</span>` : ""}
+        ${open && info ? `<span class="ep-rate">Ratings ×${ratingMul(info.rewardMul)}</span>` : ""}
         ${open && (rec?.clears ?? 0) > 0 ? `<span class="ep-clear">CLEARED ✓</span>` : ""}
         ${e.state === "production" ? `<span class="ep-prod">NOW IN PRODUCTION</span>` : ""}
       </span>

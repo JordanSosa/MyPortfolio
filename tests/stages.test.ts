@@ -22,9 +22,18 @@ import { MEADOW_PARITY } from "./fixtures/meadow-parity";
 
 const DT = 1 / 30;
 
+/**
+ * The shipped slice's content: the parity runs only offer these (Season 2 adds weapons / passives to the
+ * registries, and a bigger card pool would change every level-up roll of the frozen runs).
+ */
+const SLICE_POOLS = {
+  weaponPool: ["star_shot", "petal_slash", "yarn_orbit", "heart_boomerang", "thunder_bell", "candy_bomb", "bubble_aura", "prism_beam"],
+  passivePool: ["power_bow", "wish_charm", "big_ribbon", "twin_charm", "swift_shoes", "magnet_star", "lucky_clover", "heart_locket"],
+};
+
 /** The fingerprint the frozen MEADOW_PARITY lines were generated with (do not change its format). */
 function fingerprint(hero: string, seed: number, T: number): string {
-  const w = new World({ hero, seed, maxEnemies: 250 });
+  const w = new World({ hero, seed, maxEnemies: 250, run: defaultRunConfig(SLICE_POOLS) });
   const evs: string[] = [];
   w.bus.on("bossSpawn", (e) => evs.push(`spawn:${e.enemy.def.id}@${w.t.toFixed(2)}`));
   w.bus.on("bossKilled", (e) => evs.push(`kill:${e.title}@${w.t.toFixed(2)}`));
@@ -254,6 +263,9 @@ describe("a second stage (registered by this test only)", () => {
   test("stageInfo carries the gating / reward data", () => {
     const info = stageInfo(TEST_STAGE);
     expect(info).toMatchObject({ id: "test_candy", order: 99, duration: 120, rewardMul: 1.5, requires: "dream_meadow", finalBoss: "king_puff" });
-    expect(stageInfos().map((s) => s.id)).toEqual(["dream_meadow", "test_candy"]);
+    // (sorted by order: the shipped Season 2 stages sit between Dream Meadow and this order-99 test stage)
+    const ids = stageInfos().map((s) => s.id);
+    expect(ids[0]).toBe("dream_meadow");
+    expect(ids[ids.length - 1]).toBe("test_candy");
   });
 });

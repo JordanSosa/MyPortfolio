@@ -24,6 +24,14 @@ import { TRAILS } from "./trails";
 import { WeaponFx } from "./weapon-fx";
 import { BestiaryFx } from "./bestiary-fx";
 import { RelicFx } from "./relic-fx";
+import { HeroesAFx } from "./heroes-a-fx";
+import { HeroesBFx } from "./heroes-b-fx";
+import { Arsenal2Fx } from "./arsenal2-fx";
+import { Speech } from "./speech";
+import { BULLET_LOOKS } from "./bullet-looks";
+import { CandyFx } from "./candy-fx";
+import { AcademyFx } from "./academy-fx";
+import { S45Fx } from "./s45-fx";
 import { StageLook } from "./stage-view";
 
 interface HeroAnims {
@@ -41,6 +49,12 @@ const GEM_COLORS = [C.aqua, C.cyan, C.pink, C.yellow, C.white];
 /** 1px outline offsets (elite / boss aura). */
 const OUT_X = [1, -1, 0, 0];
 const OUT_Y = [0, 0, 1, -1];
+/**
+ * Hit-flash strength of a boss (0..1 lerp to white). A boss soaks six weapons at once, so its flash
+ * timer never runs out: at full strength it would stay a white silhouette for the whole fight. Half
+ * strength still reads as "hit" (with the boss numbers / sparks) while its art stays visible.
+ */
+const BOSS_FLASH = 0.5;
 
 export class WorldView {
   readonly anims: Anims;
@@ -54,6 +68,24 @@ export class WorldView {
   readonly stage: StageLook;
   /** Relic / talent / twist flourishes (relicProc events) and the Filler Arc banner. */
   readonly relics: RelicFx;
+  /** Season 2 heroes Kuro / Pudding / Aoi / Akane: weapon + ult visuals, BAKA! pops (heroFx cues). */
+  readonly heroesA: HeroesAFx;
+  /** Season 2 heroes Senpai / Magical Girl #47 / Isekai-kun / Truck-kun: auras, charms, ult overlays, HONK pops, ghost trucks. */
+  readonly heroesB: HeroesBFx;
+  /** Season 2 general weapons: paper cranes, lightstick waves + ENCORE!, the kotatsu + Zzz, boba cues. */
+  readonly arsenal2: Arsenal2Fx;
+  /** Enemy speech bubbles (satire.md §5-6; ambient + the sim's `enemySay`). */
+  readonly speech: Speech;
+  /** Candy Kingdom / Shoujo Academy content looks (stage enemies + bosses, stageCue candy_* / academy_*). */
+  readonly candy: CandyFx;
+  readonly academy: AcademyFx;
+  /** Beach Episode / The Final Arc looks (stage enemies + bosses, enemyFx 400-499, tides, commercial breaks, degradation overlays). */
+  readonly s45: S45Fx;
+  /**
+   * Hero sprite transform set each frame by the hero fx (Truck-kun leans and bounces, Magical Girl #47
+   * turns on the spot during her transformation): rotation, x / y scale multipliers, y offset (px).
+   */
+  readonly heroXf = { rot: 0, sx: 1, sy: 1, dy: 0 };
   private hero!: HeroAnims;
   private heroSq = { x: 1, v: 0 };
   private trail: TrailEmitter;
@@ -110,6 +142,13 @@ export class WorldView {
     this.bestiary = new BestiaryFx(r, fx, this.anims, this.texts, (s) => this.pose(s));
     this.stage = new StageLook(r, fx);
     this.relics = new RelicFx(r, fx, this.texts);
+    this.heroesA = new HeroesAFx(r, fx, this.anims);
+    this.heroesB = new HeroesBFx(r, fx, this.anims, this.texts, this);
+    this.arsenal2 = new Arsenal2Fx(r, fx, this.anims, this.texts);
+    this.speech = new Speech(r);
+    this.candy = new CandyFx(r, fx, this.anims, this.texts, this.speech);
+    this.academy = new AcademyFx(r, fx, this.anims, this.texts, this.speech);
+    this.s45 = new S45Fx(r, fx, this.anims, this.texts, this.speech);
     this.trail = new TrailEmitter(fx.ghosts, 0.024, 0.3, 0.62);
     this.hStreak = r.atlas.handle("fx_streak");
     this.hBeam = r.atlas.handle("fx_beam");
@@ -142,6 +181,13 @@ export class WorldView {
     this.weaponFx.setWorld(w);
     this.bestiary.setWorld(w);
     this.relics.setWorld(w);
+    this.heroesA.setWorld(w);
+    this.heroesB.setWorld(w);
+    this.arsenal2.setWorld(w);
+    this.speech.setWorld(w);
+    this.candy.setWorld(w);
+    this.academy.setWorld(w);
+    this.s45.setWorld(w);
     this.hpGhost = 1;
   }
 
@@ -183,20 +229,29 @@ export class WorldView {
     const r = this.r;
     const w = this.w;
     this.frameN++;
+    // (stageFx anim caps / still frames quantize enemies, the boss and deco - the hero, bullets and gems keep full rate)
+    const real = time;
     time = this.animTime(time);
     this.ground.draw(time, w.player.x, w.player.y);
     this.drawTelegraphs(time);
     this.drawPickups(time);
-    this.drawGems(time);
+    this.drawGems(real);
     this.drawEnemies(time);
-    this.drawPlayer(time, dt, realDt);
+    this.drawPlayer(real, dt, realDt);
     this.weaponFx.draw(time, dt);
     this.drawProjectiles(time);
     this.drawHeroBeacon(time, realDt);
     this.drawBossBeacon();
-    this.drawBullets(time);
+    this.drawBullets(real);
     this.drawDeadHero();
     this.bestiary.draw(time, dt, realDt);
+    this.heroesA.draw(time, dt, realDt);
+    this.heroesB.draw(time, dt, realDt);
+    this.arsenal2.draw(time, dt, realDt);
+    this.candy.draw(time, dt, realDt);
+    this.academy.draw(time, dt, realDt);
+    this.s45.draw(time, dt, realDt);
+    this.speech.draw(realDt);
     this.relics.draw(time, realDt);
     this.stage.draw(realDt);
     this.drawLines(realDt);
@@ -206,7 +261,7 @@ export class WorldView {
     // death beat: desaturate / dim on top of the active grade (bestiary overrides included)
     if (this.deathK > 0) lerpGrade(r.post.grade, GRADES.dim, Math.min(1, this.deathK), r.post.grade);
     // overlays
-    if (w.freezeT > 0) {
+    if (w.freezeT > 0 && this.stage.stillT <= 0) {
       const a = Math.min(1, w.freezeT * 2) * 0.16;
       r.fillView(Layer.Overlay, C.lightBlue, a);
     }
@@ -220,7 +275,8 @@ export class WorldView {
     const r = this.r;
     const w = this.w;
     const items = w.enemies.items;
-    const frozen = w.freezeT > 0 || w.timeStop;
+    // (a stageFx still frame holds the pose without the frozen look)
+    const frozen = (w.freezeT > 0 || w.timeStop) && this.stage.stillT <= 0;
     const cam = r.camera;
     this.bossSeen = false;
     // hero down: enemies right on top of her fade so the death pose reads
@@ -251,7 +307,7 @@ export class WorldView {
       const y = e.y - e.z;
       r.shadow(e.x, e.y, def.shadow * e.scale * (1 - Math.min(0.4, e.z / 30)), def.prop ? 0.8 : 1);
       const tint = frozen ? C.lightBlue : (def.tint ?? 0xffffff);
-      const flash = e.flash > 0 ? 1 : 0;
+      const flash = e.flash > 0 ? (def.boss ? BOSS_FLASH : 1) : 0;
       let ea = e.alpha;
       if (down) {
         const dx = e.x - pl.x;
@@ -291,6 +347,8 @@ export class WorldView {
         this.bossTint = tint;
         this.bossFlash = flash;
       }
+      if (this.candy.decorate(e, h, sx, sy, y, time, tint, flash) || this.academy.decorate(e, h, sx, sy, y, time, tint, flash)) continue;
+      if (this.s45.decorate(e, h, sx, sy, y, time, tint, flash, ea)) continue;
       if (this.bestiary.decorate(e, h, sx, sy, y, time, tint, flash)) continue;
       r.spr(Layer.Entity, h, e.x, y, sx, sy, 0, tint, ea, flash, 0);
     }
@@ -331,8 +389,9 @@ export class WorldView {
     else h = H.idle + (Math.floor(time * H.idleFps) % H.idleN);
     const sq = clamp(this.heroSq.x, 0.7, 1.35);
     const face = p.face;
-    const sx = face * (2 - sq);
-    const sy = sq;
+    const xf = this.heroXf;
+    const sx = face * (2 - sq) * xf.sx;
+    const sy = sq * xf.sy;
     // dash afterimages (cyan / pink)
     if (p.dashT > 0 && dt > 0) {
       if (this.trail.tick(dt, h, p.x, p.y, sx, sy, this.ghostI & 1 ? C.cyan : C.pink, Layer.FxBelow)) this.ghostI++;
@@ -347,7 +406,9 @@ export class WorldView {
       r.glow(p.x, p.y - 10, 18 + 2 * Math.sin(time * 6), c, 0.3);
     }
     // (down: drawn above the enemies by drawDeadHero instead)
-    if (!p.dead) r.spr(Layer.Entity, h, p.x, p.y, sx, sy, 0, 0xffffff, alpha, p.hurtT > 0.22 ? 0.85 : 0, 0);
+    if (!p.dead) r.spr(Layer.Entity, h, p.x, p.y + xf.dy, sx, sy, xf.rot, 0xffffff, alpha, p.hurtT > 0.22 ? 0.85 : 0, 0);
+    // (a reduced-resolution scene - stageFx renderScale - keeps the hero crisp: redrawn on the full-res protected layer)
+    if (!p.dead && r.sceneScale < 1) r.spr(Layer.Bullets, h, p.x, p.y + xf.dy, sx, sy, xf.rot, 0xffffff, alpha, p.hurtT > 0.22 ? 0.85 : 0, 0);
     this.heroH = h;
     this.heroSx = sx;
     this.heroSy = sy;
@@ -595,14 +656,19 @@ export class WorldView {
       const h = a.first + (Math.floor(time * a.fps + i * 0.3) % a.count);
       const moon = b.sprite === "eb_moon";
       const star = b.sprite === "eb_star";
-      const col = moon ? C.paleYellow : star ? C.violet : C.pink;
+      // (Season 2 bullets register their glow / spin / tint / size in view/bullet-looks.ts)
+      const lk = BULLET_LOOKS.get(b.sprite);
+      const tinted = b.tint !== 0xffffff;
+      const col = tinted ? b.tint : lk ? lk.glow : moon ? C.paleYellow : star ? C.violet : C.pink;
       // pop in with a white flash (never appears "from nowhere"), fade out at the end of its life
       const born = b.age < 0.12 ? b.age / 0.12 : 1;
-      const s = 0.45 + 0.55 * born;
+      const big = lk && lk.baseR && b.r > lk.baseR * 1.1 ? b.r / lk.baseR : 1;
+      const s = (0.45 + 0.55 * born) * big;
       const alpha = Math.min(1, (b.life - b.age) / 0.25);
-      r.glow(b.x, b.y, (moon ? 11 : star ? 9.5 : 8.5) * s, col, 0.6 * alpha, Layer.Bullets);
-      const rot = star ? time * 6 : moon ? Math.atan2(b.vy, b.vx) : 0;
-      r.spr(Layer.Bullets, h, b.x, b.y, s, s, rot, 0xffffff, alpha, 1 - born, Flag.Glow | (moon || star ? Flag.NoSnap : 0));
+      r.glow(b.x, b.y, (lk ? (lk.glowR ?? 8.5) : moon ? 11 : star ? 9.5 : 8.5) * s, col, 0.6 * alpha, Layer.Bullets);
+      const turn = lk ? !!lk.spin || !!lk.velRot : moon || star;
+      const rot = lk ? (lk.spin ? time * lk.spin + i * 0.7 : lk.velRot ? Math.atan2(b.vy, b.vx) : 0) : star ? time * 6 : moon ? Math.atan2(b.vy, b.vx) : 0;
+      r.spr(Layer.Bullets, h, b.x, b.y, s, s, rot, tinted ? b.tint : (lk?.tint ?? 0xffffff), alpha, 1 - born, Flag.Glow | (turn || big !== 1 ? Flag.NoSnap : 0));
     }
   }
 

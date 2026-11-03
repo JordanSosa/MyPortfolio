@@ -10,6 +10,8 @@ import { BOSSES, ENEMIES } from "../registry";
 import type { World } from "../world";
 import type { Director } from "./director";
 import type { TimelineEvent } from "../stage";
+// Season 2 kinds (laneCharge, teleportIn, bulletRain, schoolBell): stages.md §5
+import { S2_EVENTS } from "./events-s2";
 
 export type EventHandler = (w: World, d: Director, ev: TimelineEvent) => void;
 
@@ -171,4 +173,24 @@ export const EVENT_HANDLERS: Record<string, EventHandler> = {
     if (!b || !b.boss) return;
     d.warnBoss(b, ev.spawnMul ?? 0.4);
   },
+
+  ...S2_EVENTS,
 };
+
+// ---------------------------------------------------------------- Season 2 event kinds (stages.md §5)
+/**
+ * More kinds live in their own files, `director/events-*.ts`, each exporting
+ * `eventHandlers: Record<string, EventHandler>` (import only types from this
+ * file). They are merged here in file order, so a stage never edits this file.
+ * `events-s45.ts` (Beach Episode / The Final Arc): tideSweep, commercialBreak, flashback.
+ * (`events-s2.ts` is spread into EVENT_HANDLERS above.)
+ */
+const extraKinds = import.meta.glob<{ eventHandlers?: Record<string, EventHandler> }>("./events-*.ts", { eager: true });
+for (const path of Object.keys(extraKinds).sort()) {
+  const hs = extraKinds[path].eventHandlers;
+  if (!hs) continue;
+  for (const kind of Object.keys(hs)) {
+    if (EVENT_HANDLERS[kind]) console.warn(`[director] duplicate event kind '${kind}' in ${path} - skipped`);
+    else EVENT_HANDLERS[kind] = hs[kind];
+  }
+}

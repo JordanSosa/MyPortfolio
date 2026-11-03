@@ -87,5 +87,7 @@ export function rarityBadge(r: Rarity, cls = "rbadge"): string {
 
 /** A sprite as a CSS background tile (stage thumbnails). Empty string when unavailable. */
 export function spriteUrl(dataUrl: string): string {
-  return dataUrl ? `url("${dataUrl}")` : "none";
+  // (single quotes: the value goes into double-quoted inline style attributes - a `"` would end the attribute
+  // early and drop every custom property after it, e.g. the stage cards' --tile / --clear)
+  return dataUrl ? `url('${dataUrl}')` : "none";
 }

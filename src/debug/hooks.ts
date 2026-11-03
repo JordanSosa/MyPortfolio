@@ -51,6 +51,9 @@ export function installHooks(app: App): void {
       simulate(w, dt, 1 / 30, app.game?.bot ?? new Bot(5));
       w.muted = false;
       app.r.camera.snapTo(w.player.x, w.player.y - 8);
+      // (a boss that arrived during the muted skip never sent bossSpawn: sync the bar, like Session.endSkip)
+      const b = w.boss;
+      app.hud.bossBar(b && !b.dead && b.def.boss ? b : null, b?.def.boss?.title ?? "");
       return w.t;
     },
     spawn(id: string, n = 1) {

@@ -50,7 +50,7 @@ export interface MetaContent {
   /** Base (non-evolved) weapons in registry order. */
   baseWeapons: readonly WeaponInfo[];
   passives: ReadonlyMap<string, NamedInfo>;
-  /** Regular enemies (no props, no bosses). */
+  /** Regular enemies (no props, no bosses, no `noCodex` actors). */
   enemies: ReadonlyMap<string, NamedInfo>;
   bosses: ReadonlyMap<string, NamedInfo>;
   /** Stages sorted by `order`. */
@@ -134,7 +134,7 @@ export function gameContent(): MetaContent {
   const weapons: WeaponInfo[] = [];
   for (const w of WEAPONS.values()) weapons.push({ id: w.id, name: w.name, icon: w.icon, evolved: !!w.evolved, evolution: w.evolution ? { ...w.evolution } : undefined });
   const enemies: NamedInfo[] = [];
-  for (const e of ENEMIES.values()) if (!e.prop && !e.boss) enemies.push({ id: e.id, name: e.name, icon: e.sprite });
+  for (const e of ENEMIES.values()) if (!e.prop && !e.boss && !e.noCodex) enemies.push({ id: e.id, name: e.name, icon: e.sprite });
   const bosses: NamedInfo[] = [];
   for (const b of BOSSES.values()) bosses.push({ id: b.id, name: b.name, icon: b.sprite });
   const stages = stageInfos();

@@ -24,9 +24,14 @@ import { LUNA_RING_N, lunaRing } from "../game/bosses/_luna";
 
 const ringPt = { x: 0, y: 0 };
 
-const PREF: Record<string, number> = { hoshi: 70, rin: 26, mochi: 24 };
+const PREF: Record<string, number> = { hoshi: 70, rin: 26, mochi: 24, senpai: 22, magical_girl_47: 30, isekai_kun: 72, truck_kun: 0, kuro: 40, pudding: 30, aoi: 74, akane: 26 };
 /** Distance a player keeps from a boss while healthy: melee heroes walk up to it, Hoshi stays in range. */
-const BOSS_ENGAGE: Record<string, number> = { hoshi: 80, rin: 24, mochi: 26 };
+const BOSS_ENGAGE: Record<string, number> = { hoshi: 80, rin: 24, mochi: 26, senpai: 26, magical_girl_47: 34, isekai_kun: 90, truck_kun: 10, kuro: 44, pudding: 30, aoi: 90, akane: 24 };
+/**
+ * Flee weight of ordinary enemies per hero (1 = default). Truck-kun's player drives INTO the horde
+ * (the ram and the forward honk need it) and only shies away from big hitters, elites and bosses.
+ */
+const BRAVE: Record<string, number> = { truck_kun: 0.3 };
 /** How much an average player values each passive (damage first; utility last unless it evolves something). */
 const PASSIVE_VALUE: Record<string, number> = {
   power_bow: 8,
@@ -59,6 +64,27 @@ export class Bot {
   /** Level-up policy (only matters when the run has banishes / skips, RunConfig.flags). */
   useBanish = true;
   useSkip = true;
+  /** Kotatsu camping: seconds parked this time / seconds before parking again. */
+  private campT = 0;
+  private campCd = 0;
+
+  /** Park (stand still) while holding the Kotatsu of Sloth and nothing presses: up to 3.6 s, then move on a while. */
+  private camp(w: World, pressure: number, crowd: number, hpK: number, dt: number): boolean {
+    if (!w.hasWeapon("kotatsu_of_sloth") && !w.hasWeapon("eternal_winter_break")) return false;
+    if (this.campCd > 0) {
+      this.campCd -= dt;
+      return false;
+    }
+    if (pressure < 1.1 && crowd === 0 && hpK > 0.5 && this.campT < 3.6) {
+      this.campT += dt;
+      return true;
+    }
+    if (this.campT > 0) {
+      this.campT = 0;
+      this.campCd = 1.2;
+    }
+    return false;
+  }
 
   constructor(seed = 1234) {
     this.rng = new Rng(seed);
@@ -83,6 +109,7 @@ export class Bot {
     let nx = 0;
     let ny = 0;
     const items = w.enemies.items;
+    const brave = p.hp > p.maxHp * 0.4 ? (BRAVE[w.hero.id] ?? 1) : 1;
     for (let i = 0; i < w.enemies.count; i++) {
       const e = items[i];
       if (e.dead || e.def.prop) continue;
@@ -93,7 +120,7 @@ export class Bot {
       const d = Math.sqrt(d2) || 1;
       // big hitters (teddies, pumpkins, elites, bosses) are given a wider berth than puffs
       const hit = Math.min(2.5, Math.max(0.6, e.dmg / 7)) * (e.r > 8 ? 1.3 : 1);
-      const k = ((e.def.boss ? 4 : e.elite ? 2 : 1) * hit) / Math.max(36, d2 - e.r * e.r);
+      const k = (((e.def.boss ? 4 : e.elite ? 2 : 1) * hit) / Math.max(36, d2 - e.r * e.r)) * (brave < 1 && !e.def.boss && !e.elite && hit < 1.4 ? brave : 1);
       fx += (dx / d) * k * 400;
       fy += (dy / d) * k * 400;
       if (d < 26) crowd++;
@@ -266,6 +293,8 @@ export class Bot {
     const ol = Math.sqrt(this.dx * this.dx + this.dy * this.dy);
     out.mx = ol > 0.05 ? this.dx / Math.max(1, ol) : 0;
     out.my = ol > 0.05 ? this.dy / Math.max(1, ol) : 0;
+    // Kotatsu of Sloth: a player holding it parks in calm moments (it deploys; rarely long enough to doze)
+    if (this.camp(w, pressure, crowd, hpK, dt)) out.mx = out.my = 0;
 
     // dash out of crowds
     if (!this.noDash) {

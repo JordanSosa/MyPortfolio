@@ -1,7 +1,9 @@
 /**
- * Pause menu: build overview (weapons + passives with levels and names), stat
- * sheet, resume / settings / quit. Pause (P / START / BACK) toggles it closed;
- * Esc / B / Android Back resume through the nav back path.
+ * Pause menu - "COMMERCIAL BREAK" (docs/content/satire.md §8): build overview
+ * (weapons + passives with levels and names), stat sheet, "Back to the show!"
+ * / settings / quit. Quitting asks twice: "Drop the series?" -> "Yes, drop it"
+ * (and RESUME becomes "No, I'm invested"). Pause (P / START / BACK) toggles it
+ * closed; Esc / B / Android Back resume through the nav back path.
  */
 import { describeStats } from "../../game/stats";
 import type { World } from "../../game/world";
@@ -24,7 +26,7 @@ export function openPause(app: App, w: World): UiScreen {
   const passives = w.passives.map((p) => item(p.def.name, `<div class="bslot">${img(p.def.icon, "px", 0, 2)}<span class="lv">Lv${p.level}</span></div>`));
   el.innerHTML = `
     <div class="panel pause-panel">
-      <div class="h1">PAUSED</div>
+      <div class="h1">COMMERCIAL BREAK</div>
       <div class="h2">${esc(w.hero.name)} · LV ${w.level} · ${fmtTime(w.t)} · ${w.kills} KO</div>
       <div class="build">
         <div class="h2">WEAPONS</div><div class="row">${slots(w.weaponSlots, weapons)}</div>
@@ -34,9 +36,9 @@ export function openPause(app: App, w: World): UiScreen {
         .map(([k, v]) => `<div><span>${esc(k)}</span><b>${esc(v)}</b></div>`)
         .join("")}</div>
       <div class="btn-row">
-        <button class="btn" data-nav data-nav-default data-act="resume">▶ RESUME</button>
+        <button class="btn" data-nav data-nav-default data-act="resume" aria-label="Resume">▶ BACK TO THE SHOW!</button>
         <button class="btn violet small" data-nav data-act="settings">⚙ SETTINGS</button>
-        <button class="btn ghost small" data-nav data-act="quit">✕ QUIT RUN</button>
+        <button class="btn ghost small" data-nav data-act="quit" aria-label="Quit run">✕ DROP THE SERIES?</button>
       </div>
     </div>`;
   app.ui.appendChild(el);
@@ -50,7 +52,9 @@ export function openPause(app: App, w: World): UiScreen {
   onTap(quitBtn, () => {
     if (!confirmQuit) {
       confirmQuit = true;
-      quitBtn.textContent = "SURE? TAP AGAIN";
+      quitBtn.textContent = "YES, DROP IT";
+      const res = el.querySelector('[data-act="resume"]');
+      if (res) res.textContent = "NO, I'M INVESTED";
       app.sfx("uiDeny");
       return;
     }

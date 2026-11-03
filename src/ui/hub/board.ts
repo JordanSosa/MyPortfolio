@@ -1,48 +1,62 @@
 /**
- * TRAINING ARC (docs/EXPANSION.md §5): the 120-node constellation board in
- * the kit's pan / zoom viewport (pinch, drag, wheel, + / -, gamepad right
- * stick + LB / RB; keyboard / gamepad focus hops node to node and the camera
- * follows). Rings, sector labels and edges are one SVG, nodes are buttons
- * placed in board units inside the same transformed layer - a pan / zoom only
- * rewrites one transform.
+ * TRAINING ARC (docs/EXPANSION.md §5, satire.md §8): the 120-node
+ * constellation board as a pannable / zoomable star map.
  *
- * Node states: owned (gold), maxed, affordable (pulses), reachable, out of
- * reach (dim), ring locked (grey + lock). Tap a node: detail sheet with the
- * flavour, current -> next rank, cost and BUY / REFUND (+ keystone ON / OFF).
- * AUTO-PATH marks the cheapest purchase chain the coins afford (numbered) and
- * can buy it in one go; RESPEC refunds everything minus a small fee.
- * Purchases update node classes in place (no rebuild).
+ *  - Map: deep-space sky (parallax tiles behind the map), sector nebulae, ring
+ *    orbits, constellation lines (dim dotted -> lavender when one end is owned
+ *    -> glowing gold along purchased paths; cyan for the auto-path plan),
+ *    sector names curved along the rim, the real board art (board_node /
+ *    board_keystone / board_center stars + tinted board_glyph stat icons) and
+ *    rank pips. Gated rings carry shimmering "REQUIRES: EPISODE N CLEAR" chips.
+ *  - Node states: owned (gold), maxed, affordable (bright star + pulse ring,
+ *    capped to the cheapest few so a rich account never animates 100 rings),
+ *    reachable, out of reach, ring gated; keystones ON AIR.
+ *  - Input (kit PanZoom): drag with inertia, pinch, wheel, double-tap zoom,
+ *    + / -, gamepad right stick + LB / RB; keyboard / gamepad focus hops node
+ *    to node and the camera follows; a tap near a small star snaps to it.
+ *  - Node card (sheet, the map stays live and tappable around it) with BUY:
+ *    coins fly from the coin pill to the star, the lines from the owned
+ *    network ignite into it, then a burst; newly reachable neighbours twinkle
+ *    in. A keystone gets a full-screen KEYSTONE ARC splash.
+ *  - AUTO-PATH marks the cheapest chain the coins afford (numbered, cyan) and
+ *    buys it in one montage; RESPEC (confirm) reboots the series with a VHS
+ *    rewind. Minimap (rings + view box) in a corner, tap to fly.
+ *
+ * 60 fps on phones: the map is one composited layer (pans and zooms only
+ * rewrite its transform; it is re-rastered once after a zoom settles), state
+ * changes touch only the nodes / lines that changed, and all juice is WAAPI
+ * on transform / opacity of short-lived elements.
  */
-import { affordableNodes, autoPath, boardProgress, buyNode, effectText, nodeView, refundNode, respecBoard, respecFee, ringGate, toggleKeystone, type BuyBlock, type PlanStep } from "../../meta/board/board";
+import { affordableNodes, autoPath, boardProgress, buyNode, nodeView, refundNode, respecBoard, respecFee, ringUnlocked, toggleKeystone, type NodeView, type PlanStep } from "../../meta/board/board";
 import { BOARD, CENTER_ID } from "../../meta/board/graph";
 import type { BoardNode } from "../../meta/board/types";
 import { gameContent } from "../../meta/content";
 import { TUNING } from "../../meta/tuning";
 import { esc, fmtInt, h, img } from "../dom";
-import { art, money } from "../kit/art";
-import { bindActs, btn, iconBtn, pop, shake, tag } from "../kit/controls";
+import { money } from "../kit/art";
+import { bindActs, btn, iconBtn, pop, shake } from "../kit/controls";
 import { confirmDialog, openSheet, overlaysOpen, type SheetHandle } from "../kit/overlay";
+import { reducedMotion } from "../kit/ticker";
 import { PanZoom } from "../kit/viewport";
 import { save } from "../save";
+import { burstAt, centerIn, flyCoins, ignite, keystoneSplash, popEl, revealEl, rewind } from "./board/fx";
+import { effectGlyph, fillGlyphs, setGlyph } from "./board/glyph";
+import { boardSvg, BOUNDS, boxOf, EDGES_OF, gateChips, glyphTint, nebulae, nodeButtons, px, RING_PX, sectorColor, SIZE, type Look } from "./board/layout";
+import { Minimap, type DotState } from "./board/minimap";
+import { gateInfo, gateLine, nodeSheet } from "./board/sheet";
 import { pageLayer, type Hub, type HubPage, type PageOpts } from "./hub";
+import "./board/board.css";
 
-/**
- * Screen spread of the meta layout (board units -> CSS px at zoom 1): ring 1's
- * twelve nodes sit 120 units from the centre, which is too tight for 42-48 px
- * buttons with a rank pill under them, so the UI spreads every position.
- */
-const K = 1.4;
-const R_MAX = BOARD.radius[BOARD.radius.length - 1] * K + 80;
-const BOUNDS = { x0: -R_MAX, y0: -R_MAX, x1: R_MAX, y1: R_MAX };
-const SIZE: Record<BoardNode["kind"], number> = { center: 76, stat: 42, utility: 48, keystone: 64 };
+/** At most this many affordable stars pulse at once (the cheapest; the rest glow statically). */
+const MAX_PULSE = 24;
 
-const BLOCK_TEXT: Record<BuyBlock, string> = {
-  unknown: "That node doesn't exist. Spooky.",
-  maxed: "Maxed out! This montage is complete.",
-  ring: "",
-  unreachable: "Connect it to a node you own first. Training is a journey.",
-  coins: "Not enough Star Coins! Have you tried... playing an episode?",
-};
+interface NodeState {
+  cls: string;
+  look: Look;
+  rank: number;
+  tint: string;
+  ap: string;
+}
 
 export function boardPage(hub: Hub, o: PageOpts): HubPage {
   const app = hub.app;
@@ -52,44 +66,34 @@ export function boardPage(hub: Hub, o: PageOpts): HubPage {
   let sheet: SheetHandle | null = null;
   let sheetId = "";
   let plan: PlanStep[] = [];
+  let disposed = false;
+  let buyingPlan = false;
+  const timers = new Set<ReturnType<typeof setTimeout>>();
+  const later = (ms: number, fn: () => void) => {
+    const t = setTimeout(() => {
+      timers.delete(t);
+      if (!disposed) fn();
+    }, ms);
+    timers.add(t);
+  };
 
   // ---- static board markup (built once)
-  const svg: string[] = [];
-  for (let r = 1; r <= BOARD.rings; r++) svg.push(`<circle class="ring" data-ring="${r}" cx="0" cy="0" r="${BOARD.radius[r] * K}"/>`);
-  for (const s of BOARD.sectors) {
-    const a = ((s.angle - 30) * Math.PI) / 180;
-    svg.push(`<line class="wedge" x1="0" y1="0" x2="${(Math.cos(a) * R_MAX).toFixed(1)}" y2="${(Math.sin(a) * R_MAX).toFixed(1)}"/>`);
-  }
-  for (const [a, b] of BOARD.edges) {
-    const na = BOARD.byId.get(a) as BoardNode;
-    const nb = BOARD.byId.get(b) as BoardNode;
-    svg.push(`<line class="edge" data-a="${a}" data-b="${b}" x1="${na.x * K}" y1="${na.y * K}" x2="${nb.x * K}" y2="${nb.y * K}"/>`);
-  }
-  const labels = BOARD.sectors
-    .map((s) => {
-      const a = (s.angle * Math.PI) / 180;
-      const r = BOARD.radius[5] * K + 118;
-      return `<span class="bd-sec" style="left:${(Math.cos(a) * r - BOUNDS.x0).toFixed(1)}px;top:${(Math.sin(a) * r - BOUNDS.y0).toFixed(1)}px;--sc:${s.color}">${esc(s.name)}</span>`;
-    })
-    .join("");
-  const nodes = BOARD.nodes
-    .map((n) => {
-      const sc = n.sector >= 0 ? BOARD.sectors[n.sector].color : "#ffe14d";
-      const glyph = n.kind === "center" ? art("board_center", `<i class="bn-clap">EP.1</i>`, "px") : img(n.icon, "px");
-      return `<button class="bn k-${n.kind}" data-nav data-act="node" data-id="${n.id}" style="left:${(n.x * K - BOUNDS.x0).toFixed(1)}px;top:${(n.y * K - BOUNDS.y0).toFixed(1)}px;--sz:${SIZE[n.kind]}px;--sc:${sc}" aria-label="${esc(n.name)}"><span class="bn-ic">${glyph}</span><span class="bn-rk"></span><span class="bn-ap"></span></button>`;
-    })
-    .join("");
+  const gates = [2, 3, 4, 5].map((r) => gateChips(r, gateLine(r), gateInfo(r, ctx).name)).join("");
+  const twinkles = Array.from({ length: 10 }, (_, i) => `<i style="left:${((i * 37) % 100) + 2}%;top:${((i * 61) % 100) + 1}%;--d:${(i * 0.37) % 2.4}s"></i>`).join("");
   el.innerHTML = `
     <div class="bd-vp">
+      <div class="bd-sky" aria-hidden="true">${twinkles}</div>
       <div class="bd-c">
-        <svg class="bd-svg" width="${R_MAX * 2}" height="${R_MAX * 2}" viewBox="${BOUNDS.x0} ${BOUNDS.y0} ${R_MAX * 2} ${R_MAX * 2}" aria-hidden="true">${svg.join("")}</svg>
-        ${labels}
-        ${nodes}
+        ${nebulae()}
+        ${boardSvg()}
+        ${nodeButtons()}
+        ${gates}
+        <div class="bd-ovl" aria-hidden="true"><i class="bd-sel" hidden></i></div>
       </div>
     </div>
     <div class="bd-top">
       <span class="bd-prog"></span>
-      <span class="bd-intro">Every node is a montage. Every ring is a new season.</span>
+      <span class="bd-intro">Welcome to the Training Arc! Every node is a montage. Every ring is a new season.</span>
     </div>
     <div class="bd-zoom">
       ${iconBtn("+", "zin", "Zoom in", "small")}
@@ -104,10 +108,56 @@ export function boardPage(hub: Hub, o: PageOpts): HubPage {
 
   const vpEl = el.querySelector(".bd-vp") as HTMLElement;
   const content = el.querySelector(".bd-c") as HTMLElement;
+  const sky = el.querySelector(".bd-sky") as HTMLElement;
+  const planEl = el.querySelector(".bd-plan") as HTMLElement;
+  const progEl = el.querySelector(".bd-prog") as HTMLElement;
   const nodeEls = new Map<string, HTMLElement>();
   for (const b of el.querySelectorAll<HTMLElement>(".bn")) nodeEls.set(b.dataset.id as string, b);
-  const edgeEls = [...el.querySelectorAll<SVGLineElement>(".edge")];
-  const ringEls = [...el.querySelectorAll<SVGCircleElement>(".ring")];
+  const halo = [...el.querySelectorAll<SVGLineElement>(".eh")];
+  const core = [...el.querySelectorAll<SVGLineElement>(".ec")];
+  const orbs = [...el.querySelectorAll<SVGCircleElement>(".orb[data-ring]")];
+  const gateEls = [...el.querySelectorAll<HTMLElement>(".bd-gate")];
+  // everything that animates on the map lives in one overlay above the stars (pulse rings, the selection
+  // ring, ON AIR halos): nothing static is painted over an animated layer, so no star gets squashed into
+  // extra compositor layers
+  const ovl = el.querySelector(".bd-ovl") as HTMLElement;
+  const selRing = ovl.querySelector(".bd-sel") as HTMLElement;
+  const rings = new Map<string, HTMLElement>();
+  const syncRings = (want: ReadonlyMap<string, string>) => {
+    for (const [id, r] of rings)
+      if (want.get(id) !== r.dataset.k) {
+        r.remove();
+        rings.delete(id);
+      }
+    for (const [id, k] of want) {
+      if (rings.has(id)) continue;
+      const n = BOARD.byId.get(id) as BoardNode;
+      const [x, y] = px(n);
+      const r = h("i", `bd-${k}`);
+      r.dataset.k = k;
+      r.style.cssText = `left:${(x - BOUNDS.x0).toFixed(1)}px;top:${(y - BOUNDS.y0).toFixed(1)}px;--sz:${SIZE[n.kind]}px`;
+      ovl.appendChild(r);
+      rings.set(id, r);
+    }
+  };
+  const placeSel = (id: string | null) => {
+    const n = id ? BOARD.byId.get(id) : undefined;
+    selRing.hidden = !n;
+    if (!n) return;
+    const [x, y] = px(n);
+    selRing.style.cssText = `left:${(x - BOUNDS.x0).toFixed(1)}px;top:${(y - BOUNDS.y0).toFixed(1)}px;--sz:${SIZE[n.kind]}px`;
+  };
+  fillGlyphs(content);
+
+  // the screen-space fx layer (coins) sits over the sheet so the flight is never hidden
+  const fxLayer = h("div", "bfx-layer");
+  app.ui.appendChild(fxLayer);
+
+  const minimap = new Minimap((x, y) => {
+    app.sfx("uiMove");
+    vp.go(x, y, Math.max(vp.z, 0.55));
+  });
+  el.appendChild(minimap.el);
 
   const vp = new PanZoom(vpEl, content, {
     bounds: BOUNDS,
@@ -117,105 +167,197 @@ export function boardPage(hub: Hub, o: PageOpts): HubPage {
     cx: 0,
     cy: 0,
     far: 0.42,
+    near: 1.15,
     active: () => hub.top?.el === el && overlaysOpen() === 0,
+    // a tap on empty sky near a small star (zoomed out) snaps to it
+    onTap: (sx, sy) => {
+      const [wx, wy] = vp.toWorld(sx, sy);
+      let best: BoardNode | null = null;
+      let bd = Infinity;
+      for (const n of BOARD.nodes) {
+        const [x, y] = px(n);
+        const d = Math.hypot(x - wx, y - wy) * vp.z - (SIZE[n.kind] / 2) * vp.z;
+        if (d < bd) {
+          bd = d;
+          best = n;
+        }
+      }
+      if (best && bd < 26) {
+        openNode(best.id);
+        return true;
+      }
+      return false;
+    },
   });
 
-  // ---- paint states (in place)
+  // ---- paint states (in place, only what changed)
+  const states = new Map<string, NodeState>();
+  const edgeCls: string[] = [];
+  const dots = new Map<string, DotState>();
+  let views = new Map<string, NodeView>();
+
+  const lookOf = (v: NodeView): Look => (v.rank > 0 ? 3 : !v.ringOpen || !v.reachable ? 0 : v.affordable ? 2 : 1);
+
   const paint = () => {
     const p = save.profile;
     const planIdx = new Map<string, number>();
     plan.forEach((s, i) => {
       if (!planIdx.has(s.id)) planIdx.set(s.id, i + 1);
     });
+    views = new Map();
+    // the cheapest affordable frontier stars pulse
+    const frontier = affordableNodes(p, ctx)
+      .filter((v) => v.rank === 0)
+      .slice(0, MAX_PULSE)
+      .map((v) => v.node.id);
+    const pulse = new Set(frontier);
+    const want = new Map<string, string>();
     for (const n of BOARD.nodes) {
       const b = nodeEls.get(n.id) as HTMLElement;
       if (n.kind === "center") {
-        b.className = "bn k-center s-owned";
+        dots.set(n.id, "own");
         continue;
       }
       const v = nodeView(p, n.id, ctx);
       if (!v) continue;
-      const st = v.maxed ? "s-max" : v.rank > 0 ? (v.block ? "s-owned" : "s-owned s-afford") : !v.ringOpen ? "s-lock" : !v.reachable ? "s-far" : v.affordable ? "s-afford" : "s-near";
-      const cls = `bn k-${n.kind} ${st}${v.active ? " s-on" : ""}${planIdx.has(n.id) ? " s-plan" : ""}`;
-      if (b.className !== cls) b.className = cls;
-      const rk = b.querySelector(".bn-rk") as HTMLElement;
-      const txt = n.maxRank > 1 ? `${v.rank}/${n.maxRank}` : v.rank > 0 ? "✓" : "";
-      if (rk.textContent !== txt) rk.textContent = txt;
-      const ap = b.querySelector(".bn-ap") as HTMLElement;
-      const at = planIdx.get(n.id);
-      const apTxt = at ? String(at) : "";
-      if (ap.textContent !== apTxt) ap.textContent = apTxt;
+      views.set(n.id, v);
+      const look = lookOf(v);
+      const st = v.maxed ? "s-max" : v.rank > 0 ? "s-owned" : !v.ringOpen ? "s-lock" : !v.reachable ? "s-far" : v.affordable ? "s-afford" : "s-near";
+      const extra = `${v.rank > 0 && !v.maxed && !v.block ? " s-up" : ""}${v.active ? " s-on" : ""}${planIdx.has(n.id) ? " s-plan" : ""}`;
+      if (pulse.has(n.id) && !planIdx.has(n.id)) want.set(n.id, "pr");
+      else if (v.active) want.set(n.id, "air");
+      const cls = `bn k-${n.kind} ${st}${extra}`;
+      const tint = glyphTint(n, look);
+      const ap = planIdx.has(n.id) ? String(planIdx.get(n.id)) : "";
+      const prev = states.get(n.id);
+      if (!prev || prev.cls !== cls) {
+        b.className = cls;
+        const say = v.maxed ? "maxed" : v.rank > 0 ? `rank ${v.rank} of ${n.maxRank}` : !v.ringOpen ? "locked ring" : !v.reachable ? "not connected" : v.affordable ? "affordable" : "too expensive";
+        b.setAttribute("aria-label", `${n.name}, ${say}${v.active ? ", on air" : ""}`);
+      }
+      if (!prev || prev.look !== look) {
+        const st2 = b.querySelector<HTMLImageElement>("img.bn-st");
+        if (st2) {
+          const id = n.kind === "keystone" ? "board_keystone" : "board_node";
+          st2.outerHTML = img(id, "px bn-st", look);
+        }
+      }
+      if (!prev || prev.tint !== tint) {
+        const g = b.querySelector<HTMLImageElement>("img.bn-gl");
+        if (g) setGlyph(g, effectGlyph(n.effects), tint);
+      }
+      if (!prev || prev.rank !== v.rank) {
+        const list = b.querySelectorAll<HTMLElement>(".bn-pips i");
+        list.forEach((pi, i) => pi.classList.toggle("on", i < v.rank));
+      }
+      if (!prev || prev.ap !== ap) (b.querySelector(".bn-ap") as HTMLElement).textContent = ap;
+      states.set(n.id, { cls, look, rank: v.rank, tint, ap });
+      dots.set(n.id, v.rank > 0 ? "own" : !v.ringOpen ? "lock" : !v.reachable ? "far" : v.affordable ? "afford" : "near");
     }
-    for (const e of edgeEls) {
-      const a = e.dataset.a as string;
-      const b = e.dataset.b as string;
-      const ra = a === CENTER_ID ? 1 : (p.board.ranks[a] ?? 0);
-      const rb = b === CENTER_ID ? 1 : (p.board.ranks[b] ?? 0);
-      const cls = ra > 0 && rb > 0 ? "edge own" : ra > 0 || rb > 0 ? "edge reach" : "edge";
-      if (e.getAttribute("class") !== cls) e.setAttribute("class", cls);
+    syncRings(want);
+    // lines: gold where both ends are owned, lavender where one is, cyan along the plan
+    const planned = new Set(planIdx.keys());
+    const owned = (id: string) => id === CENTER_ID || (p.board.ranks[id] ?? 0) > 0;
+    BOARD.edges.forEach(([a, b], i) => {
+      const oa = owned(a);
+      const ob = owned(b);
+      const ringA = a === CENTER_ID || views.get(a)?.ringOpen;
+      const ringB = b === CENTER_ID || views.get(b)?.ringOpen;
+      let cls = "";
+      if (oa && ob) cls = "own";
+      else if ((planned.has(a) && (ob || planned.has(b))) || (planned.has(b) && (oa || planned.has(a)))) cls = "plan";
+      else if ((oa && ringB) || (ob && ringA)) cls = "reach";
+      else if (!ringA || !ringB) cls = "lock";
+      if (edgeCls[i] !== cls) {
+        edgeCls[i] = cls;
+        halo[i].setAttribute("class", `eh ${cls}`);
+        core[i].setAttribute("class", `ec ${cls}`);
+      }
+    });
+    // rings
+    const ringState: number[] = [1];
+    for (let r = 1; r <= BOARD.rings; r++) {
+      const open = ringUnlocked(p, r, ctx);
+      const ringNodes = BOARD.nodes.filter((n) => n.ring === r && n.kind !== "keystone");
+      const full = open && ringNodes.every((n) => (p.board.ranks[n.id] ?? 0) > 0);
+      ringState[r] = full ? 2 : open ? 1 : 0;
+      const c = orbs[r - 1];
+      const cls = `orb ${full ? "done" : open ? "open" : "gated"}`;
+      if (c && c.getAttribute("class") !== cls) c.setAttribute("class", cls);
     }
-    for (const c of ringEls) {
-      const r = Number(c.dataset.ring);
-      const open = r <= 1 || (() => {
-        const g = ringGate(r, ctx);
-        return !!g && (p.records[g.id]?.clears ?? 0) > 0;
-      })();
-      c.setAttribute("class", open ? "ring open" : "ring");
+    // the next ring to open shimmers; rings further out wait quietly
+    const nextGate = ringState.findIndex((st, r) => r > 0 && st === 0);
+    for (const g of gateEls) {
+      const r = Number(g.dataset.ring);
+      g.hidden = ringState[r] !== 0;
+      const next = r === nextGate;
+      if (next !== g.classList.contains("next")) {
+        g.classList.toggle("next", next);
+        if (next) g.insertAdjacentHTML("beforeend", `<i class="g-shine" aria-hidden="true"></i>`);
+        else g.querySelector(".g-shine")?.remove();
+      }
     }
+    minimap.paint(dots, ringState);
+    // HUD
     const pr = boardProgress(p);
-    (el.querySelector(".bd-prog") as HTMLElement).innerHTML = `<b>${pr.nodesOwned}</b> / ${pr.nodes} nodes · ${money("coins", fmtInt(pr.spent))} spent`;
-    const planEl = el.querySelector(".bd-plan") as HTMLElement;
+    progEl.innerHTML = `<b>${pr.nodesOwned}</b> / ${pr.nodes} NODES · ${money("coins", fmtInt(pr.spent))} SPENT`;
     if (plan.length) {
       const cost = plan.reduce((a, s) => a + s.cost, 0);
-      planEl.innerHTML = `${plan.length} node${plan.length === 1 ? "" : "s"} · ${money("coins", fmtInt(cost))} ${btn("BUY PATH", { cls: "gold small", act: "buyplan" })}`;
+      planEl.innerHTML = `<span class="pl-tx"><b>${plan.length}</b> node${plan.length === 1 ? "" : "s"} · ${money("coins", fmtInt(cost))}</span>${btn("BUY PATH", { cls: "gold small", act: "buyplan" })}`;
       bindActs(planEl, { buyplan: buyPlan });
     } else planEl.innerHTML = "";
   };
 
-  // ---- node sheet
-  const nodeSheetHtml = (id: string): { html: string; foot: string; kicker: string; title: string; icon: string } => {
-    const p = save.profile;
-    const v = nodeView(p, id, ctx);
-    const n = BOARD.byId.get(id) as BoardNode;
-    const sector = n.sector >= 0 ? BOARD.sectors[n.sector] : null;
-    const kind = n.kind === "keystone" ? "KEYSTONE" : n.kind === "utility" ? "UTILITY" : n.kind === "center" ? "THE PILOT" : "STAT";
-    const kicker = n.kind === "center" ? "EPISODE 1" : `RING ${n.ring} · ${sector?.name.toUpperCase() ?? ""} · ${kind}`;
-    const icon = n.kind === "center" ? art("board_center", `<i class="bn-clap big">EP.1</i>`, "px") : img(n.icon, "px");
-    if (!v || n.kind === "center") return { html: `<p class="flav">${esc(n.flavor)}</p><p>The centre of your Training Arc. Every path starts here.</p>`, foot: "", kicker, title: n.name, icon };
-    const pips = n.maxRank > 1 ? `<div class="rk-pips">${Array.from({ length: n.maxRank }, (_, i) => `<i class="${i < v.rank ? "on" : ""}"></i>`).join("")}<span>RANK ${v.rank} / ${n.maxRank}</span></div>` : "";
-    const now = v.rank > 0 ? `<div class="fx-now"><small>NOW</small>${n.effects.map((e) => `<b>${esc(effectText(e, v.rank))}</b>`).join("")}</div>` : "";
-    const next = !v.maxed ? `<div class="fx-next"><small>${v.rank > 0 ? "NEXT RANK" : "EFFECT"}</small>${n.effects.map((e) => `<b>${esc(effectText(e, v.rank + 1))}</b>`).join("")}</div>` : `<div class="fx-max">${tag("MAXED", "gold")} The montage is complete.</div>`;
-    let why = "";
-    if (v.block === "ring") {
-      const g = ringGate(n.ring, ctx);
-      why = `Ring ${n.ring} opens when you clear <b>${esc(g?.name ?? "the next stage")}</b>. Each ring is a new season.`;
-    } else if (v.block && v.block !== "maxed") why = esc(BLOCK_TEXT[v.block]);
-    const keyNote =
-      n.kind === "keystone"
-        ? `<div class="ks-note">${tag("KEYSTONE", "rainbow")} A build-defining story arc. Only ${TUNING.board.keystoneSlots} arcs can air per season.${v.rank > 0 ? ` <b>${v.active ? "ON AIR" : "OFF AIR"}</b>` : ""}</div>`
-        : "";
-    const html = `${n.flavor ? `<p class="flav">“${esc(n.flavor)}”</p>` : ""}${pips}${now}${next}${keyNote}${why ? `<p class="why">${why}</p>` : ""}`;
-    const foot = [
-      !v.maxed ? btn(`BUY ${money("coins", fmtInt(v.cost), v.affordable ? "" : "poor")}`, { cls: `gold small${v.block ? " nope" : ""}`, act: "buy", def: !v.block }) : "",
-      n.kind === "keystone" && v.rank > 0 ? btn(v.active ? "TAKE OFF AIR" : "PUT ON AIR", { cls: "violet small", act: "ks" }) : "",
-      v.rank > 0 ? btn("REFUND", { cls: "ghost small", act: "refund" }) : "",
-    ].join("");
-    return { html, foot, kicker, title: n.name, icon };
-  };
-
+  // ---- node sheet (the map stays live around it: tap another star to switch)
   const openNode = (id: string) => {
     app.sfx("uiConfirm");
     sheetId = id;
-    const c = nodeSheetHtml(id);
-    sheet?.close();
-    sheet = openSheet(app, { title: c.title, kicker: c.kicker, icon: c.icon, html: c.html, foot: c.foot, cls: "node-sheet", onClose: () => (sheet = null) });
-    bindSheet();
+    const c = nodeSheet(save.profile, id, ctx);
+    if (sheet && !sheet.closed) {
+      sheet.update(c);
+      fillGlyphs(sheet.el);
+      bindSheet();
+    } else {
+      sheet = openSheet(app, {
+        ...c,
+        cls: "node-sheet",
+        onClose: () => {
+          sheet = null;
+          placeSel(null);
+        },
+      });
+      sheet.el.classList.add("bd-sheet-wrap");
+      fillGlyphs(sheet.el);
+      bindSheet();
+    }
+    placeSel(id);
+    // keep the star clear of the sheet: above a bottom sheet, left of a side panel
+    requestAnimationFrame(() => frameNode(id));
+  };
+
+  const frameNode = (id: string) => {
+    const n = BOARD.byId.get(id);
+    if (!n || disposed) return;
+    const area = { x0: 0, y0: 0, x1: vp.viewW, y1: vp.viewH };
+    const sh = sheet && !sheet.closed ? (sheet.el.querySelector(".ksheet") as HTMLElement | null) : null;
+    if (sh && sheet) {
+      // the sheet's resting place (offsets ignore its slide-in transform)
+      const w = sheet.el.getBoundingClientRect();
+      const top = w.top + sh.offsetTop;
+      const left = w.left + sh.offsetLeft;
+      const v = vpEl.getBoundingClientRect();
+      if (top > v.top + v.height * 0.25) area.y1 = Math.max(80, top - v.top);
+      else if (left > v.left + v.width * 0.25) area.x1 = Math.max(80, left - v.left);
+    }
+    const [x, y] = px(n);
+    vp.ensureVisible(x, y, 70, area);
   };
 
   const refreshSheet = () => {
-    if (!sheet || !sheetId) return;
-    const c = nodeSheetHtml(sheetId);
-    sheet.update({ html: c.html, foot: c.foot });
+    if (!sheet || sheet.closed || !sheetId) return;
+    const c = nodeSheet(save.profile, sheetId, ctx);
+    sheet.update({ html: c.html, foot: c.foot, icon: c.icon });
+    fillGlyphs(sheet.el);
     bindSheet();
   };
 
@@ -223,45 +365,34 @@ export function boardPage(hub: Hub, o: PageOpts): HubPage {
     const s = sheet;
     if (!s) return;
     bindActs(s.el, {
-      buy: (b) => {
-        const r = buyNode(save.profile, sheetId, ctx);
-        if (!r.ok) {
-          app.sfx("nodeDeny");
-          shake(b);
-          if (r.block === "coins") hub.toast("Not enough Star Coins!", { kind: "bad", sub: "Have you tried... playing an episode?" });
-          return;
-        }
-        app.sfx("nodeBuy");
-        if (r.activated) hub.toast("Keystone on air!", { kind: "good", sub: BOARD.byId.get(sheetId)?.name });
-        plan = [];
-        hub.changed();
-        paint();
-        pop(nodeEls.get(sheetId) ?? null, 1.3);
-        refreshSheet();
-      },
+      buy: (b) => buy(sheetId, b),
       refund: async () => {
         const n = BOARD.byId.get(sheetId);
         const ok = await confirmDialog(app, { title: "Refund this rank?", body: `<b>${esc(n?.name ?? "")}</b> loses one rank. You get back what that rank cost.`, ok: "REFUND", cancel: "Keep it" });
-        if (!ok) return;
+        if (!ok || disposed) return;
         const r = refundNode(save.profile, sheetId);
         if (!r.ok) {
           app.sfx("uiDeny");
           hub.toast(r.block === "strands" ? "Other nodes depend on this one." : "Nothing to refund.", { kind: "bad", sub: r.block === "strands" ? "Refund the nodes further out first." : undefined });
           return;
         }
+        app.sfx("coin");
         plan = [];
         hub.changed();
         paint();
         refreshSheet();
+        const to = centerIn(hub.cbar.pill("coins"), app.ui);
+        flyCoins(fxLayer, centerIn(nodeEls.get(sheetId) ?? null, app.ui), to, 4, 420);
       },
       ks: () => {
         const r = toggleKeystone(save.profile, sheetId);
         if (!r.ok) {
           app.sfx("uiDeny");
-          hub.toast("Two arcs are already on air.", { kind: "bad", sub: "Take one off air first." });
+          hub.toast(`${TUNING.board.keystoneSlots} arcs are already on air.`, { kind: "bad", sub: "Take one off air first." });
           return;
         }
         app.sfx(r.active ? "equip" : "uiBack");
+        if (r.active) burstAt(content, ...px(BOARD.byId.get(sheetId) as BoardNode), { color: "#ff7ab8", label: "ON AIR!" });
         hub.changed(false);
         paint();
         refreshSheet();
@@ -269,22 +400,105 @@ export function boardPage(hub: Hub, o: PageOpts): HubPage {
     });
   };
 
-  const buyPlan = () => {
+  // ---- buying (the juice)
+  const calm = () => !!app.settings.reduceFlashing;
+
+  /** Buy one rank of `id`; `quiet` = part of a BUY PATH montage (fewer coins, no sheet refresh). */
+  const buy = (id: string, b?: HTMLElement, quiet = false): boolean => {
     const p = save.profile;
-    let n = 0;
-    for (const s of plan) {
-      if (!buyNode(p, s.id, ctx).ok) break;
-      n++;
-      const b = nodeEls.get(s.id);
-      setTimeout(() => pop(b ?? null, 1.3), n * 70);
+    const before = new Set<string>();
+    for (const [nid, v] of views) if (v.reachable && v.ringOpen) before.add(nid);
+    const prevRank = p.board.ranks[id] ?? 0;
+    const r = buyNode(p, id, ctx);
+    if (!r.ok) {
+      app.sfx("nodeDeny");
+      shake(b ?? null);
+      if (!quiet) {
+        if (r.block === "coins") hub.toast("Not enough Star Coins!", { kind: "bad", sub: "Have you tried... playing an episode?" });
+        else if (r.block === "unreachable") hub.toast("Not connected yet.", { kind: "bad", sub: "Connect it to a node you own first. Training is a journey." });
+      }
+      return false;
     }
-    plan = [];
-    if (n > 0) {
-      app.sfx("nodeBuy");
-      hub.toast(`Montage complete: ${n} node${n === 1 ? "" : "s"}!`, { kind: "good" });
-    } else app.sfx("nodeDeny");
-    hub.changed();
-    paint();
+    const n = BOARD.byId.get(id) as BoardNode;
+    const [x, y] = px(n);
+    const nodeEl = nodeEls.get(id) ?? null;
+    app.sfx("coin", 0.7, 2);
+    if (b) pop(b, 1.1);
+    plan = quiet ? plan : [];
+    if (quiet) hub.cbar.sync(p.currencies, false);
+    else hub.changed();
+    if (!quiet) refreshSheet();
+    // coins: from the coin pill to the star
+    const fromPt = centerIn(hub.cbar.pill("coins"), app.ui);
+    const toPt = centerIn(nodeEl?.querySelector(".bn-st") ?? nodeEl, app.ui);
+    const land = flyCoins(fxLayer, fromPt, toPt, quiet ? 3 : Math.min(8, 4 + Math.round(Math.log10(Math.max(10, r.cost ?? 10)))), quiet ? 340 : 460);
+    // the owned network lights the line into the new star while the coins travel
+    if (prevRank === 0) {
+      for (const ei of EDGES_OF.get(id) ?? []) {
+        const [ea, eb] = BOARD.edges[ei];
+        const other = ea === id ? eb : ea;
+        if (other !== CENTER_ID && (p.board.ranks[other] ?? 0) <= 0) continue;
+        const [ox, oy] = px(BOARD.byId.get(other) as BoardNode);
+        ignite(content, { x: ox, y: oy }, { x, y }, Math.max(0, land - 260), 260);
+      }
+    }
+    const hit = () => {
+      const maxed = (p.board.ranks[id] ?? 0) >= n.maxRank;
+      app.sfx("nodeBuy", 1, Math.min(6, prevRank * 2));
+      app.input.haptic(n.kind === "keystone" ? [20, 40, 30] : 18);
+      paint();
+      popEl(nodeEls.get(id)?.querySelector(".bn-st") ?? null, n.kind === "keystone");
+      burstAt(content, x, y, { color: sectorColor(n), big: n.kind === "keystone" || maxed, flash: !calm(), label: maxed && n.maxRank > 1 ? "MAX!" : n.maxRank > 1 ? `RANK ${prevRank + 1}` : "GET!" });
+      // neighbours that just came into reach twinkle in, outward from the new star
+      let k = 0;
+      for (const o2 of n.links) {
+        const v = views.get(o2);
+        if (v && v.reachable && v.ringOpen && v.rank === 0 && !before.has(o2)) revealEl(nodeEls.get(o2)?.querySelector(".bn-st") ?? null, 120 + k++ * 70);
+      }
+      if (n.kind === "keystone" && prevRank === 0)
+        later(reducedMotion() ? 0 : 420, () =>
+          keystoneSplash(app, {
+            node: n,
+            activated: !!r.activated,
+            slots: TUNING.board.keystoneSlots,
+            calm: calm(),
+            done: () => {
+              paint();
+              refreshSheet();
+            },
+          }),
+        );
+    };
+    if (land > 0) later(land, hit);
+    else hit();
+    return true;
+  };
+
+  const buyPlan = () => {
+    if (buyingPlan || !plan.length) return;
+    const steps = plan.slice();
+    buyingPlan = true;
+    let i = 0;
+    let bought = 0;
+    const step = () => {
+      if (disposed) return;
+      const s = steps[i++];
+      if (!s || !buy(s.id, undefined, true)) {
+        buyingPlan = false;
+        plan = [];
+        hub.changed();
+        later(reducedMotion() ? 0 : 520, () => {
+          paint();
+          refreshSheet();
+        });
+        if (bought > 0) hub.toast(`Montage complete: ${bought} node${bought === 1 ? "" : "s"}!`, { kind: "good", sub: "Training Arc: cleared. (This episode.)" });
+        else app.sfx("nodeDeny");
+        return;
+      }
+      bought++;
+      later(reducedMotion() ? 0 : 170, step);
+    };
+    step();
   };
 
   bindActs(el, {
@@ -292,55 +506,73 @@ export function boardPage(hub: Hub, o: PageOpts): HubPage {
     zin: () => vp.zoomBy(1.3),
     zout: () => vp.zoomBy(1 / 1.3),
     home: () => vp.go(0, 0, Math.max(vp.z, 0.8)),
-    auto: () => {
+    auto: (b) => {
       const p = save.profile;
-      plan = plan.length ? [] : autoPath(p, ctx, { maxSteps: 12 });
+      if (plan.length) {
+        plan = [];
+        app.sfx("uiBack");
+        b.classList.remove("on");
+        paint();
+        return;
+      }
+      plan = autoPath(p, ctx, { maxSteps: 15 });
       if (!plan.length) {
-        const cheap = affordableNodes(p, ctx)[0];
         app.sfx("uiDeny");
-        hub.toast(cheap ? "Nothing on the path." : "Nothing affordable right now.", { kind: "bad", sub: "Not enough Star Coins! Have you tried... playing an episode?" });
+        shake(b);
+        hub.toast(affordableNodes(p, ctx).length ? "Nothing on the path." : "Nothing affordable right now.", { kind: "bad", sub: "Not enough Star Coins! Have you tried... playing an episode?" });
       } else {
         app.sfx("uiConfirm");
-        const first = BOARD.byId.get(plan[0].id);
-        if (first) vp.go(first.x * K, first.y * K, Math.max(vp.z, 0.7));
+        b.classList.add("on");
+        const box = boxOf(plan.map((s) => s.id), 80);
+        vp.go((box.x0 + box.x1) / 2, (box.y0 + box.y1) / 2, Math.min(1, vp.fitZoom(box, 40)));
       }
       paint();
     },
-    respec: async () => {
+    respec: async (b) => {
       const p = save.profile;
       const pr = boardProgress(p);
       if (pr.spent <= 0) {
         app.sfx("uiDeny");
-        hub.toast("Nothing to reboot yet.", { kind: "info" });
+        shake(b);
+        hub.toast("Nothing to reboot yet.", { kind: "info", sub: "Buy a node first. Then regret it." });
         return;
       }
       const fee = respecFee(p);
       const ok = await confirmDialog(app, {
         title: "Reboot the series?",
-        body: `All nodes will be refunded (minus a small fee for the reboot).<br>Refund ${money("coins", fmtInt(pr.spent - fee))} · fee ${money("coins", fmtInt(fee))}`,
+        body: `All nodes will be refunded (minus a small fee for the reboot).<div class="bd-respec">${money("coins", fmtInt(pr.spent - fee))}<small>refund</small><span>·</span>${money("coins", fmtInt(fee), "poor")}<small>reboot fee</small></div>`,
         ok: "REBOOT",
         cancel: "Keep my arc",
         danger: true,
       });
-      if (!ok) return;
-      respecBoard(p);
+      if (!ok || disposed) return;
+      sheet?.close();
+      app.sfx("cassetteEject");
+      await rewind(vpEl);
+      if (disposed) return;
+      const r = respecBoard(save.profile);
       plan = [];
       app.sfx("reroll");
       hub.changed();
       paint();
-      vp.go(0, 0, 0.8);
+      vp.go(0, 0, vp.z);
+      flyCoins(fxLayer, { x: app.ui.clientWidth / 2, y: app.ui.clientHeight / 2 }, centerIn(hub.cbar.pill("coins"), app.ui), 8, 520);
+      hub.toast("Series rebooted!", { kind: "good", sub: `${fmtInt(r.refund)} Star Coins back. The fee was ${fmtInt(r.fee)}. Showbiz.` });
     },
   });
-  // keyboard / gamepad focus: keep the focused node on screen
+  // keyboard / gamepad focus: keep the focused star on screen
   el.addEventListener("navfocus", (e) => {
     const b = (e.target as HTMLElement).closest<HTMLElement>(".bn");
     const n = b ? BOARD.byId.get(b.dataset.id as string) : undefined;
-    if (n) vp.ensureVisible(n.x * K, n.y * K, 90 * vp.z + 40);
+    if (n) {
+      const [x, y] = px(n);
+      vp.ensureVisible(x, y, 110);
+    }
   });
 
   paint();
-  // start (first frame, once the page is laid out): the cheapest affordable node (results "Upgrade"),
-  // else the centre, at a zoom that fits rings 1-2 in the view
+
+  // start (first frame, once laid out): the cheapest affordable node (results "Upgrade"), else the centre
   const start = o.focus === "affordable" ? affordableNodes(save.profile, ctx)[0]?.node : undefined;
   const startEl = start ? nodeEls.get(start.id) : nodeEls.get(CENTER_ID);
   layer.focus = startEl ?? null;
@@ -349,9 +581,21 @@ export function boardPage(hub: Hub, o: PageOpts): HubPage {
     placed = true;
     vp.measure();
     // fit rings 1-2 (the early game) in the shorter side of the view
-    const z = Math.max(0.42, Math.min(1.05, Math.min(vp.viewW, vp.viewH) / (2 * (BOARD.radius[2] * K + 56))));
-    vp.go(start ? start.x * K * 0.6 : 0, start ? start.y * K * 0.6 : 0, z, 0);
-    if (start) setTimeout(() => pop(startEl ?? null, 1.5), 450);
+    const z = Math.max(0.42, Math.min(1.05, Math.min(vp.viewW, vp.viewH) / (2 * (RING_PX[2] + 70))));
+    const [sx, sy] = start ? px(start) : [0, 0];
+    vp.go(sx * 0.6, sy * 0.6, z, 0);
+    if (start) later(450, () => popEl(startEl?.querySelector(".bn-st") ?? null));
+  };
+
+  // sky parallax (a quarter of the map's speed) - written only when the camera moved
+  let skySeen = -1;
+  const followSky = () => {
+    if (vp.version === skySeen) return;
+    skySeen = vp.version;
+    const T = 256;
+    const ox = (((-vp.cx * vp.z * 0.22) % T) + T) % T;
+    const oy = (((-vp.cy * vp.z * 0.22) % T) + T) % T;
+    sky.style.transform = `translate3d(${(ox - T).toFixed(1)}px, ${(oy - T).toFixed(1)}px, 0)`;
   };
 
   return {
@@ -366,10 +610,16 @@ export function boardPage(hub: Hub, o: PageOpts): HubPage {
     update(dt) {
       if (!placed) place();
       vp.update(dt);
+      followSky();
+      minimap.follow(vp);
     },
     dispose() {
+      disposed = true;
+      for (const t of timers) clearTimeout(t);
+      timers.clear();
       sheet?.close();
       vp.dispose();
+      fxLayer.remove();
     },
   };
 }

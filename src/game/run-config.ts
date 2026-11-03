@@ -110,7 +110,7 @@ export interface RunStats {
   bossKills: string[];
   damageByWeapon: Record<string, number>;
   killsByWeapon: Record<string, number>;
-  /** Weapon ids held at max level / evolved at the end. */
+  /** Evolved weapon ids held at the end (Plot Points "Evolve X weapons" / "Hold 6 evolved weapons"). */
   evolutions: string[];
   dashes: number;
   ults: number;

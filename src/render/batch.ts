@@ -64,6 +64,7 @@ layout(location=5) in vec4 a_color;
 layout(location=6) in vec4 a_extra;
 uniform vec2 u_origin;   // world position of target pixel (0,0) (integer)
 uniform vec2 u_size;     // target size in world pixels
+uniform vec2 u_snap;     // target texels per world pixel (1 = art resolution; < 1 = a low-res scene)
 uniform vec2 u_atlasInv;
 out vec2 v_uv;
 out vec4 v_tint;   // rgb = tint * alpha, a = alpha
@@ -83,7 +84,8 @@ void main() {
     if (a_extra.z < 0.5) {
       // snap the quad's min corner to the pixel grid (crisp, no shimmering)
       vec2 mn = rel + min(-a_pivot * a_scale, (size - a_pivot) * a_scale);
-      p += floor(mn + 0.5) - mn;
+      vec2 sn = mn * u_snap;
+      p += (floor(sn + 0.5) - sn) / u_snap;
     }
   }
   gl_Position = vec4(p / u_size * 2.0 - 1.0, 0.0, 1.0);
@@ -192,13 +194,64 @@ export class SpriteBatch {
     py: number,
   ): void {
     if (alpha <= 0.002) return;
+    this.emit(layer, this.fx[handle] | (this.fy[handle] << 16), this.fw[handle] | (this.fh[handle] << 16), x, y, sx, sy, rot, color, alpha, flash, flags, px, py);
+  }
+
+  /**
+   * Draw only the sub-rectangle (rx, ry, rw, rh) of a frame (sprite pixels,
+   * clamped to the frame). The pivot (px, py) is relative to the sub-rect's
+   * top-left. Used e.g. to re-draw lettering un-mirrored over a flipped sprite.
+   */
+  drawSub(
+    layer: number,
+    handle: number,
+    rx: number,
+    ry: number,
+    rw: number,
+    rh: number,
+    x: number,
+    y: number,
+    sx: number,
+    sy: number,
+    color: number,
+    alpha: number,
+    flash: number,
+    flags: number,
+    px: number,
+    py: number,
+  ): void {
+    if (alpha <= 0.002) return;
+    const fw = this.fw[handle];
+    const fh = this.fh[handle];
+    const x0 = Math.max(0, Math.min(fw, rx | 0));
+    const y0 = Math.max(0, Math.min(fh, ry | 0));
+    const w = Math.min(fw - x0, rw | 0);
+    const h = Math.min(fh - y0, rh | 0);
+    if (w <= 0 || h <= 0) return;
+    this.emit(layer, (this.fx[handle] + x0) | ((this.fy[handle] + y0) << 16), w | (h << 16), x, y, sx, sy, 0, color, alpha, flash, flags, px, py);
+  }
+
+  private emit(
+    layer: number,
+    uv0: number,
+    uv1: number,
+    x: number,
+    y: number,
+    sx: number,
+    sy: number,
+    rot: number,
+    color: number,
+    alpha: number,
+    flash: number,
+    flags: number,
+    px: number,
+    py: number,
+  ): void {
     if (layer === Layer.FxAdd) flags |= Flag.Add;
     const a = alpha >= 1 ? 255 : (alpha * 255 + 0.5) | 0;
     const col = ((color >>> 16) & 255) | (color & 0xff00) | ((color & 255) << 16) | (a << 24);
     const ext =
       (flash <= 0 ? 0 : flash >= 1 ? 255 : (flash * 255 + 0.5) | 0) | (flags & Flag.Add ? 0xff00 : 0) | (flags & Flag.NoSnap ? 0xff0000 : 0);
-    const uv0 = this.fx[handle] | (this.fy[handle] << 16);
-    const uv1 = this.fw[handle] | (this.fh[handle] << 16);
     if (!(flags & Flag.GlowOnly)) {
       const L = this.layers[layer];
       if (L.count >= L.cap && !L.grow()) return this.full();
@@ -345,13 +398,18 @@ export class SpriteBatch {
     this.stats.drawCalls = 0;
   }
 
-  /** Bind program + uniforms for a pass into a target covering the world rect (ox, oy, w, h). */
-  begin(ox: number, oy: number, w: number, h: number, gain: number): void {
+  /**
+   * Bind program + uniforms for a pass into a target covering the world rect (ox, oy, w, h).
+   * `snapX / snapY` = target texels per world pixel: sprites snap to that grid (1 = the art pixel grid; a
+   * half-resolution scene - Renderer.sceneScale 0.5 - snaps to 2-art-pixel blocks).
+   */
+  begin(ox: number, oy: number, w: number, h: number, gain: number, snapX = 1, snapY = snapX): void {
     const gl = this.gl as GL;
     const p = this.prog as Program;
     gl.useProgram(p.prog);
     gl.uniform2f(p.u.u_origin, ox, oy);
     gl.uniform2f(p.u.u_size, w, h);
+    gl.uniform2f(p.u.u_snap, snapX, snapY);
     gl.uniform2f(p.u.u_atlasInv, 1 / this.atlas.width, 1 / this.atlas.height);
     gl.uniform1f(p.u.u_gain, gain);
     gl.uniform1i(p.u.u_atlas, 0);

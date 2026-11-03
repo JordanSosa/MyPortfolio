@@ -148,10 +148,12 @@ export function openLevelUp(app: App, w: World): UiScreen {
     banishBtn?.classList.toggle("on", on);
     updateSub();
   };
+  /** The first card of a SEASON FINALE level-up (Season Finale Manga: w.doublePicks) was taken: one more from the rest. */
+  let bonusPick = false;
   const updateSub = () => {
-    sub.textContent = banishing
-      ? "TAP A CARD TO BANISH IT FOR THE RUN"
-      : `LV ${w.level - w.pendingLevels + 1}${w.pendingLevels > 1 ? `  ·  +${w.pendingLevels - 1} MORE` : ""}  ·  CHOOSE ONE`;
+    const lv = w.level - w.pendingLevels + 1;
+    const choose = bonusPick ? "SEASON FINALE · PICK 1 MORE" : w.doublePicks.has(lv) ? "SEASON FINALE · PICK 2" : "CHOOSE ONE";
+    sub.textContent = banishing ? "TAP A CARD TO BANISH IT FOR THE RUN" : `LV ${lv}${w.pendingLevels > 1 ? `  ·  +${w.pendingLevels - 1} MORE` : ""}  ·  ${choose}`;
   };
   const updateFoot = () => {
     const left = w.rerollsLeft;
@@ -223,6 +225,7 @@ export function openLevelUp(app: App, w: World): UiScreen {
   const skip = () => {
     if (busy || openT < GUARD || w.skips <= 0) return;
     if (!w.skipLevelUp()) return;
+    bonusPick = false;
     busy = true;
     app.sfx("coin");
     cardsEl.querySelectorAll<HTMLElement>(".card").forEach((b) => b.classList.add("gone"));
@@ -247,7 +250,12 @@ export function openLevelUp(app: App, w: World): UiScreen {
     els.forEach((b, k) => b.classList.add(k === i ? "picked" : "gone"));
     // evolutions play their "evolve" fanfare in the deferred celebration (view/feedback.ts) once the modal closes
     app.sfx(c.kind === "evolution" ? "powerup" : "cardPick");
+    const lv = w.level - w.pendingLevels + 1;
+    const double = w.doublePicks.has(lv);
+    const pending = w.pendingLevels;
     w.choose(c);
+    // (World.choose kept the rest of the offer for a second pick when the level is still pending)
+    bonusPick = double && w.pendingLevels === pending;
     setTimeout(() => {
       busy = false;
       if (w.pendingLevels > 0) {

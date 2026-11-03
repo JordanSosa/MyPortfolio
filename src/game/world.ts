@@ -260,6 +260,7 @@ const newEnemy = (): Enemy => ({
   inv: 0,
   skin: "",
   stun: 0,
+  untargetable: false,
 });
 
 export function resetProjectile(p: Projectile): void {
@@ -312,7 +313,7 @@ const newProjectile = (): Projectile => {
   resetProjectile(p);
   return p;
 };
-const newBullet = (): Bullet => ({ x: 0, y: 0, vx: 0, vy: 0, r: 3, dmg: 5, life: 4, age: 0, sprite: "eb_orb", turn: 0, accel: 0, from: "", dead: false });
+const newBullet = (): Bullet => ({ x: 0, y: 0, vx: 0, vy: 0, r: 3, dmg: 5, life: 4, age: 0, sprite: "eb_orb", turn: 0, accel: 0, from: "", tint: 0xffffff, dead: false });
 const newTelegraph = (): Telegraph => ({ shape: 0, x: 0, y: 0, x2: 0, y2: 0, r: 10, age: 0, life: 1, color: 0xff4d6d, dead: false });
 const newGem = (): Gem => ({ x: 0, y: 0, z: 0, vz: 0, vx: 0, vy: 0, value: 1, tier: 1, state: 0, speed: 0, t: 0, dead: false });
 const newPickup = (): Pickup => ({ kind: "coin", x: 0, y: 0, z: 0, vz: 0, vx: 0, vy: 0, value: 1, golden: false, censored: false, sprite: "", tint: 0xffffff, state: 0, speed: 0, t: 0, dead: false });
@@ -396,8 +397,17 @@ export class World {
   readonly hurtGuards: ((dmg: number, sx: number, sy: number) => boolean)[] = [];
   /** Contact damage taken multiplier (Senpai's "Too Cool To Get Hit"); bullets / blasts are unaffected. */
   contactDmg = 1;
+  /** The hero dozes off in the Kotatsu of Sloth ("Too Comfy"): weapon hits deal no damage while true. */
+  dozing = false;
   /** The hero ignores hit recoil (Truck-kun: "can't be knocked back"). */
   heavy = false;
+  /**
+   * Hit context for `dmgTaken` / `hit` listeners: the projectile whose hit is being applied
+   * (projectileHits, else null) and how many `explode()` calls are on the stack (Candy Kingdom:
+   * the Candy Corn's front-half Shield Wall, the Marshmallow Brute's Toasty).
+   */
+  hitProj: Projectile | null = null;
+  blastDepth = 0;
   /**
    * Hero movement override (Truck-kun drives like a vehicle): when set it replaces the default
    * input -> velocity damping (dashes still use the dash velocity); it sets player.vx / vy.
@@ -432,6 +442,17 @@ export class World {
   skips = 0;
   /** Rerolls never run out (Infinite Gacha Credit Card / flag). */
   freeRerolls = false;
+  /**
+   * Hurt modifiers (relics: Mascot Costume Head, Pocket Tissues): run on every hit that lands, after
+   * shields / armor / damage reduction and before the lethal check; each returns the new damage (min 1).
+   */
+  readonly hurtMods: ((dmg: number, sx: number, sy: number) => number)[] = [];
+  /** Extra chest JACKPOT chance, absolute (0.02 = +2 %): Waving Lucky Cat, Pity Counter Keychain. */
+  jackpotBonus = 0;
+  /** Chests offer a weapon's evolution this many levels before its max level (Golden Gacha Ticket: 1 = Lv4). */
+  chestEvoEarly = 0;
+  /** Levels whose level-up lets the player pick a second card from the same offer (Season Finale Manga). */
+  readonly doublePicks = new Set<number>();
   /** Lethal hits that will still be survived (Plot Armor) and how many were. */
   plotArmor = 0;
   plotArmorSaves = 0;
@@ -544,6 +565,7 @@ export class World {
   private readonly hLevel = { level: 0 };
   private readonly hAmount = { amount: 0 };
   private readonly hStep = { dt: 0 };
+  private readonly hBlast = { x: 0, y: 0, r: 0 };
   private readonly hEnemy = { enemy: null as unknown as Enemy };
   private readonly hBossKill = { enemy: null as unknown as Enemy, final: false };
   private readonly hPos = { x: 0, y: 0 };
@@ -948,7 +970,9 @@ export class World {
       return true;
     }
     const s = this.stats;
-    const d = Math.max(1, Math.round(s.dmgReduction > 0 ? (dmg - s.armor) * (1 - s.dmgReduction) : dmg - s.armor));
+    let d = Math.max(1, Math.round(s.dmgReduction > 0 ? (dmg - s.armor) * (1 - s.dmgReduction) : dmg - s.armor));
+    const hm = this.hurtMods;
+    for (let i = 0; i < hm.length; i++) d = Math.max(1, Math.round(hm[i](d, sx, sy)));
     if (p.hp - d <= 0 && this.saveFromLethal(d)) return true;
     p.hp -= d;
     p.iframes = CFG.hurtIframes;
@@ -1187,6 +1211,7 @@ export class World {
     e.inv = 0;
     e.skin = "";
     e.stun = 0;
+    e.untargetable = false;
     if (d.prop) this.propCount++;
     else this.enemyCount++;
     d.init?.(e, this);
@@ -1339,6 +1364,8 @@ export class World {
   /** Damage an enemy. Rolls crit + variance. Returns true if it died. */
   hitEnemy(e: Enemy, base: number, owner: WeaponInstance | null, angle: number, knock: number, critBonus: number, source: string, color: number): boolean {
     if (e.dead || e.inv > 0) return false;
+    // Too Comfy (Kotatsu of Sloth): the hero dozes and no weapon deals damage (no hit, no hook, no number)
+    if (this.dozing && (owner || WEAPONS.has(source))) return false;
     const s = this.stats;
     let crit = this.rng.next() < s.crit + critBonus;
     if (!crit && this.critRules.length) for (let i = 0; i < this.critRules.length && !crit; i++) crit = this.critRules[i](e, source);
@@ -1535,10 +1562,19 @@ export class World {
       const dy = e.y - e.cy - y;
       const rr = r + e.r;
       if (dx * dx + dy * dy > rr * rr) continue;
+      this.blastDepth++;
       this.hitEnemy(e, dmg, owner, Math.atan2(dy, dx), knock, critBonus, source, color);
+      this.blastDepth--;
       hits++;
     }
     this.release();
+    if (this.hooks.has("blast")) {
+      const hb = this.hBlast;
+      hb.x = x;
+      hb.y = y;
+      hb.r = r;
+      this.hooks.emit("blast", hb);
+    }
     this.emit("explosion", { x, y, r, source, big });
     return hits;
   }
@@ -1574,7 +1610,7 @@ export class World {
   private homingP: Projectile | null = null;
   private acceptHoming = (id: number): boolean => {
     const e = this.enemies.items[id];
-    if (!e || e.dead || e.def.prop) return false;
+    if (!e || e.dead || e.def.prop || e.untargetable) return false;
     const p = this.homingP;
     return !p || p.hitEvery > 0 || !hasHit(p, e.uid);
   };
@@ -1586,7 +1622,7 @@ export class World {
   }
   private acceptTarget = (id: number): boolean => {
     const e = this.enemies.items[id];
-    return !!e && !e.dead && !e.def.prop;
+    return !!e && !e.dead && !e.def.prop && !e.untargetable;
   };
 
   /**
@@ -1601,7 +1637,7 @@ export class World {
     if (this.sortKey.length < n) this.sortKey = new Float64Array(n * 2);
     for (let k = 0; k < n; k++) {
       const e = this.enemies.items[buf[k]];
-      if (!e || e.dead || e.def.prop) continue;
+      if (!e || e.dead || e.def.prop || e.untargetable) continue;
       const dx = e.x - x;
       const dy = e.y - e.cy - y;
       this.sortKey[buf[k]] = dx * dx + dy * dy;
@@ -1625,7 +1661,7 @@ export class World {
     const start = this.rng.int(0, cnt - 1);
     for (let k = 0; k < cnt; k++) {
       const e = this.enemies.items[(start + k) % cnt];
-      if (e.dead || e.def.prop) continue;
+      if (e.dead || e.def.prop || e.untargetable) continue;
       if (Math.abs(e.x - p.x) <= hw && Math.abs(e.y - p.y) <= hh) return e;
     }
     return null;
@@ -1834,7 +1870,9 @@ export class World {
       }
       const ang = p.kind === PK_FREE && (p.vx !== 0 || p.vy !== 0) ? Math.atan2(p.vy, p.vx) : Math.atan2(dy, dx);
       const color = p.owner ? p.owner.def.color : p.tint;
+      this.hitProj = p;
       this.hitEnemy(e, p.dmg, p.owner, ang, p.knock, p.crit, p.source, color);
+      this.hitProj = null;
       p.onHit?.(p, this, e);
       if (p.dead) break;
       p.pierce--;
@@ -1889,6 +1927,7 @@ export class World {
     b.turn = 0;
     b.accel = 0;
     b.from = this.acting;
+    b.tint = 0xffffff;
     b.dead = false;
     if (!this.muted) {
       // one reused payload (bursts of 16+ bullets are common); audio rate-limits the sfx
@@ -2424,6 +2463,7 @@ export class World {
     this.passives.push(pi);
     if (!this.passivesUsed.includes(id)) this.passivesUsed.push(id);
     this.buildVersion++;
+    def.install?.(this, pi);
     this.recomputeStats();
     return pi;
   }
@@ -2543,6 +2583,20 @@ export class World {
   /** Apply a level-up card and consume one pending level. */
   choose(card: UpgradeCard): void {
     applyCard(this, card);
+    // a SEASON FINALE level-up (Season Finale Manga): pick a second card from the same offer
+    const offer = this.currentOffer;
+    if (offer && this.doublePicks.size > 0 && this.doublePicks.delete(this.level - this.pendingLevels + 1)) {
+      const rest = offer.filter(
+        (c) =>
+          c !== card &&
+          !(c.kind === "weapon" && !this.hasWeapon(c.id) && this.weapons.length >= this.weaponSlots) &&
+          !(c.kind === "passive" && this.passiveLevel(c.id) <= 0 && this.passives.length >= this.passiveSlots),
+      );
+      if (rest.length > 0) {
+        this.currentOffer = rest;
+        return;
+      }
+    }
     this.currentOffer = null;
     if (this.pendingLevels > 0) this.pendingLevels--;
   }

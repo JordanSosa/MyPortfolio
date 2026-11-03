@@ -13,7 +13,7 @@ import type { BannerKind, DupeResult, Profile, PullRecord } from "../profile";
 import { TUNING } from "../tuning";
 import { mathRandom, type RandomSource } from "../util";
 import { bannerPool, bannerView, gachaItem, heroItem, TRAFFIC_CONE, type GachaItem, type Pool } from "./banners";
-import { R_N, R_SSR, rarityAt, rarityIndex, RarityRoller, WHY_HARD, WHY_SOFT, WHY_UR, WHY_FLOOR } from "./rates";
+import { R_N, R_SSR, R_UR, rarityAt, rarityIndex, RarityRoller, WHY_BASE, WHY_HARD, WHY_SOFT, WHY_UR, WHY_FLOOR } from "./rates";
 
 export interface PullResult {
   item: GachaItem;
@@ -99,12 +99,26 @@ function record(p: Profile, banner: BannerKind, r: PullResult): void {
   if (h.length > G.historySize) h.splice(0, h.length - G.historySize);
 }
 
+/** Extra `pull` options. */
+export interface PullOpts {
+  /** No gems are charged (welcome gifts, tests). */
+  free?: boolean;
+  /**
+   * Debug / tests only (the UI passes it from a dev-only hook): result number
+   * `forceAt` (default: the last of the pull) has this rarity instead of a roll.
+   * Pity counters move exactly as if it had been rolled; everything after the
+   * rarity (50/50, item pick, dupes) runs as usual.
+   */
+  force?: Rarity;
+  forceAt?: number;
+}
+
 /**
  * Pull `count` (1 or 10) on a banner. Pays gems (unless `free`), updates pity,
  * the spark, history, stats and the collection. Never throws; returns
  * `{ ok: false, error }` when the banner is unavailable or gems are short.
  */
-export function pull(p: Profile, banner: BannerKind, count: 1 | 10, rng: RandomSource = mathRandom, ctx: MetaContent = gameContent(), opts: { free?: boolean } = {}): PullOutcome {
+export function pull(p: Profile, banner: BannerKind, count: 1 | 10, rng: RandomSource = mathRandom, ctx: MetaContent = gameContent(), opts: PullOpts = {}): PullOutcome {
   const G = TUNING.gacha;
   const fail = (error: PullError): PullOutcome => ({ ok: false, error, banner, results: [], best: "N", gemsSpent: 0, copium: 0, codexGems: 0, sparkReady: p.gacha.spark >= G.spark });
   if (count !== 1 && count !== 10) return fail("count");
@@ -120,6 +134,8 @@ export function pull(p: Profile, banner: BannerKind, count: 1 | 10, rng: RandomS
   const featured = view.featured;
   const cone = pool.N.find((x) => x.id === TRAFFIC_CONE);
   const floorIdx = rarityIndex(G.tenPullFloor);
+  const forceIdx = opts.force !== undefined ? rarityIndex(opts.force) : -1;
+  const forceAt = Math.max(0, Math.min(count - 1, Math.floor(opts.forceAt ?? count - 1)));
   const results: PullResult[] = [];
   let best = 0;
   let copium = 0;
@@ -128,8 +144,17 @@ export function pull(p: Profile, banner: BannerKind, count: 1 | 10, rng: RandomS
   for (let i = 0; i < count; i++) {
     const floor = count === 10 && i === count - 1 && !hadFloor ? floorIdx : -1;
     const pityBefore = st.pity;
-    const rolled = ROLLER.roll(st, rng, floor);
-    const why = ROLLER.last;
+    let rolled: number;
+    let why: number;
+    if (forceIdx >= 0 && i === forceAt) {
+      rolled = forceIdx;
+      why = WHY_BASE;
+      st.pity = rolled >= R_SSR ? 0 : st.pity + 1;
+      st.pityUR = rolled >= R_UR ? 0 : st.pityUR + 1;
+    } else {
+      rolled = ROLLER.roll(st, rng, floor);
+      why = ROLLER.last;
+    }
     const ri = resolveRarity(pool, rolled);
     if (ri < 0) break; // unreachable: the banner view guarantees a non-empty pool
     const rarity = rarityAt(ri);

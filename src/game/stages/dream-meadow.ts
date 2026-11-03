@@ -58,13 +58,17 @@ export const dreamMeadow: StageDef = {
   order: 1,
   duration: 600,
   rewardMul: 1,
+  // the beat clock (Idol Lightstick Wave) follows the shipped battle theme (src/audio/music/songs/battle.ts: 150 bpm);
+  // the bible's 140 predates that track - the music wins, so the waves land on its beat
+  bpm: 150,
 
   phases: PHASES,
   events: EVENTS,
   opening: { enemy: "puff", count: 10 },
   finalBoss: "lady_lunatic",
   enrageAt: 630,
-  props: { interval: 16, max: 4 },
+  // (named: later stages register their own props - beach balls, coolers, CRT TVs - which must stay out of the meadow)
+  props: { ids: ["prop_lantern", "prop_gift"], interval: 16, max: 4 },
   endless: {
     hpPerMinute: 0.35,
     spawnPerMinute: 0.08,

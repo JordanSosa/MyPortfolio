@@ -25,7 +25,8 @@ import { TAU, clamp } from "../../core/math";
 import type { Enemy, EnemyDef } from "../types";
 import type { World } from "../world";
 import { aimAt, B_MOON, B_ORB, B_STAR, fan, ring, shoot } from "../enemies/_bullets";
-import { EFX_CAST, EFX_DAWN_POP, EFX_SUMMON, EFX_TELE_IN, EFX_TELE_OUT, efx, onScreen, shock } from "../enemies/_fx";
+import { EFX_CAST, EFX_SUMMON, EFX_TELE_IN, EFX_TELE_OUT, efx, onScreen, shock } from "../enemies/_fx";
+import { dawnOut } from "./_dawn";
 import { LL_BODY, LUNA_RING_N, lunaBodyY, lunaRing, lunaState, lunaStateOf as st, type LunaState } from "./_luna";
 
 // (ring geometry + per-boss state live in ./_luna so the bot / view can read them without import cycles)
@@ -196,22 +197,6 @@ function startFlourish(e: Enemy, w: World, s: LunaState, phase: number): void {
   const title = phase === 2 ? "MOONLIT WALTZ" : "LUNATIC MOON";
   const sub = phase === 2 ? "the moons begin to dance" : "the night bares its fangs";
   w.emit("bossPhase", { id: e.def.id, phase, x: e.x, y: e.y, title, subtitle: sub });
-}
-
-/** Final dawn: every other nightmare dissolves in light, outward from her. */
-function dawn(e: Enemy, w: World): void {
-  w.clearBullets();
-  const items = w.enemies.items;
-  for (let i = 0; i < w.enemies.count; i++) {
-    const o = items[i];
-    if (o === e || o.dead) continue;
-    if (!o.def.prop && onScreen(w, o.x, o.y, 30)) {
-      const dx = o.x - e.x;
-      const dy = o.y - e.y;
-      efx(w, EFX_DAWN_POP, o.x, o.y, 0, 0, 0.35 + Math.sqrt(dx * dx + dy * dy) / 260, o);
-    }
-    w.despawn(o);
-  }
 }
 
 export const ladyLunatic: EnemyDef = {
@@ -453,7 +438,8 @@ export const ladyLunatic: EnemyDef = {
   onDeath(e, w) {
     const s = lunaState(e);
     if (s) s.ringT = -1;
-    dawn(e, w);
+    // final dawn: every other nightmare dissolves in light, outward from her
+    dawnOut(e, w);
   },
 };
 
