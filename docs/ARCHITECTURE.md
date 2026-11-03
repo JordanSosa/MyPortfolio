@@ -136,7 +136,8 @@ src/
                        elite 25 % on entering the view, scripted lines from the sim's `enemySay`, free-standing
                        `sayAt(x, y, text, life, ink)` lines (boss death lines: rows of <= 22 characters, a trailing "♡"
                        as the heart sprite, kept out of the bottom third where the touch buttons are); 3 on screen in
-                       total, 8 s per type, none above 200 enemies or within 40 px of the hero
+                       total (an ambient one never placed over another), 8 s per type, none above 200 enemies or
+                       within 40 px of the hero
     bullet-looks.ts    SHARED per-sprite enemy-bullet looks for drawBullets (glow colour / radius, spin, velocity
                        rotation, tint, size by hit radius): a stage view registers its bullets at module load
     candy-fx.ts        Candy Kingdom looks: gummy flavour tints, Shield Wall glint, Corn-mander flag, donut roll
@@ -777,7 +778,7 @@ carries trait behaviour, and the bot's per-hero distances live in `debug/bot.ts`
 | Telegraphs: eye charge glow, pumpkin shiver + red flash + dash lane (chevrons), wisp fuse blink + blast ring, claw-sweep circle | `bestiary-fx.ts decorate`, `WorldView.drawTelegraphs` |
 | Stomps, skids, dust walls, roars, summons, teleports | `bestiary-fx.ts` via `enemyFx` events |
 | Boss phase change (banner, flash, shockwave, speed lines, duck), enrage (WARNING banner, red grade + vignette) | `bestiary-fx.ts bossPhase / bossEnrage / applyGrade` |
-| VICTORY: slow-mo chained explosions up the final boss, dawn flash at 1.7 s, enemies dissolve into light, "DAWN BREAKS!", sunrise grade sweep + sun + god rays, fireworks, victory music, results modal at 7.2 s | `bestiary-fx.ts finalDeath / victory / drawDawn`, `App.gameFrame` |
+| VICTORY: slow-mo chained explosions up the final boss, dawn flash at 1.7 s, enemies dissolve into light, the stage's `victory.title` / `line` ("DAWN BREAKS!", "SUGAR CRASH!" ...: the title steps down a whole pixel scale and a long line wraps onto two rows when the view is too narrow), sunrise grade sweep + sun + god rays, fireworks, victory music, results modal at 7.2 s | `bestiary-fx.ts finalDeath / victory / drawDawn`, `App.gameFrame` |
 | Bullet clears pop every bullet into a sparkle | `bestiary-fx.ts bulletsCleared` |
 | Combo counter, rank stamps (one-shot shine inside the glyph's gradient fill), SSS border (opacity crossfade), milestone blip every 25 (`comboUp`); the timer bar drains faster at high ranks (gold-pink from S), a rank drop replays the letter falling in + a red flinch on the counter + a soft high `comboBreak` | `hud.ts` (WAAPI), `feedback.ts enemyKilled / comboDrop` |
 | Peak-chaos readability: adaptive bloom limiter (`r.post.load` from the glow-instance count), fewer sparks / puffs / numbers, fainter + smaller enemy numbers (a screen with 40+ enemy bullets counts as busy too), hero beacon (faint silhouette + ring above player fx, under bullets; also forced on for ~0.5 s when an explosion / Raijin blast lands on the hero, `WorldView.coverHero`), small player shots fade within 16 px of the hero's body (Galaxy Barrage streams spawn there); the beacon redraws the hero's current frame translucent (its plum outline reads over white blasts and pink star clouds), and the live boss gets the same treatment (boss beacon) so it never vanishes under six evolutions | `render/post.ts feedGlow`, `feedback.ts frame()`, `fx/damage.ts busy`, `WorldView.drawHeroBeacon / drawBossBeacon / drawProjectiles` |

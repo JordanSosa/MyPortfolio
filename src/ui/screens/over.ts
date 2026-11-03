@@ -86,11 +86,15 @@ export function openGameOver(app: App, w: World, victory: boolean): UiScreen {
   app.ui.appendChild(el);
   let t = 0;
   let banked = false;
+  // the buttons wake up 0.5 s after the stinger lands - in REAL time: the App caps a frame's dt at 1/20 s, so on a
+  // slow device a frame-time guard could swallow a deliberate tap / Enter for seconds
+  const born = performance.now();
+  const asleep = () => performance.now() - born < 500;
   // the subtitle types out once the banner has landed (text changes only when a letter is added)
   const subEl = el.querySelector(".os-t") as HTMLElement | null;
   let typedN = reducedMotion() ? sub.length : 0;
   onTap(el.querySelector('[data-act="revive"]'), () => {
-    if (t < 0.5) return;
+    if (asleep()) return;
     if (w.revive()) {
       app.sfx("revive");
       app.closeModal();
@@ -98,14 +102,14 @@ export function openGameOver(app: App, w: World, victory: boolean): UiScreen {
     }
   });
   onTap(el.querySelector('[data-act="retry"]'), () => {
-    if (t < 0.5 || banked) return;
+    if (asleep() || banked) return;
     // bank the run like the Results screen does (coins, bests, run counter), then go again
     banked = true;
     app.sfx("uiConfirm");
     app.retryFromGameOver();
   });
   onTap(el.querySelector('[data-act="results"]'), () => {
-    if (t < 0.5 || banked) return;
+    if (asleep() || banked) return;
     app.sfx("uiConfirm");
     app.endRun();
   });

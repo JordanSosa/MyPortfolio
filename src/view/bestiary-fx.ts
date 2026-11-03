@@ -887,8 +887,16 @@ export class BestiaryFx {
     });
     this.after(DAWN_AT + 0.35, () => {
       const vt = w.stage.victory;
-      this.texts.add(vt.title, 0, -46, { anchor: 2, scale: 3, rainbow: true, life: 4.8, wobble: 2, rise: 4 });
-      this.texts.add(vt.line, 0, -22, { anchor: 2, scale: 1, color: C.paleYellow, life: 4.4, delay: 0.5, rise: 2 });
+      // (every stage's texts fit a portrait phone: the title steps down to the largest whole pixel scale that
+      // fits, a long line - "the network has approved another season" - wraps onto two rows)
+      const vw = this.r.camera.view.w;
+      const tw = this.r.text.measure(vt.title, 1);
+      // ("DAWN BREAKS!" keeps its x3 on a 217 px portrait view: 213 px)
+      const ts = Math.max(1, Math.min(3, Math.floor((vw - 2) / Math.max(1, tw))));
+      const room = vw - 8;
+      this.texts.add(vt.title, 0, -46, { anchor: 2, scale: ts, rainbow: true, life: 4.8, wobble: 2, rise: 4 });
+      const rows = this.r.text.measure(vt.line, 1) > room ? splitMiddle(vt.line) : [vt.line];
+      for (let i = 0; i < rows.length; i++) this.texts.add(rows[i], 0, -22 + i * 9, { anchor: 2, scale: 1, color: C.paleYellow, life: 4.4, delay: 0.5, rise: 2 });
       this.pose(4);
       o?.hooks?.victory?.();
     });
@@ -901,4 +909,12 @@ export class BestiaryFx {
       });
     }
   }
+}
+
+/** Split a line at the space nearest its middle (victory lines too wide for a portrait view). */
+function splitMiddle(s: string): string[] {
+  const mid = s.length / 2;
+  let best = -1;
+  for (let i = 0; i < s.length; i++) if (s[i] === " " && (best < 0 || Math.abs(i - mid) < Math.abs(best - mid))) best = i;
+  return best < 0 ? [s] : [s.slice(0, best), s.slice(best + 1)];
 }

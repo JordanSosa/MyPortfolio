@@ -13,7 +13,8 @@
  *             at most 22 characters, kept out of the bottom third (touch buttons);
  *             every stage's view shares this one bubble set (s45-common.ts Captions
  *             is a thin adapter), so the 3-bubble cap holds across all of them
- *   rules     at most 3 bubbles on screen, an 8 s cooldown per enemy type
+ *   rules     at most 3 bubbles on screen (an ambient one never overlapping
+ *             another), an 8 s cooldown per enemy type
  *             (ambient), none while more than 200 enemies are alive, never
  *             within 40 px of the hero (a scripted bubble slides away from
  *             her instead), none during the ultimate cut-in; 1.4 s each, max
@@ -314,12 +315,24 @@ export class Speech {
     slot.life = LIFE;
     slot.ax = e.x;
     slot.ay = this.headY(e);
-    if (!this.place(slot) && !forced) {
+    // an ambient line never lands on another bubble (two chatty crabs side by side); scripted lines always show
+    if ((!this.place(slot) || this.overlapsOther(slot)) && !forced) {
       slot.on = false;
       slot.enemy = null;
       return false;
     }
     return true;
+  }
+
+  /** Does `b`'s body (as placed) overlap another bubble on screen? */
+  private overlapsOther(b: Bubble): boolean {
+    const l = b.line;
+    if (!l) return false;
+    for (const o of this.bubbles) {
+      if (o === b || !o.on || !o.line) continue;
+      if (Math.abs(o.bx - b.bx) * 2 < o.line.w + l.w + 4 && Math.abs(o.by - b.by) * 2 < o.line.h + l.h + 4) return true;
+    }
+    return false;
   }
 
   /**
