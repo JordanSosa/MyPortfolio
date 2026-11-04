@@ -221,7 +221,11 @@ export class App implements KitHost {
         if (this.screen === "game" && !this.modal) this.pause();
         // (also on pagehide / blur: the OS may kill a hidden tab without another event)
         this.stashRun();
-        audio.suspend();
+        // Suspend audio only when the page is really hidden. A window blur alone (an Android
+        // notification, the host app's own UI around an embedded page) leaves the page on screen
+        // and often never sends the matching focus event back, which left the game silent for
+        // the rest of the session. The pause menu muffles the music meanwhile.
+        if (typeof document === "undefined" || document.visibilityState === "hidden") audio.suspend();
       } else {
         if (this.unlocked) audio.resume();
         // the browser drops the wake lock while the page is hidden (a paused run keeps the screen free to sleep)

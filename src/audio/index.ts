@@ -86,7 +86,19 @@ class RealtimeAudio implements AudioAPI {
     this.ctx = ctx;
     this.createdAt = now();
     const onState = () => {
-      if (ctx.state === "running") this.everRunning = true;
+      if (ctx.state === "running") {
+        this.everRunning = true;
+        return;
+      }
+      // The system suspended or interrupted us (Android audio focus: a notification sound, another
+      // app, an output-device switch; iOS: a call). We did not ask for it, the page is visible and
+      // the player has interacted (sticky activation), so resume() is allowed without a new gesture:
+      // retry shortly instead of staying silent until the next tap.
+      if (ctx.state !== "closed" && this.everRunning && !this.wantSuspended && typeof document !== "undefined" && document.visibilityState === "visible") {
+        setTimeout(() => {
+          if (this.ctx === ctx && ctx.state !== "running" && ctx.state !== "closed" && !this.wantSuspended) ctx.resume().catch(() => {});
+        }, 300);
+      }
     };
     ctx.addEventListener?.("statechange", onState);
     onState();
@@ -160,7 +172,12 @@ class RealtimeAudio implements AudioAPI {
     this.hooked = true;
     const retry = () => {
       const ctx = this.ctx;
-      if (ctx && !this.wantSuspended && ctx.state !== "running") this.kick();
+      if (!ctx) return;
+      // A gesture on a visible page means the player is here: clear any stale suspend request
+      // (a blur / hide whose matching focus / show event never arrived, common in Android
+      // WebViews and embedded frames) and bring the context back.
+      if (this.wantSuspended && typeof document !== "undefined" && document.visibilityState === "visible") this.wantSuspended = false;
+      if (!this.wantSuspended && ctx.state !== "running") this.kick();
     };
     for (const ev of GESTURES) window.addEventListener(ev, retry, { capture: true, passive: true });
   }
