@@ -57,13 +57,37 @@ async function load(): Promise<Atlas> {
 
 /** The baked atlas' premultiplied RGBA texels (exact: see the header). */
 async function bakedTexels(url: string, meta: BakedAtlasMeta): Promise<Uint8Array> {
-  const res = await fetch(url);
-  if (!res.ok) throw new Error(`[atlas] ${url}: HTTP ${res.status}`);
-  const png = new Uint8Array(await res.arrayBuffer());
+  const png = await urlBytes(url);
   if (typeof DecompressionStream === "function") return texelsFromPlanes(await inflateIndexPng(png, meta.width, meta.height), meta.width + 1, 1, meta);
   const out = texelsFromPlanes(await canvasIndexPng(png, meta.width, meta.height), meta.width * 4, 0, meta, 4);
   if (texelHash(out) !== meta.hash) console.warn("[atlas] the atlas image decoded with different texels on this browser (colour management?): art may look slightly off");
   return out;
+}
+
+/**
+ * The bytes behind `url`. A data: URI (the single-file build inlines atlas.png)
+ * is decoded in place: sandboxed hosts with a strict Content-Security-Policy
+ * (connect-src) refuse fetch() even for data: URLs, which made the game fail
+ * to boot with "The game's art could not be loaded". Real URLs (the multi-file
+ * GitHub Pages build) are fetched as usual.
+ */
+export async function urlBytes(url: string): Promise<Uint8Array> {
+  if (url.startsWith("data:")) {
+    const comma = url.indexOf(",");
+    if (comma < 0) throw new Error("[atlas] malformed data URI");
+    const head = url.slice(5, comma);
+    const body = url.slice(comma + 1);
+    if (/;base64$/i.test(head)) {
+      const bin = atob(body);
+      const out = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
+      return out;
+    }
+    return new TextEncoder().encode(decodeURIComponent(body));
+  }
+  const res = await fetch(url);
+  if (!res.ok) throw new Error(`[atlas] ${url}: HTTP ${res.status}`);
+  return new Uint8Array(await res.arrayBuffer());
 }
 
 /**
