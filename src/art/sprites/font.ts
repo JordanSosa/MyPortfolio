@@ -704,4 +704,9 @@ function lower(grid: string): string {
 const glyphs: Record<string, string> = { ...G };
 for (const [ch, g] of Object.entries(SMALL)) glyphs[ch] = lower(g);
 
-export const fonts: FontDef[] = [{ id: "font_main", h: 7, glyphs }];
+export const fonts: FontDef[] = [
+  { id: "font_main", h: 7, glyphs },
+  // Same glyphs without the auto outline, 1 px apart: for DARK ink on LIGHT backgrounds (speech bubbles).
+  // Dark ink + the dark outline of font_main merges every letter into a blob.
+  { id: "font_ink", h: 7, glyphs, outline: false, spacing: 1 },
+];

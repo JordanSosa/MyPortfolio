@@ -25,7 +25,7 @@ import { lerpColor } from "../core/color";
 import { TAU, clamp, ease } from "../core/math";
 import { P, type EmitterDef, type Fx } from "../fx";
 import { Flag, Layer } from "../render/layers";
-import { GRADES, lerpGrade } from "../render/post";
+import { lerpGrade, type Grade } from "../render/post";
 import type { Renderer } from "../render/renderer";
 import type { HeroFxEvent, KillEvent } from "../game/events";
 import { PK_FALL, PK_FREE, PK_MANAGED, type Projectile } from "../game/types";
@@ -67,6 +67,8 @@ import { TRAILS, type TrailDef } from "./trails";
 const PI = Math.PI;
 const DFD = "dark_flame_dragon";
 const ABYSS = "unsealed_abyss_dragon";
+/** ETERNAL ABYSS dim: violet and moody but still clearly readable (see applyDim). */
+const ABYSS_GRADE: Grade = { tint: [0.82, 0.76, 0.94], lift: [0.03, 0.0, 0.08], saturation: 0.86, contrast: 1.05, brightness: 0.9, hue: 0 };
 const TEA = "teapot_tempest";
 const PARTY = "eternal_tea_party";
 const ALDENTE = "al_dente_armageddon";
@@ -471,14 +473,28 @@ export class HeroesAFx {
     const a = this.anims.get("w_salamander");
     const h = a.first + (Math.floor(time * 5) % a.count);
     const sweep = Math.sin(PI * k);
-    // a dark band rides with it (the light goes out where it passes)
-    r.fillView(Layer.Overlay, C.deep, 0.12 * sweep);
-    // the wings, implied by two huge streak blurs
-    const wx = x - dir * 26;
+    // a faint dark band rides with it (the light dims where it passes - never a black screen)
+    r.fillView(Layer.Overlay, C.deep, 0.08 * sweep);
+    // size to the view so a portrait phone still sees a creature, not a wall of black
+    const sc = Math.max(5, Math.min(9, v.w / 26));
+    // the wings, implied by two huge violet streak blurs
+    const wx = x - dir * 2.6 * sc;
     const flap = Math.sin(time * 4) * 0.12;
-    r.spr(Layer.Decal, this.hStreak, wx, y - 42, 9 * dir, 9, (-0.38 - flap) * dir, C.deep, 0.62, 0, Flag.NoSnap);
-    r.spr(Layer.Decal, this.hStreak, wx, y + 40, 9 * dir, 9, (0.38 + flap) * dir, C.deep, 0.62, 0, Flag.NoSnap);
-    r.spr(Layer.Decal, h, x, y, 10 * dir, 10, 0, C.deep, 0.85, 0, Flag.NoSnap);
+    r.spr(Layer.Decal, this.hStreak, wx, y - 4.2 * sc, 0.9 * sc * dir, 0.9 * sc, (-0.38 - flap) * dir, C.darkViolet, 0.38, 0, Flag.NoSnap);
+    r.spr(Layer.Decal, this.hStreak, wx, y + 4 * sc, 0.9 * sc * dir, 0.9 * sc, (0.38 + flap) * dir, C.darkViolet, 0.38, 0, Flag.NoSnap);
+    // violet rim (a slightly larger copy behind) + a translucent violet-black body: reads as a shape, not a hole
+    r.spr(Layer.Decal, h, x, y, 1.08 * sc * dir, 1.08 * sc, 0, C.violet, 0.32, 1, Flag.NoSnap);
+    r.spr(Layer.Decal, h, x, y, sc * dir, sc, 0, 0x2a1840, 0.6, 1, Flag.NoSnap);
+    r.glow(x, y, 7 * sc, C.darkViolet, 0.22 * sweep);
+    // two burning red eyes on the head (sprite faces right: head is up-right of centre)
+    const ex = x + dir * 2.4 * sc;
+    const ey = y - 1.6 * sc;
+    const blink = Math.sin(time * 9) > 0.92 ? 0.3 : 1;
+    for (let i = 0; i < 2; i++) {
+      const eox = ex + dir * i * 0.9 * sc;
+      r.glow(eox, ey, 0.9 * sc, C.red, 0.55 * blink);
+      r.circle(Layer.Fx, eox, ey, Math.max(1.2, 0.16 * sc), C.red, 0.95 * blink);
+    }
     if ((this.frameN & 1) === 0) this.fx.ps.emit(darkSparkle, x - dir * 50 + (Math.random() - 0.5) * 40, y + (Math.random() - 0.5) * 70, 1);
   }
 
@@ -536,10 +552,11 @@ export class HeroesAFx {
       return;
     }
     const k = ease.sineOut(this.dimK);
-    lerpGrade(post.grade, GRADES.dim, k, post.grade);
+    // a moody violet dusk, not a blackout: phones at low brightness turned GRADES.dim + 0.6 vignette into "just black"
+    lerpGrade(post.grade, ABYSS_GRADE, k, post.grade);
     this.vigSaved = this.vigOwned ? this.vigSaved : post.vignette;
     this.vigOwned = true;
-    post.vignette = this.vigSaved + (0.6 - this.vigSaved) * k;
+    post.vignette = this.vigSaved + (0.4 - this.vigSaved) * k;
   }
 
   private releaseVignette(): void {

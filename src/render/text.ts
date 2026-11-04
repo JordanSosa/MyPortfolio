@@ -61,6 +61,11 @@ export class BitmapText {
     return this.font.h;
   }
 
+  /** Line height in px at scale 1 of a specific font (cell height incl. any outline). */
+  lineHeightOf(fontId: string): number {
+    return this.atlas.font(fontId).h;
+  }
+
   /** Width of `str` in px at `scale`. */
   measure(str: string, scale = 1, spacing = 0, fontId?: string): number {
     const f = fontId ? this.atlas.font(fontId) : this.font;
@@ -79,11 +84,11 @@ export class BitmapText {
   }
 
   /** Positional fast path (no wobble/rotation). */
-  drawFast(layer: number, str: string, x: number, y: number, scale = 1, color = 0xffffff, alpha = 1, alignN = 0, flags = 0, flash = 0): void {
-    const f = this.font;
+  drawFast(layer: number, str: string, x: number, y: number, scale = 1, color = 0xffffff, alpha = 1, alignN = 0, flags = 0, flash = 0, fontId?: string): void {
+    const f = fontId ? this.atlas.font(fontId) : this.font;
     let pen = x;
     if (alignN !== 0) {
-      const w = this.measure(str, scale);
+      const w = this.measure(str, scale, 0, fontId);
       pen = alignN === 1 ? x - w / 2 : x - w;
     }
     pen = Math.round(pen);

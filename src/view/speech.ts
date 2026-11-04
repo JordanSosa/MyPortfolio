@@ -35,6 +35,9 @@ import type { Enemy } from "../game/types";
 import type { World } from "../game/world";
 import { bossHeadroom } from "../game/bosses/_entrance";
 
+/** Outline-free font for dark ink on the white bubble (font_main's dark outline would blob the letters). */
+const INK_FONT = "font_ink";
+
 // ---------------------------------------------------------------- pools (satire.md §6)
 export const SPEECH_POOLS: Readonly<Record<string, readonly string[]>> = {
   // Dream Meadow
@@ -260,9 +263,9 @@ export class Speech {
       const tailHeart = !heart && /[♡♥]$/.test(text);
       const body = sanitize(text.replace(/[♡♥]$/, "")).trim();
       const rows = heart ? [""] : free ? wrapRows(body, FREE_CHARS) : wrap(body);
-      const widths = rows.map((s) => this.r.text.measure(s, 1));
+      const widths = rows.map((s) => this.r.text.measure(s, 1, 0, INK_FONT));
       if (tailHeart) widths[widths.length - 1] += 9;
-      const lh = this.r.text.lineHeight;
+      const lh = this.r.text.lineHeightOf(INK_FONT) + 2;
       const w = heart ? 13 : Math.max(...widths) + 6;
       const h = heart ? 11 : rows.length * (lh - 1) + 4;
       l = { rows, widths, heart, tailHeart, w: Math.ceil(w), h: Math.ceil(h) };
@@ -489,10 +492,10 @@ export class Speech {
       r.spr(L, this.hHeart, b.bx, b.by + 3, 1, 1, 0, C.pink, alpha, 0, 0);
       return;
     }
-    const lh = r.text.lineHeight - 1;
-    const top = Math.round(b.by - (line.rows.length * lh) / 2);
+    const lh = r.text.lineHeightOf(INK_FONT) + 1;
+    const top = Math.round(b.by - (line.rows.length * lh) / 2) + 1;
     for (let i = 0; i < line.rows.length; i++) {
-      r.text.drawFast(L, line.rows[i], Math.round(b.bx - line.widths[i] / 2), top + i * lh, 1, b.ink, alpha, 0, 0, 0);
+      r.text.drawFast(L, line.rows[i], Math.round(b.bx - line.widths[i] / 2), top + i * lh, 1, b.ink, alpha, 0, 0, 0, INK_FONT);
     }
     if (line.tailHeart) {
       const last = line.rows.length - 1;
