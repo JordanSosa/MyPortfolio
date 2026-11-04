@@ -333,7 +333,10 @@ Star Pouch fallbacks remain), so it is never spent or tapped for nothing.
   (`requestIdleCallback` without a timeout, slices of at most 8 ms), hub icons
   first, then portraits and hero idles; the queue waits (coarse 500 ms timer,
   no per-frame polling) during a run, a modal, settings, an overlay and for 1 s
-  after a screen change (`__kk.prewarm()` reports its progress).
+  after a screen change (`__kk.prewarm()` reports its progress). The Training
+  Arc's glyph pretint (`hub/board/glyph.ts pretint`, queued at boot) keeps out
+  of a run the same way (`setPretintGate`, set by `App.start`); glyphs already
+  waiting on screen are always served.
 
 ### Quality tiers (render/quality.ts)
 
@@ -1173,6 +1176,8 @@ node scripts/e2e.mjs           # desktop + mobile portrait + mobile landscape: s
 node scripts/shot.mjs --path "/?autoplay=1&hero=rin&skip=150" --mobile --wait 5000 --out shots/x.png
 node scripts/flows.mjs         # Season 2 account flows on portrait / landscape / iPhone SE / desktop (section 11):
                                # --only portrait,se --flow fresh,v1,endless,nav,keys --out shots/flows --keep-going
+node scripts/touch.mjs         # touch-only Training Arc checks on iPhone 13 (CDP touch: one-finger pan, drags over
+                               # stars never press them, tap opens a node sheet, pinch zoom)
 npm run balance                # headless full-run balance probe: 3 heroes x 10 seeds x good + lazy bot (section 6);
                                # CP=P2 STAGE=candy_kingdom BOT=mid plays an account checkpoint's RunConfig
 node tools/matrix.mjs          # power-vs-stage matrix: checkpoints P0-P7 x 5 stages x heroes x seeds (section 6)
@@ -1289,7 +1294,8 @@ splash -> Hub [home] -> stages -> loadout -> START EPISODE -> run -> TO BE CONTI
   (the TO BE CONTINUED modal with no revive left, the victory modal; closing the
   app there loses nothing), else from Results / the game-over RETRY; RETRY of an
   account run re-plans (the profile just changed). The game-over RETRY also
-  claims the run's Plot Point rewards and queues its unlocks
+  claims the Plot Point rewards (when one pays gems / coins: `cashClaimable`,
+  the same rule as leaving Results) and queues its unlocks
   (`save.pendingUnlocks`): the next Results (or the hub home) celebrates them.
   TO BE CONTINUED makes RESULTS the big default for episodes 1-3 (RETRY small),
   RETRY from episode 4. A first clear points the loadout at the episode it

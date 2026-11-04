@@ -431,7 +431,10 @@ for (const dev of DEVICES) {
           await waitFor(page, () => window.__kk.screen === "results", null, 15000, "results after quit");
           const p = await profile();
           check(p.lifetime.runs === 2, `quit run banked (runs ${p.lifetime.runs})`);
-          check(p.rotation.runsLeft === 1, `banner rotation (runsLeft ${p.rotation.runsLeft})`);
+          // (only runs of 60 s+ (TUNING.rotation.minRunSeconds) or clears spin the banners: a quit loop never does)
+          const quitT = await page.evaluate(() => window.__kk.world?.t ?? 0);
+          const spun = quitT >= 60;
+          check(p.rotation.runsLeft === (spun ? 1 : 2), `banner rotation ${spun ? "advanced" : "unchanged by a short quit"} (runsLeft ${p.rotation.runsLeft}, run ${Math.round(quitT)} s)`);
           await sleep(600);
           await shot("results-quit");
           await tap('.results [data-act="hub"]');

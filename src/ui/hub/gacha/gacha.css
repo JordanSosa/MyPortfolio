@@ -127,6 +127,13 @@
   /* the machine's box (64x80), bounded by the poster's height AND width */
   --mh: min(54cqh, 40cqw);
 }
+/* (short portrait phones, 568-600 px: a slightly shorter poster keeps the whole rates row, "MYTHIC 0.0069%"
+   included, above the sticky pull dock) */
+@media (orientation: portrait) and (max-height: 600px) {
+  .bnr-wrap {
+    height: clamp(13em, 36vh, 27em);
+  }
+}
 .bnr {
   --bb: linear-gradient(160deg, #ffb8dc, #ff7ab8 40%, #b47cff 88%);
   position: absolute;
@@ -934,10 +941,26 @@
 }
 .btn.pull .bsub {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   align-items: center;
-  gap: 0.3em;
+  gap: 0 0.3em;
   font-size: max(9px, 0.52em);
   white-space: nowrap;
+}
+/* (a narrow ×10 button - 320 px phones, the landscape dock: "1,600 · SR+ GUARANTEED" is wider than it - puts
+   the guarantee on its own line) */
+.btn.pull.p10 {
+  container-type: inline-size;
+}
+@container (max-width: 190px) {
+  .btn.pull .g10 {
+    flex-basis: 100%;
+    text-align: center;
+  }
+  .btn.pull .g10-dot {
+    display: none;
+  }
 }
 .btn.pull .money .mico {
   width: 1.3em;
@@ -1587,7 +1610,7 @@
   width: fit-content;
 }
 .mm-seg-b {
-  min-height: 40px;
+  min-height: 44px;
   padding: 0 1.1em;
   border-radius: 999px;
   border: 0;

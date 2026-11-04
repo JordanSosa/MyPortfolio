@@ -33,6 +33,8 @@ import { heroDef } from "../../game/heroes";
 import { WEAPONS } from "../../game/registry";
 import type { RunSummary } from "../../game/world";
 import { claimAllAchievements } from "../../meta/achievements/engine";
+import { ACHIEVEMENTS } from "../../meta/achievements/registry";
+import type { Profile } from "../../meta/profile";
 import { affordableNodes } from "../../meta/board/board";
 import { bannerViews } from "../../meta/gacha/banners";
 import type { PayoutLine } from "../../meta/economy";
@@ -70,6 +72,19 @@ interface Typer {
 }
 
 const LINE_GAP = 0.32;
+
+/**
+ * A completed, unclaimed Plot Point pays gems or coins: leaving Results (or a TBC RETRY) claims them all for
+ * the player, so the Pilot Episode's gems pay the first pull even without CLAIM ALL (docs/META.md §4).
+ */
+export function cashClaimable(p: Profile): boolean {
+  for (const id in p.achievements.done) {
+    if (p.achievements.claimed.includes(id)) continue;
+    const rw = ACHIEVEMENTS.get(id)?.reward;
+    if (rw && ((rw.gems ?? 0) > 0 || (rw.coins ?? 0) > 0)) return true;
+  }
+  return false;
+}
 
 export function showResults(app: App, s: RunSummary, r: RunReport, ep: EpisodeInfo): UiScreen {
   const hd = heroDef(s.hero);
@@ -413,7 +428,7 @@ export function showResults(app: App, s: RunSummary, r: RunReport, ep: EpisodeIn
   };
   /** Leaving Results (UPGRADE / RETRY / HUB / Back): unclaimed gem / coin Plot Points are claimed for the player. */
   const leave = (go: () => void) => {
-    claim();
+    if (!app.practice && cashClaimable(save.profile)) claim();
     celebrate(go);
   };
   onTap(el.querySelector('[data-act="upgrade"]'), () => {

@@ -325,10 +325,18 @@ export class Summon implements Tickable {
       this.line(pick("gacha:summon", C.CAPTIONS));
       document.querySelector(".merch .bnr-machine")?.classList.add("crank");
       if (this.fx) {
-        const c = this.centre();
-        this.fx.spiral(c.x, c.y, 40, Math.max(c.d * 0.9, 160), ["#fff7b0", "#ffb8dc", "#ffffff", "#ffe14d"], 1.15);
+        // (the circle is measured in the overlay's first frame: reading it here would force the new overlay's
+        // first style + layout inside the constructor's task; in the frame it is the layout that frame does anyway)
+        requestAnimationFrame(() => {
+          if (!ok(true) || !this.fx) return;
+          const c = this.centre();
+          this.fx.spiral(c.x, c.y, 40, Math.max(c.d * 0.9, 160), ["#fff7b0", "#ffb8dc", "#ffffff", "#ffe14d"], 1.15);
+        });
       }
       if (!ok(await this.sleep(0.3, g))) return;
+      // the (still invisible) summary bar is filled and measured now, while the overlay is settled: the card
+      // deal's FLIP read later is then the only layout read in that busy task
+      this.prepareSummary();
       el.classList.add("s-skip");
       if (!ok(await this.sleep(0.9, g))) return;
       // ---- 2. meteor (1.20 - 2.20)

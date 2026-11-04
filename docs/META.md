@@ -157,7 +157,8 @@ setup; the run there is still heat 0, no Filler Arc - `buildRunConfig` resolves)
 
 After a grant (a pull, a Copium Exchange buy, the spark) `afterGrant` runs the unlock
 rules right away (a new hero's signature weapon, "own 4 heroes" passives: returned as
-`unlocks`, celebrated when the summon closes) and `autoEquipNewRelics` puts relics owned
+`unlocks`, celebrated when the summon closes; a PULL AGAIN chain holds them until the last
+summon of the chain closes, so the cards never cover a storyboard) and `autoEquipNewRelics` puts relics owned
 for the first time into free relic slots, best rarity first, never replacing one
 (`equipped`; the summary card reads EQUIPPED!).
 

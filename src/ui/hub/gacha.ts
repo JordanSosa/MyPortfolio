@@ -65,6 +65,8 @@ export function gachaPage(hub: Hub, o: PageOpts): HubPage {
   let summon: Summon | null = null;
   let busy = false;
   let disposed = false;
+  /** Unlocks of a summon that PULL AGAIN closed: celebrated when the chained summon closes (never on top of it). */
+  const carried: UnlockEvent[] = [];
   /** What the bars showed last (they glide from there after a pull). */
   const shown = new Map<BannerKind, { pity: number; ur: number; spark: number }>();
 
@@ -364,9 +366,10 @@ export function gachaPage(hub: Hub, o: PageOpts): HubPage {
       const unlocks = unlocksOf(out.unlocks, done);
       hub.changed();
       // the results' art (cards, splashes, summary) encoded now, so the storyboard builds from the icon
-      // cache; most of it is already warm (warmPool); the summon opens on the next frame, its own task
+      // cache; most of it is already warm (warmPool); the summon opens after the next frame, in its own task
+      // (not inside a frame callback: its first style + layout then lands in the following frame's task)
       for (const r of out.results) for (const [id, f] of itemArtFrames(r.item)) sprite(id, f);
-      await new Promise<void>((res) => requestAnimationFrame(() => res()));
+      await new Promise<void>((res) => requestAnimationFrame(() => setTimeout(res, 0)));
       if (disposed) return;
       openSummon(out, "pull", done, unlocks, dbg.fakeout, n);
     } finally {
@@ -404,13 +407,25 @@ export function gachaPage(hub: Hub, o: PageOpts): HubPage {
       onClose: () => {
         summon = null;
         el.classList.remove("summoning");
-        if (disposed) return;
+        if (disposed) {
+          // (the page went away with the summon: the hub home celebrates them instead)
+          save.pendingUnlocks.push(...carried.splice(0), ...unlocks);
+          return;
+        }
         tabs.render(tabDefs());
         render();
         if (mode === "spark") app.sfx("unlockFanfare", 0.6);
         // what the new items unlocked (Senpai -> Notice Me Sparkles, a 4th hero -> Friendship Bracelet):
         // celebrated now, not as a stray card at the next run's Results (already saved by hub.changed)
-        if (unlocks.length) celebrateUnlocks(app, unlocks);
+        const list = [...carried.splice(0), ...unlocks];
+        if (!list.length) return;
+        // (PULL AGAIN closes this summon and starts the next pull in the same task: the cards wait for that
+        // summon to close instead of covering its storyboard)
+        queueMicrotask(() => {
+          if (disposed) save.pendingUnlocks.push(...list);
+          else if (busy || summon) carried.push(...list);
+          else celebrateUnlocks(app, list);
+        });
       },
     });
   };

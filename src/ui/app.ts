@@ -60,13 +60,14 @@ import { openChestModal } from "./screens/chest";
 import { openLevelUp } from "./screens/levelup";
 import { openGameOver } from "./screens/over";
 import { openPause } from "./screens/pause";
-import { showResults } from "./screens/results";
+import { cashClaimable, showResults } from "./screens/results";
 import { openSettings } from "./screens/settings";
 import { showSplash } from "./screens/splash";
 import { markBorn } from "./screens/common";
 import { Tutorial } from "./tutorial";
 import { ScreenWake } from "./wake";
 import { Hub, type PageId, type PageOpts } from "./hub/hub";
+import { setPretintGate } from "./hub/board/glyph";
 import { episodeTitle } from "./hub/copy";
 import { clearRunToasts, kitTick, overlaysOpen, toast, trophyIcon, type KitHost, type ToastOpts } from "./kit";
 import { resumeToasts, suspendToasts } from "./kit/overlay";
@@ -273,6 +274,8 @@ export class App implements KitHost {
       else if (m.id.endsWith("_idle")) for (let f = 0; f < m.frames; f++) idles.push([m.id, f]);
     }
     prewarmSprites([...icons, ...portraits, ...idles], () => this.screen !== "game" && !this.modal && !this.sub && overlaysOpen() === 0 && performance.now() - this.changedAt > PREWARM_SETTLE_MS);
+    // (the Training Arc's glyph pretint, started at boot, waits out a run the same way)
+    setPretintGate(() => this.screen !== "game");
     this.syncSaveWarn();
     this.startAttract();
     const sc = this.params.screen;
@@ -685,8 +688,8 @@ export class App implements KitHost {
           save.pendingUnlocks.push(u);
           queued++;
         }
-      const c = claimAllAchievements(save.profile);
-      if (c.count) {
+      const c = cashClaimable(save.profile) ? claimAllAchievements(save.profile) : null;
+      if (c?.count) {
         save.save();
         coins += c.coins;
         gems += c.gems;

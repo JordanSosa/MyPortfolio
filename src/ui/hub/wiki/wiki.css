@@ -99,7 +99,7 @@
   display: flex;
   align-items: center;
   gap: 0.4em;
-  min-height: 42px;
+  min-height: 44px;
   margin-top: 0.35em;
   padding: 0 0.3em 0 0.7em;
   border-radius: 12px;
@@ -330,6 +330,7 @@
 }
 .wk-chip {
   flex: none;
+  min-width: 44px;
   min-height: 44px;
   padding: 0.15em 0.75em;
   border-radius: 999px;

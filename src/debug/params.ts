@@ -2,14 +2,16 @@
  * Debug URL params (DESIGN §8.5):
  *   ?autoplay=1        bot plays + auto-picks upgrades
  *   ?seed=N            deterministic run
- *   ?hero=hoshi|rin|mochi
+ *   ?hero=<id>         hoshi, rin, mochi, kuro, pudding, aoi, akane, senpai, magical_girl_47, isekai_kun, truck_kun
  *   ?skip=SECONDS      fast-forward the sim headlessly at run start (bot-driven)
  *   ?god=1             invulnerable
  *   ?mute=1            no audio
  *   ?quality=low|mid|high
- *   ?screen=title|select|game|results|shop|settings   jump straight to a screen (skips the splash)
+ *   ?screen=game|hub|stages|loadout|board|heroes|hero|gacha|wiki|settings   jump straight to a screen (skips the
+ *                      splash; title / select / shop are Season 1 aliases of hub / loadout / board)
  *   ?fps=1             FPS meter
  *   ?speed=N           sim speed multiplier
+ *   (?god, ?skip and ?speed make even a hub START EPISODE a practice run: never banked, never stashed)
  *
  * Season 2 run config (debugRunConfig; any of these builds a RunConfig on top of defaultRunConfig()):
  *   ?stage=dream_meadow                 stage id

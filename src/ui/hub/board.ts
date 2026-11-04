@@ -32,7 +32,7 @@ import { BOARD, CENTER_ID } from "../../meta/board/graph";
 import type { BoardNode } from "../../meta/board/types";
 import { gameContent } from "../../meta/content";
 import { TUNING } from "../../meta/tuning";
-import { esc, fmtInt, h, img } from "../dom";
+import { esc, fmtInt, h, hasArt, img, prewarmSprites } from "../dom";
 import { money } from "../kit/art";
 import { bindActs, btn, iconBtn, pop, shake } from "../kit/controls";
 import { confirmDialog, openSheet, overlaysOpen, type SheetHandle } from "../kit/overlay";
@@ -50,15 +50,32 @@ import "./board/board.css";
 /** At most this many affordable stars pulse at once (the cheapest; the rest glow statically). */
 const MAX_PULSE = 24;
 
+/** The map's star frames (board_node / board_keystone looks 0-3, the centre and its glow): encoded with the pretint. */
+const STAR_FRAMES: [string, number][] = [
+  ...[0, 1, 2, 3].flatMap((f): [string, number][] => [
+    ["board_node", f],
+    ["board_keystone", f],
+  ]),
+  ["board_center", 0],
+  ["board_center", 1],
+];
+
 // Every (glyph, tint) the map can show (sector colour, locked, owned), tinted in idle slices a little
-// after boot: the first Training Arc open finds them made instead of tinting ~100 frames in its own task.
-if (typeof window !== "undefined")
-  setTimeout(() => {
+// after boot, and the star frames encoded the same way: the first Training Arc open finds them made
+// instead of tinting ~100 frames (and encoding its stars) in its own task.
+if (typeof window !== "undefined") {
+  let tries = 0;
+  const warm = () => {
+    // (the DOM icon atlas arrives with the App, after the atlas preload: look again a little later)
+    if (!hasArt("board_node") && ++tries < 20) return void setTimeout(warm, 500);
+    prewarmSprites(STAR_FRAMES);
     // (the sector colours first: the map's markup uses them; then locked / owned)
     const stars = BOARD.nodes.filter((n) => n.kind !== "center");
     pretint(stars.map((n) => [effectGlyph(n.effects), sectorColor(n)] as const));
     pretint(stars.flatMap((n) => [[effectGlyph(n.effects), LOCK_TINT] as const, [effectGlyph(n.effects), OWN_TINT] as const]));
-  }, 1200);
+  };
+  setTimeout(warm, 1200);
+}
 
 interface NodeState {
   cls: string;
@@ -623,7 +640,8 @@ export function boardPage(hub: Hub, o: PageOpts): HubPage {
     if (!hudRects) {
       const host = vpEl.getBoundingClientRect();
       const head = document.querySelector<HTMLElement>(".hub-top");
-      hudRects = [...el.querySelectorAll<HTMLElement>(".bd-prog, .bd-intro, .bd-zoom, .bd-bar > *, .bd-mini"), ...(head ? [head] : [])]
+      // (not the welcome line: it fades out after a few seconds, and a chip it covered would stay faded for good)
+      hudRects = [...el.querySelectorAll<HTMLElement>(".bd-prog, .bd-zoom, .bd-bar > *, .bd-mini"), ...(head ? [head] : [])]
         .map((h) => h.getBoundingClientRect())
         .filter((r) => r.width > 0)
         .map((r) => new DOMRect(r.left - host.left, r.top - host.top, r.width, r.height));

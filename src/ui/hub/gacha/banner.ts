@@ -166,7 +166,7 @@ export function dockHtml(v: BannerView, p: Profile, prevPity: number | null): st
   return `<div class="mm-dock">
     <div class="pull-row">
       <button class="btn violet pull p1${can1 ? "" : " nope"}" data-nav${can1 && !can10 ? " data-nav-default" : ""} data-act="pull1" aria-label="Pull once for ${v.cost1} Dream Gems"><span class="btxt"><span class="blab">PULL ×1</span><small class="bsub">${money("gems", fmtInt(v.cost1))}</small></span></button>
-      <button class="btn gold pull p10${can10 ? " can" : " nope"}" data-nav${can10 || !can1 ? " data-nav-default" : ""} data-act="pull10" aria-label="Pull ten times for ${v.cost10} Dream Gems, SR or better guaranteed"><span class="btxt"><span class="blab">PULL ×10</span><small class="bsub">${money("gems", fmtInt(v.cost10))} · SR+ GUARANTEED</small></span></button>
+      <button class="btn gold pull p10${can10 ? " can" : " nope"}" data-nav${can10 || !can1 ? " data-nav-default" : ""} data-act="pull10" aria-label="Pull ten times for ${v.cost10} Dream Gems, SR or better guaranteed"><span class="btxt"><span class="blab">PULL ×10</span><small class="bsub">${money("gems", fmtInt(v.cost10))}<span class="g10"><span class="g10-dot">· </span>SR+ GUARANTEED</span></small></span></button>
     </div>
     <button class="dock-pity ${state}" data-nav data-act="pitytip" aria-label="Pity ${v.pity} of ${g.hardPity}. ${esc(msg || C.PITY_TIP)}">
       <span class="dp-l">Pity <b>${fmtInt(v.pity)}</b> / ${g.hardPity}</span>

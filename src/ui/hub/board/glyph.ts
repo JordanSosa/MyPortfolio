@@ -218,7 +218,12 @@ function slice(budget: number): boolean {
   }
   return true;
 }
-/** The atlas is still loading (boot): try the queue again a little later. */
+/** The background pretint runs only while this says yes (App: never during a run; glyphs on screen always). */
+let pretintGate: () => boolean = () => true;
+export function setPretintGate(fn: () => boolean): void {
+  pretintGate = fn;
+}
+/** The atlas is still loading (boot) or the pretint is gated: try the queue again a little later. */
 let retryPending = false;
 function retryLater(): void {
   if (retryPending) return;
@@ -240,6 +245,11 @@ function pump(): void {
     return;
   }
   if (rafPending || idlePending) return;
+  // (nothing on screen waits: the background pretint keeps out of a run in progress)
+  if (!pretintGate()) {
+    retryLater();
+    return;
+  }
   idlePending = true;
   const run = (d?: Deadline) => {
     idlePending = false;

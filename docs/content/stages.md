@@ -586,7 +586,7 @@ Kingdom +3; Shoujo Academy +2; Beach Episode +2; The Final Arc +2.
 | 1 | `budget_cuts` | Budget Cuts | 3 | [1,1,1] | 3 | Enemy HP +25% / +50% / +75% | a cracked piggy bank | Dream Meadow |
 | 2 | `filler_overload` | Filler Overload | 2 | [1,2] | 3 | Spawn rate +30% / +60%, max alive +10% / +20% (device cap still applies) | a stack of film reels | Dream Meadow |
 | 3 | `rushed_production` | Rushed Production | 2 | [1,1] | 2 | Enemy bullets +30% / +60% speed | a clock with speed lines | Dream Meadow |
-| 4 | `censored` | Censored | 2 | [2,2] | 4 | R1: no food or heal pickups (props drop coins instead; pickups show a black "CENSORED" bar); R2: also no level-up heal | a black bar over a heart | Dream Meadow |
+| 4 | `censored` | Censored | 2 | [2,2] | 4 | R1: no food or heal pickups (props, and hero-kit / talent / ult snacks via `dropSnack`, drop coins instead; pickups show a black "CENSORED" bar); R2: also no level-up heal | a black bar over a heart | Dream Meadow |
 | 5 | `cliffhanger` | Cliffhanger | 2 | [1,2] | 3 | Max HP −20% / −40% | a hero hanging from a cliff edge | Dream Meadow |
 | 6 | `power_creep` | Power Creep | 2 | [1,2] | 3 | R1: elites ×2 per elite event; R2: ×3 and elites +50% HP | a rising arrow over a crown | Dream Meadow |
 | 7 | `spoilers` | Spoilers | 1 | [1] | 1 | No boss WARNING and no spawn pause: bosses just appear ("the warnings were spoilers") | a speech bubble with a "!" crossed out | Candy Kingdom |
