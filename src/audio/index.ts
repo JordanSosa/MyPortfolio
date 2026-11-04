@@ -35,6 +35,8 @@ class RealtimeAudio implements AudioAPI {
   private failed = false;
   /** Phone audio profile (wantLite). */
   private lite = false;
+  private lastTick = 0;
+  private stress = 0;
   private hooked = false;
   private wantSuspended = false;
   private everRunning = false;
@@ -151,6 +153,14 @@ class RealtimeAudio implements AudioAPI {
   private tick(): void {
     const ctx = this.ctx;
     if (!ctx || !this.engine || ctx.state !== "running") return;
+    // Main-thread stress from late timer ticks (the timer asks for TICK_MS; a busy game frame delays it):
+    // rise fast, fall slowly, so a crowded fight keeps the sfx budget squeezed until it calms down.
+    const t = now();
+    const gap = this.lastTick > 0 ? t - this.lastTick : TICK_MS;
+    this.lastTick = t;
+    const target = Math.max(0, Math.min(1, (gap - 45) / 120));
+    this.stress = target > this.stress ? this.stress + (target - this.stress) * 0.5 : this.stress * 0.97;
+    this.engine.setStress(this.stress);
     try {
       this.engine.tick(ctx.currentTime);
     } catch (e) {

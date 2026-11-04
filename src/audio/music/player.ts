@@ -63,6 +63,8 @@ interface Lofi {
 const WOW_BASE = 0.012;
 
 export class Player {
+  /** Notes skipped because the scheduler fell behind (diagnostics). */
+  skipped = 0;
   readonly dry: GainNode;
   readonly rev: GainNode;
   readonly dly: GainNode;
@@ -398,7 +400,10 @@ export class Player {
         if (p && at >= p.at - 1e-4) break; // the arrangement switches first
         if (at >= h) return;
         this.ei++;
-        if (at < now - 0.03) continue; // fell behind (stalled thread): skip, never burst
+        if (at < now - 0.03) {
+          this.skipped++; // fell behind (stalled thread): skip, never burst
+          continue;
+        }
         const c = this.chans[e.ch];
         if (c.on ? at < c.since - 1e-4 : at >= c.offAt) continue;
         const dr = chDefs[e.ch].deg;

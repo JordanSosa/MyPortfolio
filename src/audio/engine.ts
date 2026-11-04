@@ -61,6 +61,13 @@ const MERGE_MAX = 1.413;
 const PAN_MIN = 0.15;
 /** music scheduling window (s) */
 export const LOOKAHEAD = 0.15;
+/**
+ * Phone profile music lookahead. Notes are scheduled from the main thread on a 25 ms timer and a note
+ * that is already late is skipped (never burst), so a game frame longer than the lookahead (a crowded
+ * screen on a phone) dropped notes and the music "broke down". 0.6 s rides out long frames; layer /
+ * track changes simply land up to 0.6 s later.
+ */
+export const LOOKAHEAD_LITE = 0.6;
 
 const BASE = { master: 0.9, music: 2.0, sfx: 2.5 };
 const MUFFLE_HZ = 620;
@@ -144,6 +151,10 @@ export class Engine {
 
   /** Phone profile (see EngineOpts). */
   readonly lite: boolean;
+  /** Music scheduling lookahead in seconds (LOOKAHEAD, or LOOKAHEAD_LITE on phones). */
+  readonly lookahead: number;
+  /** Main-thread stress 0..1 (setStress): squeezes the low-priority sfx budget and the voice cap. */
+  private stress = 0;
   /** Simultaneous voice cap (MAX_VOICES, or MAX_VOICES_LITE on phones). */
   private readonly maxVoices: number;
 
@@ -151,6 +162,7 @@ export class Engine {
     this.ctx = ctx;
     this.lite = !!opts.lite;
     this.maxVoices = this.lite ? MAX_VOICES_LITE : MAX_VOICES;
+    this.lookahead = this.lite && (typeof OfflineAudioContext === "undefined" || !(ctx instanceof OfflineAudioContext)) ? LOOKAHEAD_LITE : LOOKAHEAD;
     this.realtime = typeof OfflineAudioContext === "undefined" || !(ctx instanceof OfflineAudioContext);
     // Mobile browsers render in bursts of several quanta, so `currentTime` seen from the
     // main thread can lag the audio thread. Scheduling a little ahead keeps attacks intact.
@@ -264,7 +276,7 @@ export class Engine {
       if (!oldestSame || a.start < oldestSame.start) oldestSame = a;
     }
     if (same >= max && oldestSame) this.steal(oldestSame, now);
-    if (this.voices.length >= this.maxVoices) {
+    if (this.voices.length >= this.voiceCap) {
       let victim: Active | null = null;
       for (const a of this.voices) {
         if (!victim || a.pri < victim.pri || (a.pri === victim.pri && a.start < victim.start)) victim = a;
@@ -317,7 +329,8 @@ export class Engine {
       this.lowWinN = 0;
     }
     if (t > this.lowT) {
-      this.lowTokens = Math.min(LOW_BURST, this.lowTokens + (t - this.lowT) * (this.lite ? LOW_PER_SECOND_LITE : LOW_PER_SECOND));
+      const rate = (this.lite ? LOW_PER_SECOND_LITE : LOW_PER_SECOND) * (1 - 0.6 * this.stress);
+      this.lowTokens = Math.min(LOW_BURST, this.lowTokens + (t - this.lowT) * rate);
       this.lowT = t;
     }
     let b = this.lowId.get(id);
@@ -380,7 +393,7 @@ export class Engine {
     if (this.tailsCut) this.setTails(true, start);
     this.players.push(p);
     this.current = p;
-    p.update(now, now + LOOKAHEAD);
+    p.update(now, now + this.lookahead);
   }
 
   private setTails(on: boolean, at: number): void {
@@ -394,7 +407,7 @@ export class Engine {
 
   /** Advance music scheduling; call every ~25 ms (realtime) or stepwise (offline). */
   tick(now = this.now()): void {
-    const horizon = now + LOOKAHEAD;
+    const horizon = now + this.lookahead;
     for (let i = this.players.length - 1; i >= 0; i--) {
       const p = this.players[i];
       p.update(now, horizon);
@@ -403,11 +416,34 @@ export class Engine {
         // Offline renders build the whole graph before rendering: disconnecting would
         // silence the player for the entire render, so only realtime engines dispose.
         if (this.realtime) p.dispose();
+        this.skippedDone += this.players[i].skipped;
         this.players.splice(i, 1);
         if (p === this.current) this.current = null;
       }
     }
   }
+
+  /** Current simultaneous-voice cap: the profile's cap, squeezed by main-thread stress (min 6). */
+  private get voiceCap(): number {
+    return Math.max(6, Math.round(this.maxVoices * (1 - 0.4 * this.stress)));
+  }
+
+  /**
+   * Main-thread stress 0..1, measured by the realtime wrapper from late scheduler ticks (a busy game
+   * frame). Under stress fewer new low-priority sfx start and fewer voices overlap, so the audio thread
+   * keeps up when the screen is full of enemies.
+   */
+  setStress(x: number): void {
+    this.stress = Math.max(0, Math.min(1, Number.isFinite(x) ? x : 0));
+  }
+
+  /** Music notes skipped because the scheduler fell behind (diagnostics). */
+  get skippedNotes(): number {
+    let n = this.skippedDone;
+    for (const p of this.players) n += p.skipped;
+    return n;
+  }
+  private skippedDone = 0;
 
   setIntensity(x: number): void {
     this.intensity = Math.max(0, Math.min(1, Number.isFinite(x) ? x : 0));
