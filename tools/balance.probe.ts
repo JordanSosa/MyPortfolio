@@ -13,12 +13,17 @@
  *     npm run balance                                 # any Season 2 RunConfig, same syntax as the debug URL
  *                                                     # params (src/debug/params.ts debugRunConfig)
  *
- * BOT: `good` = the autoplay bot (dodges, dashes, picks a sensible build; the
- * average-player proxy) / `lazy` = random level-up picks and never dashes (a
- * weak-player proxy) / `both` (default).
+ * BOT: `good` = the autoplay bot (dodges, dashes, picks a sensible build) /
+ * `mid` = the average-player proxy the Season 2 curve is tuned for (takes the
+ * shiny card a third of the time, slower and sloppier) / `lazy` = random
+ * level-up picks and never dashes (a weak-player proxy) / `strong` / `both`
+ * (default: good + lazy) / a comma list.
+ *   CP=P2 [STAGE=candy_kingdom] [TWISTS=mid|max] npm run balance   # an account checkpoint's real
+ *     RunConfig (tools/checkpoints.ts); the power-vs-stage matrix is `node tools/matrix.mjs`
  */
 import { test } from "vitest";
-import { Bot, simulate } from "../src/debug/bot";
+import { Bot, makeBot, simulate } from "../src/debug/bot";
+import { checkpointRun } from "./checkpoints";
 import { RANKS, xpToNext } from "../src/game/config";
 import { META } from "../src/game/meta";
 import { debugRunConfig, type DebugParams } from "../src/debug/params";
@@ -101,19 +106,20 @@ const range = (a: number[], d = 0): string => {
   return `${fmt(median(v), d)} [${fmt(Math.min(...v), d)}-${fmt(Math.max(...v), d)}]`;
 };
 
-/** RUN env -> a fresh RunConfig per World (undefined = the default Dream Meadow config). */
-function runConfig() {
+/**
+ * RUN env -> a fresh RunConfig per World (undefined = the default Dream Meadow config); CP=P0..P7 ->
+ * the account checkpoint's RunConfig (tools/checkpoints.ts, through buildRunConfig) on STAGE (id).
+ */
+function runConfig(hero: string) {
+  if (process.env.CP) return checkpointRun(process.env.CP, { hero, stage: process.env.STAGE ?? "dream_meadow", twists: process.env.TWISTS }).config;
   const q = process.env.RUN;
   return q ? debugRunConfig({ query: q.startsWith("?") ? q : `?${q}` } as DebugParams) : undefined;
 }
 
 function play(hero: string, seed: number, botKind: string, T: number, dt: number, meta: Record<string, number>, maxE: number, view: [number, number], verbose: boolean): Run {
-  const w = new World({ hero, seed, viewW: view[0], viewH: view[1], meta, maxEnemies: maxE, run: runConfig() });
-  const bot = new Bot(seed ^ 77);
-  if (botKind === "lazy") {
-    bot.noDash = true;
-    bot.randomPicks = true;
-  }
+  const w = new World({ hero, seed, viewW: view[0], viewH: view[1], meta, maxEnemies: maxE, run: runConfig(hero) });
+  // good = new Bot() (the autoplay bot); lazy / mid / strong: src/debug/bot.ts makeBot
+  const bot = botKind === "good" ? new Bot(seed ^ 77) : makeBot(botKind, seed ^ 77);
   const lvT: number[] = [];
   let last = 1;
   const boss: Run["boss"] = {};
@@ -382,12 +388,12 @@ test("balance probe", () => {
   // 12:00 by default: the final boss arrives at 9:00 and enrages at 10:30, so a slow kill still resolves
   const T = Number(process.env.T ?? 720);
   const dt = Number(process.env.DT ?? 1 / 30);
-  const bots = (process.env.BOT ?? "both") === "both" ? ["good", "lazy"] : [process.env.BOT as string];
+  const bots = (process.env.BOT ?? "both") === "both" ? ["good", "lazy"] : (process.env.BOT as string).split(",");
   const meta = metaRanks(process.env.META ?? "0");
   const maxE = Number(process.env.MAXE ?? 350);
   const view = VIEWS[process.env.VIEW ?? "phone"] ?? VIEWS.phone;
   const verbose = !!process.env.VERBOSE;
-  console.log(`balance probe: T=${T}s dt=${dt.toFixed(4)} meta=${process.env.META ?? "0"} maxEnemies=${maxE} view=${view.join("x")}${process.env.RUN ? ` run=${process.env.RUN}` : ""}`);
+  console.log(`balance probe: T=${T}s dt=${dt.toFixed(4)} meta=${process.env.META ?? "0"} maxEnemies=${maxE} view=${view.join("x")}${process.env.RUN ? ` run=${process.env.RUN}` : ""}${process.env.CP ? ` checkpoint=${process.env.CP} stage=${process.env.STAGE ?? "dream_meadow"}` : ""}`);
   const all: Run[] = [];
   const hurt = new Map<string, Map<string, number>>();
   const killedBy = new Map<string, string[]>();

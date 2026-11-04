@@ -470,7 +470,7 @@ export const cancelSama: EnemyDef = {
   name: "CANCEL-SAMA",
   sprite: "boss_cancel",
   fps: 4,
-  hp: 1400000,
+  hp: 1900000,
   speed: 30,
   dmg: 22,
   radius: 18,

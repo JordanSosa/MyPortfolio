@@ -9,6 +9,7 @@ import { CFG } from "../src/game/config";
 import { FILLER_EPISODE } from "../src/game/director/director";
 import { BOSSES, WEAPONS } from "../src/game/registry";
 import { defaultRunConfig } from "../src/game/run-config";
+import { earlyAccountRun } from "./fixtures/account";
 import { dreamMeadow } from "../src/game/stages/dream-meadow";
 import { World } from "../src/game/world";
 import { GRADES, PostFx } from "../src/render/post";
@@ -42,7 +43,9 @@ describe("Filler Arc (endless)", () => {
   });
 
   test("with endless the run goes on: FILLER ARC, rising scaling, elite waves, boss rematches, episode cards", () => {
-    const w = new World({ hero: "rin", seed: 2, god: true, maxEnemies: 250, run: defaultRunConfig({ endless: true }) });
+    // (an early account's damage: a rematch waits for the previous boss to fall, and since the verification pass's
+    // Dream Meadow retune a fresh-save Rin can't take down the 3:00 / 6:00 bosses inside this window)
+    const w = new World({ hero: "rin", seed: 2, god: true, maxEnemies: 250, run: earlyAccountRun({ endless: true }) });
     simulate(w, 30, DT, new Bot(3));
     let victory = 0;
     let filler = 0;

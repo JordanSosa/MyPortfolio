@@ -203,7 +203,7 @@ const CRAFT: Record<string, Craft> = {
   truck_isekai: asRun({ hero: "truck_kun", isekaid: 1_000 }),
   // ---- weapons
   evolve_1: (p) => void (p.lifetime.evolutions = 1),
-  evolve_10: (p) => void (p.lifetime.evolutions = 10),
+  evolve_10: (p) => void (p.lifetime.evolutions = 600),
   evolve_25: (p) => void (p.lifetime.evolutions = 25),
   evolve_6_run: asRun({ evolutions: ["a", "b", "c", "d", "e", "f"] }),
   boba_origins: (p) => void (p.lifetime.killsByEnemy.puff = 1_000),
@@ -344,7 +344,7 @@ describe("rewards and unlocks", () => {
     ["aoi", "hero", "clear_stage_2", { t: "stageClear", order: 2 }],
     ["akane", "hero", "clear_stage_3", { t: "stageClear", order: 3 }],
     ["bubble_tea_cannon", "weapon", "boba_origins", { t: "enemyKills", enemy: "puff", count: 1000 }],
-    ["paper_crane_flock", "weapon", "evolve_10", { t: "life", key: "evolutions", count: 10 }],
+    ["paper_crane_flock", "weapon", "evolve_10", { t: "life", key: "evolutions", count: 600 }],
     ["idol_lightstick_wave", "weapon", "rank_sss", { t: "life", key: "maxRank", count: 5 }],
     ["kotatsu_of_sloth", "weapon", "no_dash", { t: "life", key: "noDashBest", count: 180 }],
     ["plot_armor", "passive", "damage_5000", { t: "life", key: "damageTaken", count: 5000 }],

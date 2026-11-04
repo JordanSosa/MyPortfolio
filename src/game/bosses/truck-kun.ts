@@ -255,7 +255,7 @@ export const truckKunBoss: EnemyDef = {
   name: "Truck-kun",
   sprite: "boss_truck",
   fps: 8,
-  hp: 300000,
+  hp: 520000,
   speed: 60,
   dmg: 22,
   radius: 18,

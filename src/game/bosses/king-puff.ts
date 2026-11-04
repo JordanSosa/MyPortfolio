@@ -43,7 +43,7 @@ export const kingPuff: EnemyDef = {
   name: "King Puff",
   sprite: "boss_kingpuff",
   fps: 6,
-  hp: 2600,
+  hp: 12000,
   speed: 46,
   dmg: 15,
   radius: 17,

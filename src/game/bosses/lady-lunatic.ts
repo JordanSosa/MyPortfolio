@@ -204,7 +204,7 @@ export const ladyLunatic: EnemyDef = {
   name: "Lady Lunatic",
   sprite: "boss_lunatic",
   fps: 5,
-  hp: 34000,
+  hp: 82000,
   speed: 42,
   dmg: 15,
   radius: 13,

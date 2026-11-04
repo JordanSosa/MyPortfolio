@@ -13,7 +13,6 @@
  * c = the dash it already mirrored (World.t of the dash), d = dash time left.
  */
 import { C } from "../../art/palette";
-import { enemyDmgScale } from "../config";
 import { WEAPONS } from "../registry";
 import type { Enemy, EnemyDef } from "../types";
 import type { World } from "../world";
@@ -52,7 +51,7 @@ const dir = { x: 0, y: 0 };
 
 function orb(e: Enemy, w: World): void {
   const y = e.y - e.cy - 2;
-  shot(w, e.x, y, aimAt(w, e.x, y), ORB_SPEED, ORB_DMG * enemyDmgScale(w.t), "eb_orb", CLONE_ORB_TINT, 5);
+  shot(w, e.x, y, aimAt(w, e.x, y), ORB_SPEED, ORB_DMG * w.enemyDmgMul(), "eb_orb", CLONE_ORB_TINT, 5);
 }
 
 /** Lv1 cooldown of the hero's start weapon (the Evil Twin's fire rate). */

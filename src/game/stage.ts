@@ -212,6 +212,37 @@ export interface EndlessDef {
   bossSpawnMul: number;
 }
 
+// ---------------------------------------------------------------- toughness
+/**
+ * Per-stage enemy toughness (docs/ARCHITECTURE.md §6): each stage tunes its own
+ * horde against the account power it is meant to be cleared at, instead of one
+ * global time curve (a 20-minute stage on the 10-minute curve ends at x100+ HP).
+ * Missing fields take the CFG defaults (`stageScaling`).
+ */
+export interface StageScaling {
+  /** Regular-enemy (and elite) HP x this, on top of each enemy's own base HP. */
+  hp: number;
+  /** HP time curve x (1 + a m + b m^2 + c m^3), m = run minutes x `pace`. */
+  curve: readonly [number, number, number];
+  /** Run minutes are multiplied by this for the HP curve (a long stage at < 1 stretches the same curve). */
+  pace: number;
+  /** Enemy contact / shot damage x this (bosses keep their own numbers). */
+  dmg: number;
+  /** Damage ramp x (1 + dmgPerMinute x max(0, m - dmgFrom)), real minutes. */
+  dmgPerMinute: number;
+  dmgFrom: number;
+  /** Boss HP x this. */
+  bossHp: number;
+  /** Adaptive toughness ceiling (Director.adapt, extra HP fraction for new spawns on an empty screen). */
+  adaptMax: number;
+  /** Continuous spawn rate x this (every phase). */
+  spawn: number;
+  /** Phase max-alive caps x this (the device cap still applies). */
+  cap: number;
+  /** Regular-enemy move speed x this (a strong account outruns slow melee: later stages close in faster). */
+  speed: number;
+}
+
 // ---------------------------------------------------------------- the stage
 export interface StageDef {
   id: string;
@@ -235,6 +266,8 @@ export interface StageDef {
   phases: readonly SpawnPhase[];
   /** One-shot events (bosses included: kind "boss"). */
   events: readonly TimelineEvent[];
+  /** Enemy toughness for this stage (defaults: CFG, see StageScaling). */
+  scaling?: Partial<StageScaling>;
   /** Run-start ring of easy enemies so the first level-up lands fast. */
   opening: { enemy: string; count: number };
   /** Final boss id: its death clears the stage (victory, or the Filler Arc when endless). */

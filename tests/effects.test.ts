@@ -479,7 +479,8 @@ describe("Plot Twists", () => {
     // and they bite in the sim
     const base = mk();
     const hard = tw("budget_cuts", 2);
-    expect(hard.spawnEnemy("puff", 0, 0)!.maxHp).toBe(Math.round(base.spawnEnemy("puff", 0, 0)!.maxHp * 1.5));
+    // (both HP values are rounded: within 1 of x1.5)
+    expect(Math.abs(hard.spawnEnemy("puff", 0, 0)!.maxHp - base.spawnEnemy("puff", 0, 0)!.maxHp * 1.5)).toBeLessThanOrEqual(1);
     const fast = tw("rushed_production", 1);
     const b = fast.spawnBullet(0, 0, 100, 0, 10);
     expect(b.vx).toBeCloseTo(130, 6);
@@ -546,7 +547,8 @@ describe("Plot Twists", () => {
       }
     });
     expect(rival).not.toBeNull();
-    expect(rival!.skin).toMatch(/^(rin|mochi)_run$/);
+    // another hero's run sprite (any of the roster but the one playing)
+    expect(HEROES.filter((h) => h.id !== "hoshi").map((h) => `${h.sprite}_run`)).toContain(rival!.skin);
     let chests = 0;
     for (let i = 0; i < w.enemies.count; i++) {
       const e = w.enemies.items[i];

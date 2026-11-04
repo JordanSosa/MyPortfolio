@@ -42,7 +42,7 @@ and `gacha.md` (gacha heroes).
 | Senpai | Effortless Charisma | +20% luck, +10% XP, enemies within 40 px are 10% slower (they're staring) | `luck += 0.20; growth += 0.10` + install: enemies with distance < 40 px get `slow = min(slow, 0.9)` each step |
 | Magical Girl #47 | Perfectly Average | +5% to EVERYTHING | `might, area, moveSpeed, projSpeed, duration, pickup, luck, growth, greed += 0.05; cooldown -= 0.05; maxHp += 5` ("every stat" below always means this exact list) |
 | Isekai-kun | Cheat Skill | +15% damage, +15% XP, starts every run at Lv 3 | `might += 0.15; growth += 0.15` + `RunConfig.start.level = max(start.level, 3)` |
-| Truck-kun | Heavy Vehicle | 180 max HP, 3 armor, +50% pickup, −15% move speed, can't be knocked back, bigger hitbox | `maxHp += 80; armor += 3; pickup += 0.5; moveSpeed -= 0.15` + player radius 9, knockback on the player ignored |
+| Truck-kun | Heavy Vehicle | +80 max HP (2x the base 80), 3 armor, +50% pickup, −15% move speed, can't be knocked back, bigger hitbox | `maxHp += 80; armor += 3; pickup += 0.5; moveSpeed -= 0.15` + player radius 9, knockback on the player ignored |
 
 ### 1.2 UI colours
 

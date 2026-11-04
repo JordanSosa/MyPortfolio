@@ -239,7 +239,7 @@ export const sugarPlumTyrant: EnemyDef = {
   name: "Sugar Plum Tyrant",
   sprite: "boss_sugarplum",
   fps: 5,
-  hp: 90000,
+  hp: 200000,
   speed: 44,
   dmg: 18,
   radius: 14,

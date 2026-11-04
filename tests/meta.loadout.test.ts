@@ -3,6 +3,7 @@
  * ownership), every progression track combined into the RunConfig, and an
  * integration check that the live World runs the config the account builds.
  */
+import { CFG } from "../src/game/config";
 import { describe, expect, test } from "vitest";
 import { simulate } from "../src/debug/bot";
 import { baseStats } from "../src/game/stats";
@@ -96,7 +97,7 @@ describe("RunConfig", () => {
     const s = baseStats();
     for (const m of c.mods) m(s);
     expect(s.might).toBeCloseTo(1 + 0.08 + 0.1);
-    expect(s.maxHp).toBeCloseTo(100 * 1.1);
+    expect(s.maxHp).toBeCloseTo(CFG.playerHp * 1.1);
     expect(c.talents).toEqual({ h0_1: 3 });
     expect(c.constellation).toBe(4);
     expect(c.weaponDamage).toEqual({ star_shot: masteryDamage(6), petal_slash: masteryDamage(10) });

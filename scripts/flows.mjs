@@ -556,6 +556,11 @@ for (const dev of DEVICES) {
           await waitFor(page, () => window.__kk.world.endlessOn === true, null, 40000, "Filler Arc started");
           await sleep(2500);
           await shot("filler-tbc");
+          // (a level-up or chest that pops in these seconds pauses the world: pick / open it, then keep waiting)
+          for (let i = 0; i < 6 && !(await page.evaluate(() => window.__kk.world.t > window.__kk.world.endlessFrom + 4)); i++) {
+            await resolveModals();
+            await sleep(1500);
+          }
           await waitFor(page, () => window.__kk.world.t > window.__kk.world.endlessFrom + 4, null, 60000, "Filler Arc plays on");
           await shot("filler-arc");
         });

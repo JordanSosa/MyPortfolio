@@ -13,7 +13,6 @@
  * timer = next core tick, a = stored gem XP, b = gems eaten (count).
  */
 import { C } from "../../art/palette";
-import { enemyDmgScale } from "../config";
 import { PK_FREE, type Enemy, type EnemyDef } from "../types";
 import type { World } from "../world";
 import { BX_FILLED, BX_SWALLOW, countAlive, cue, pullHero } from "./_s45";
@@ -86,7 +85,7 @@ export const plotHole: EnemyDef = {
     e.timer -= dt;
     if (e.timer <= 0) {
       e.timer = CORE_EVERY;
-      if (d < HOLE_CORE_R + 4) w.hurtPlayer(CORE_DMG * enemyDmgScale(w.t), e.x, e.y, e.def.id);
+      if (d < HOLE_CORE_R + 4) w.hurtPlayer(CORE_DMG * w.enemyDmgMul(), e.x, e.y, e.def.id);
     }
     const cy = e.y - e.cy;
     // it eats gems...

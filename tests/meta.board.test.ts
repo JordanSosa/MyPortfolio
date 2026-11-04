@@ -4,6 +4,7 @@
  * refund (never strands a node) / respec, keystone slots, applyBoard and the
  * auto-path planner, plus the save-v1 Dream Shop compat mapping.
  */
+import { CFG } from "../src/game/config";
 import { describe, expect, test } from "vitest";
 import { baseStats, finalizeStats } from "../src/game/stats";
 import {
@@ -177,7 +178,7 @@ describe("board rules", () => {
     applyBoard(p).mod!(s);
     finalizeStats(s);
     expect(s.might).toBeCloseTo(1.6);
-    expect(s.maxHp).toBe(60);
+    expect(s.maxHp).toBe(Math.round(CFG.playerHp * 0.6));
   });
 
   test("applyBoard: stat mod, flags, slots, start bonuses", () => {
@@ -187,7 +188,7 @@ describe("board rules", () => {
     const s = baseStats();
     fx.mod!(s);
     expect(s.might).toBeCloseTo(1.12);
-    expect(s.maxHp).toBe(100 + 16);
+    expect(s.maxHp).toBe(CFG.playerHp + 16);
     expect(s.curse).toBeCloseTo(0.05);
     expect(fx.flags).toMatchObject({ ultStart: 0.2, banish: 1, revives: 1 });
     expect(fx.slots).toEqual({ relic: 1, weapon: 1, passive: 0 });

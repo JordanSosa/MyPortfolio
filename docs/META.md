@@ -23,7 +23,7 @@ boundary. Content names and numbers come from the content bible
 
 | File | What |
 | --- | --- |
-| `tuning.ts` | **Every tunable number**: payout, grade, hero XP curve, mastery curve, board costs, relic slots, rotation, gacha rates / pity / Copium, Copium Exchange prices, Gem Exchange, codex bounties, migration gift. The economy pass edits only this file. |
+| `tuning.ts` | **Every tunable number**: payout, grade, hero XP curve, mastery curve, board costs, relic slots, rotation, gacha rates / pity / Copium, Copium Exchange prices, Gem Exchange, codex bounties, migration gift. The economy also reads the stages' Ratings (`StageDef.rewardMul`), the Plot Point rewards (`achievements/defs`) and the in-run coin sources (`CFG.coinDropChance` ... `chestCoinsGolden`). |
 | `profile.ts` | `Profile` type (version 2), `defaultProfile()`, `sanitizeProfile(raw)` (field-by-field repair, never throws), `Settings` (unchanged from v1), `setFlag`. |
 | `reconcile.ts` | `reconcileProfile(p, ctx)`: content-aware repair (levels from XP, talents vs trees and points, unknown board nodes refunded, keystone slots, pity caps, loadout made playable) + start / newly-met unlocks. |
 | `content.ts` | `MetaContent` catalogue (heroes, weapons, passives, enemies, bosses, stages, relics, talent trees, twists) from the `src/game` registries (`gameContent()`), or `makeContent(parts)` for tests. Every meta function takes an optional `ctx`. |
@@ -165,23 +165,44 @@ something'").
 
 ## 4. Economy (`economy.ts`, numbers in `tuning.ts`)
 
-- **Grade**: a death scores `minutes + kills/400 + level/12 + maxCombo/300`
-  (D / C / B / A); a clear is A, S under 150 damage taken, SS under 50 with an
-  SSS combo rank.
-- **Coins**: picked up + time (per minute) + kills (+ elites) + each boss (by its
-  slot in the stage) + clear + endless minutes, then a **Greed** line (the
-  bonuses x `RunStats.greed`; the coins picked up already include greed, so it
-  never counts twice), then x grade x heat (`1 + 0.08 heat`) x curse x stage
-  `rewardMul`.
-- **Gems**: stipend (per run + per minute + endless) x gem find (`RunStats.gemFind`)
-  x heat x curse x stage, + first clear (by stage order), + boss first kills, +
-  heat badges (4 / 8 / 16 / 32, once per stage), + codex bounties; achievements
-  pay separately.
-- **Hero XP**: time + kills + bosses + clear, x stage reward; level L -> L+1 costs
-  `round(140 x L^1.32)` (Lv 30 ≈ 155k XP ≈ 100 full runs); one talent point per level.
-- **Mastery**: damage x 0.001 XP; ranks at 300 ... 110,000 XP; +3% damage per rank.
-- **Costs**: talent respec 50 + 15 per point; hero level accelerator 0.6 coins per
-  missing XP; Gem Exchange 1,000 ★ -> 10 ♦.
+Tuned by the progression simulator (§9) so the mid bot hits EXPANSION §2; the method and
+the before / after tables are in ARCHITECTURE.md §6.6.
+
+- **Grade**: a death scores `minutes + kills/2000 + level/20 + maxCombo/500` (D / C / B / A
+  at 2.5 / 5 / 9); a clear is A, S under 150 damage taken, SS under 50 with an SSS combo
+  rank. Rank multipliers D 1 · C 1.05 · B 1.1 · A 1.15 · S 1.25 · SS 1.35.
+- **Coins** = the coins picked up (as they are: they already include greed) + the
+  **episode bonuses** x greed x rank x the stage's **Ratings** (`StageInfo.rewardMul`:
+  Dream Meadow 1 · Candy 1.5 · Academy 2 · Beach 5 · Final Arc 8), then x heat
+  (`1 + 0.08 heat`) x curse (`1 + 0.5 curse`) on everything. Episode bonuses: time 9 / min
+  (the first 2:00 count double: a 90 s death still buys a ring-1 node, and dying early never
+  pays more per minute), kills 0.0002 each + elites 0.2, bosses by slot 5 / 10 / 18 / 28,
+  clear 20, Filler Arc 4 / min. Picked-up coins stay small on purpose (they grow with raw
+  power - a maxed build's Star Pouches - not with the stage): `CFG.coinDropChance` 0.2 % a
+  kill (x luck), boss / elite bursts 8 / 4 coins, Star Pouch 3, chests 3-6 (golden 10).
+  Typical payouts (heat 0, the after progression run, deaths p25-p75 / clear median): a
+  fresh ~2:00 death ~45 (+40 from the Pilot Episode Plot Point); Dream Meadow 110-230 /
+  ~730; Candy 210-525 / ~1,000; Academy 350-640 / ~1,400; Beach 690-1,200 / ~3,250; Final
+  Arc 1,250-5,400 / ~9,800; a death inside 3:00 pays ~50 / 115 / 140 / 410 / 670 by stage.
+- **Gems**: stipend (4 a run + 1.5 / min + 3 / endless min) x gem find x heat (`1 + 0.06
+  heat`) x curse x Ratings^0.5, + first clear (240 / 320 / 400 / 480 / 800 by stage
+  order) + boss first kills (30, finals 60) + heat badges (200 / 400 / 800 / 1,600 at
+  heat 4 / 8 / 16 / 32, once per stage) + codex bounties (hero 10, weapon 5, passive 3,
+  enemy 3, boss 12, relic 2, stage 15); Plot Points pay separately (~24,800 ♦ in all, half
+  the bible's first numbers). A fresh save gets no starter gems: the Pilot Episode (160 ♦)
+  pays the first single pull after run 1 and "Just One Pull" pays it back.
+- **Hero XP**: time 1 / s + kills 0.004 + bosses 40 + clear 150, x Ratings^0.3; x3
+  ("Recap Episode" catch-up) while the hero is more than 2 levels below the account's best
+  hero. Level L -> L+1 costs `round(120 x L^1.3 x 1.06^(L-1))` (Lv 10 ≈ 12.9k XP, Lv 20 ≈
+  104k, Lv 30 ≈ 418k ≈ 120-150 Final Arc runs); one talent point per level.
+- **Mastery**: damage x 0.001 XP; ranks at 500 / 2.5k / 12k / 35k / 80k / 160k / 320k /
+  900k / 3M / 10M XP (rank 5 "Limit Break" ≈ 80M damage, rank 10 ≈ 10B); +3 % damage per
+  rank.
+- **Costs**: board ring 1 15 coins a rank up (ring totals 1.9k / 23k / 181k / 996k / 3.65M,
+  4.85M in all); talent respec 50 + 15 per point; hero level accelerator 0.6 coins per
+  missing XP (the simulated player's dead-zone fallback); Gem Exchange 1,000 ★ -> 10 ♦.
+- **Unlocks** (`unlocks.ts`): the bible's conditions; Paper Crane Flock moved from 10 to
+  600 lifetime evolutions (the late-game unlock: ~11-17 evolutions an hour by then, so ~40-60 h for the mid bot).
 
 ## 5. Training Arc board (`board/`)
 
@@ -198,8 +219,8 @@ Friendship, Merch Tie-In, Curse Of The Sequel, Truck-kun's Blessing).
 - **Gating**: ring 1 open; ring r needs the stage with order r - 1 cleared. A node
   is buyable when a neighbour is owned (the centre counts).
 - **Costs**: `ringCost[ring] x kindMul x (1 + 0.45 x path position) x 1.55^(rank-1)`,
-  rounded to friendly steps: 25 on ring 1 up to ~100k for a ring-5 keystone;
-  ~4.9 M coins for the whole board.
+  rounded to friendly steps: 15 on ring 1 up to ~100k for a ring-5 keystone;
+  ~4.85 M coins for the whole board.
 - **Refund**: the top rank of a node, full price, refused when it would strand an
   owned node. **Respec**: everything back minus `min(6000, 50 + 4%)`.
 - **Keystones**: bought ones switch on automatically while a slot is free;
@@ -264,17 +285,113 @@ need the previous clear; a twist without a row opens with the stage its
 `unlockStatus` gives the codex hint and progress ("412 / 1,000"). Codex
 discoveries pay `TUNING.codex` gems once per entry.
 
-## 9. Progression simulator (`npm run progression`)
+## 9. Progression simulator (`npm run progression`, `node tools/progression.mjs`)
 
-`tools/progression.sim.ts` plays consecutive runs with one account: loadout
-policy (furthest unlocked stage, main hero, best relics) -> `buildRunConfig` ->
-headless World + bot (`BOT=weak|mid|strong`) -> `applyRunToProfile` (auto-claim)
--> spending policy (board by value / cost through `autoPath`, talents in the
-strongest branch, 10-pulls on the featured banner, spark, Copium vouchers,
-keystones). It prints per-run lines (`VERBOSE=1`, payout lines with `LINES=1`),
-curves every `EVERY` runs, hours / runs to every EXPANSION §2 milestone, totals and
-the sim cost; `OUT=file.json` writes the full log. Env: `RUNS`, `HOURS`, `SEED`,
-`OVERHEAD` (menu seconds per run), `DT`, `MAXE`.
+`tools/progression.sim.ts` plays consecutive runs with ONE account, exactly like a
+player: loadout policy -> `buildRunConfig` -> headless World + bot
+(`BOT=weak|mid|good|strong`, `src/debug/bot.ts makeBot`; weak = the lazy bot) ->
+`applyRunToProfile` (auto-claim) -> spending policy. A run stops at its clear, its
+death or 5:00 past the stage length (a real player keeps fighting a final boss).
+
+**The player model** (`tools/policy.ts` + the worker):
+
+- **Loadout**: the furthest open stage, the most-played hero (each newly unlocked hero
+  gets one try-out run), the best relics (rarity, then stars).
+- **Farming**: after a short death on the frontier (the furthest stage, not cleared yet,
+  died before 40 % of its length) the next run replays the last cleared stage for coins,
+  then it is back to the frontier (`FARM=0`: always push; the always-push player buys a
+  board node after only ~57 % of its first-10 h runs - a string of 90 s Final Arc deaths
+  pays ~400 coins against 1,500-coin ring-3 ranks - against ~80 % with farming).
+- **Spending** after every run: board nodes by value / cost (`autoPath` + `nodeValue`),
+  keystones, talent points (strongest branch first); with nothing open on the board
+  (every open ring bought, the next one still gated) coins go into the hero-level
+  accelerator instead; the very first pull is a single one, then 10-pulls (featured hero
+  banner first), the spark, Copium -> Pull Vouchers.
+- **Endgame** (after the first Final Arc clear): a Plot Twist heat ladder on the Final Arc
+  with the main hero (+2 heat after a clear, -2 after two failures, `TWIST_LADDER`), and
+  every other run trains the lowest-level hero at heat 0 (hero levels / talents keep
+  moving in the long tail).
+
+**Worker env**: `RUNS`, `HOURS`, `SEED`, `OVERHEAD` (menu seconds per run, 45),
+`DT` (1/30), `MAXE` (250), `STRIDE=4 STRIDE_FROM=final|<h>` (late game: bank each
+simulated run 4 times - the late game is stable and a high-power Final Arc run costs
+20-30 s), `ENDGAME=0`, `TRY_NEW=0`, `FARM=0` / `FARM_BELOW=0.4`, `SAVE_AT=<h> SAVE_TO=f` / `RESUME=f` (dump an account
+and continue it: late-game tuning without replaying the first hours), `OUT=f.json`,
+`VERBOSE=1` (a line per run), `LINES=1` (every payout line), `PATCH='{...}'` or a .json file (a combat tuning patch,
+`tools/patch.ts` paths - `"stage.candy_kingdom.scaling": {"hp": 2.1}`, `"boss.cancel_sama.hp": 1900000` - applied for the
+whole account: stage-clear sweeps without editing files), `STOP_AT=final|<stage order>` (end the account at that stage's
+first clear), `SAVE_END=1 SAVE_TO=f` (dump the account where it stopped). Driver flags: `--patch`, `--stop-at`,
+`--save-end --save-dir d`, `--resume-dir d` (the next stage's sweep continues those dumps: the verification pass tuned
+Beach / Final Arc variants from the same eight post-Academy accounts).
+
+**The report** (`node tools/progression.mjs --bots weak,mid,strong --seeds 1-2 --hours 160
+--stride 6 --name after`, ~75 min on 4 cores, one worker process per account, 4 in parallel; `--report f.json`
+re-prints, `--compare before.json` adds before columns): hours / runs to every EXPANSION §2
+milestone (median [min-max]), weak / strong pace vs mid, checkpoint snapshots against §9.1
+(board coins, hero level, mastery, relics, constellation, pulls, clears), income per
+phase (runs / h, coins / run and / h, gems / h, runs per 10-pull, hero XP / h), the
+incremental hook for the first 10 h (payout covers the cheapest open node, something
+affordable on Results, runs that bought a node) and the longest dead zones (no board buy;
+no progress event at all), the first 12 runs, and the unlock timeline. Results:
+`tools/results/progression-{before,after}.{json,md}`.
+
+**Economy helpers** (`tools/econ.sim.ts`, `npx vitest run --config tools/econ.vitest.config.ts
+--root . --disableConsoleIntercept`): `ECON=fit` prices every run of a `node tools/matrix.mjs
+--stats` result (each run's RunStats kept; `tools/results/matrix-econ-data.json` = P0-P7 x
+every stage, Hoshi / Kuro) with the live payout / hero XP / mastery formulas, per cell, and
+`FIT_PATCH='{"payout.coinsPerMinute": 9, "stage.final_arc.rewardMul": 12}'` tries a change
+offline before a progression run; `ECON=reprice RINGS=15,220,1500,7000,22000` prints what each
+checkpoint's ranks cost under other ring costs (the §9.1 coin values that keep their power).
+
+### 9.1 Account-power checkpoints (the contract between the combat curve and the economy)
+
+`tools/checkpoints.ts` builds eight synthetic accounts **through the real meta
+layer** (board purchases with the policy above, hero XP -> level -> talents,
+mastery XP -> ranks / Limit Breaks, relics with stars, constellations, unlocks)
+and turns them into RunConfigs with `buildRunConfig`:
+`checkpointRun("P3", { hero, stage, twists })`. Checkpoints are cumulative (P(k)
+is built from P(k-1): each step's coins arrive in 24 chunks and are spent with
+only the rings of that step open, so ring 1 is bought before ring 2 exists).
+Measurement liberties: every stage is unlocked and the played hero is unlocked
+even when the account would not have it yet ("P0 Rin" = Rin at fresh-save power).
+
+| Id | Hours (economy target) | Clears | Board coins | Hero Lv | Mastery (signature / others) | Relics equipped | Const. | Intended clear (~40-70 %) |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| P0 | 0 | 0 | 0 | 1 | 0 / 0 | - | C0 | - (dies 2:30-4:00 in Dream Meadow) |
+| P1 | ~1 | 0 | 420 (18 ranks of ring 1) | 5 | 1 / 0 | - | C0 | - (King Puff) |
+| P1b | ~1.2 | 0 | 1,862 (ring 1 done) | 6 | 2 / 1 | SR Festival Goldfish ★0 | C0 | - (where the Dream Meadow push sits: ~10 % clears) |
+| P2 | ~3 | 0 | 1,862 (ring 1 done) | 10 | 3 / 1 | SR Festival Goldfish ★0 | C0 | Dream Meadow |
+| P3 | ~8 | 1 | 19,760 (ring 2 mostly) | 15 | 5 / 2 | SSR Transformation Brooch ★0, SR Mascot Head ★1 | C0 | Candy Kingdom |
+| P4 | ~15 | 2 | 83,760 (ring 3 started) | 20 | 7 / 4 | SSR Protagonist Scarf ★0, SSR Brooch ★0, SR Mascot Head ★1 (slots allowing) | C0 | Shoujo Academy |
+| P5 | ~30 | 3 | 398,760 (ring 4 started) | 25 | 8 / 5 | UR Director's Cut ★0, UR Unopened Figure ★0, SSR Brooch ★1, SSR Scarf ★0 (slots allowing) | C1 | Beach Episode (and the Final Arc's lower bound) |
+| P6 | ~80 | 5 | 2,298,760 (ring 5 half) | 30 | 10 / 7 | LR Sakuga Cel ★1, UR ★2, SSR ★4, SSR ★3 | C2 | The Final Arc |
+| P7 | ~150 | 5 | 4,854,242 (full board; keystones Plot Armor + Truck-kun's Blessing) | 30 | 10 / 10 | MYTHIC A Real Friend ★1, LR Sakuga Cel ★4, SSR Red String ★5, UR ★5 | C4 | heat: melts the Final Arc at heat 12, works at heat 41 |
+| P7r | ~150 | 5 | as P7 | 30 | 10 / 10 | LR Revival Theme ★0, UR Director's Cut ★1, UR Unopened Figure ★1, UR Hot-Blooded Bandana ★0 | C6 | P7 with the Merch Machine's real 150 h haul (no MYTHIC: the spark is ~780 pulls away) |
+
+(Verification pass: P2-P5 now hold what the Merch Machine actually gives the average player by those hours -
+progression snapshots: an SR by ~1 h, SR / SSR pairs by 3-8 h, SSR + SSR + SR by 15 h, two URs by ~30 h - one
+rarity more than the combat-curve pass's sets; P1b and P7r are new. P6 / P7 keep their LR / MYTHIC sets as the
+lucky-gacha ceiling.)
+
+(Board coins at today's prices: the economy pass made ring 1 40 % cheaper - 3,101 -> 1,862 coins - and
+repriced every checkpoint so it keeps the ranks it was measured with: `ECON=reprice` in `tools/econ.sim.ts`.
+Paper Crane Flock is now the 1,000-evolution late unlock, so P2-P5 hold the other three general weapons.)
+
+Unlocked content grows with them (P1: Rin, Mochi, Bubble Tea Cannon, Main
+Character Aura; P2: + Kuro, 3 of the 4 general weapons, 6 of the new passives; P3+:
+every passive, + the heroes each clear opens; P6+: + Paper Crane Flock; P5: + Senpai;
+P6: + Magical Girl #47, Isekai-kun; P7: + Truck-kun). Resulting stats (Hoshi):
+P0 might x1.00 / 80 HP; P2 x1.29 / ~133 HP; P3 x1.46, 2 armor; P4 x1.67, 7 weapon
+slots, a revive; P5 x1.94, start Lv 3, 4 relic slots; P6 x2.40 / ~380 HP, start Lv 8, 2
+revives; P7 x2.5 might, 3 revives + Plot Armor (a 150 h player picks survivable keystones: the value
+policy's Glass Cannon Arc, -40 % HP, is a liability against the long stages' damage ramps).
+`HEAT_SETS.mid` (heat 12) and `HEAT_SETS.max` (41) are the Plot Twist sets for P7.
+
+**What the economy pass tunes**: income and costs so that the mid bot's account
+reaches each checkpoint's board coins / hero level / mastery / relics at about its
+`hours` (the combat side then guarantees the clear rates of ARCHITECTURE.md §6:
+a stage's first clear lands a little before its intended checkpoint). Changing a
+checkpoint's contents is a joint decision: re-run `node tools/matrix.mjs` after.
 
 ## 10. Tests
 

@@ -9,10 +9,15 @@ enrages at `duration + 30`.
 | # | id | Name | duration | final boss at | mid bosses | rewardMul | requires | bpm* |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | `dream_meadow` | Dream Meadow | 600 | 9:00 | 3:00, 6:00 | 1 | — | 140 |
-| 2 | `candy_kingdom` | Candy Kingdom | 720 | 11:00 | 6:00 | 1.25 | `dream_meadow` | 150 |
-| 3 | `shoujo_academy` | Shoujo Academy | 840 | 13:00 | 7:00 | 1.5 | `candy_kingdom` | 136 |
-| 4 | `beach_episode` | Beach Episode | 960 | 15:00 | 8:00 | 1.8 | `shoujo_academy` | 128 |
-| 5 | `final_arc` | The Final Arc | 1200 | 19:00 | 8:00, 14:00 | 2.2 | `beach_episode` | 160 |
+| 2 | `candy_kingdom` | Candy Kingdom | 720 | 11:00 | 6:00 | 1.5 | `dream_meadow` | 150 |
+| 3 | `shoujo_academy` | Shoujo Academy | 840 | 13:00 | 7:00 | 2 | `candy_kingdom` | 136 |
+| 4 | `beach_episode` | Beach Episode | 960 | 15:00 | 8:00 | 5 | `shoujo_academy` | 128 |
+| 5 | `final_arc` | The Final Arc | 1200 | 19:00 | 8:00, 14:00 | 8 | `beach_episode` | 160 |
+
+`rewardMul` is the stage's **Ratings** (economy pass, docs/META.md §4): the coin episode
+bonuses are multiplied by it, run gems by its square root (`TUNING.payout.gemStageExp` 0.5)
+and hero XP by its 0.3 power (`TUNING.hero.xpStageExp`). It started at 1 / 1.25 / 1.5 / 1.8 /
+2.2; the progression simulator set it so each stage's runs pay for that stage's board ring.
 
 \* `bpm` is a proposed optional `StageDef.bpm` (Idol Lightstick Wave's beat
 clock, `weapons.md` §2.11). The audio agent sequences each stage's battle theme
@@ -20,8 +25,13 @@ at this tempo.
 
 Proposed optional `TimelineEvent` fields used below: `label` (the
 `waveIncoming` banner text) and `sprite` (bullet sprite for `bulletRain`).
-Enemy HP ramps come from the base HP in `enemies.md` × `enemyHpScale(t)`;
-longer stages are naturally tougher at the end.
+Enemy HP / damage ramps come from the base stats in `enemies.md` × the stage's
+own toughness (`StageDef.scaling`: a tier, a time curve stretched by `pace`, a
+damage ramp, spawn / speed multipliers), tuned so the average player's first clear
+of each stage lands at EXPANSION §2's hours (Season 2 combat-curve pass, then the
+verification pass against the progression simulator: `docs/ARCHITECTURE.md` §6.3 /
+§6.7 hold the live tiers and boss HP; the phase rates below are multiplied by
+`scaling.spawn`, x1.4 on stages 2-5).
 
 ---
 
@@ -31,7 +41,7 @@ longer stages are naturally tougher at the end.
 name: "Candy Kingdom",
 subtitle: "Episode 2: Everything Here Is Edible (Please Don't)",
 blurb: "sugar rush, sprinkle storms, a very sticky tyrant",
-order: 2, duration: 720, rewardMul: 1.25, requires: "dream_meadow",
+order: 2, duration: 720, rewardMul: 1.5, requires: "dream_meadow",
 finalBoss: "sugar_plum_tyrant", enrageAt: 750,
 opening: { enemy: "gummy_bear", count: 12 },
 props: { ids: ["prop_candy_jar", "prop_pinata"], interval: 16, max: 4 },
@@ -151,7 +161,7 @@ melody in a minor key with a tuba.
 name: "Shoujo Academy",
 subtitle: "Episode 3: The Transfer Student Is Suspiciously Powerful",
 blurb: "cherry blossoms, hall passes, unspoken feelings",
-order: 3, duration: 840, rewardMul: 1.5, requires: "candy_kingdom",
+order: 3, duration: 840, rewardMul: 2, requires: "candy_kingdom",
 finalBoss: "bishounen", enrageAt: 870,
 opening: { enemy: "exam_paper", count: 12 },
 props: { ids: ["prop_school_desk", "prop_vending"], interval: 16, max: 4 },
@@ -284,7 +294,7 @@ screen is a crab's opinion.
 name: "Beach Episode",
 subtitle: "Episode 4: The Obligatory Beach Episode (Crabs Only)",
 blurb: "sand, sun, sidestepping crabs, fireworks after dark",
-order: 4, duration: 960, rewardMul: 1.8, requires: "shoujo_academy",
+order: 4, duration: 960, rewardMul: 5, requires: "shoujo_academy",
 finalBoss: "firework_dragon", enrageAt: 990,
 opening: { enemy: "crab_kun", count: 12 },
 props: { ids: ["prop_beachball", "prop_cooler"], interval: 16, max: 4 },
@@ -416,7 +426,7 @@ arps, shaker); boss theme: festival taiko drums with a chiptune flute.
 name: "The Final Arc",
 subtitle: "Episode 5: The Final Arc (Final) (Real) (v2)",
 blurb: "plot holes, rushed animation, and the network is watching",
-order: 5, duration: 1200, rewardMul: 2.2, requires: "beach_episode",
+order: 5, duration: 1200, rewardMul: 8, requires: "beach_episode",
 finalBoss: "cancel_sama", enrageAt: 1230,
 opening: { enemy: "filler_goon", count: 12 },
 props: { ids: ["prop_clapboard", "prop_crt_tv"], interval: 16, max: 4 },

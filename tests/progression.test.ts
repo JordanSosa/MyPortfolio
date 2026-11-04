@@ -10,18 +10,25 @@ import { META, metaCost } from "../src/game/meta";
 import { ADAPT_FROM, ADAPT_MAX } from "../src/game/director/director";
 
 describe("xp curve", () => {
-  test("curve: 3 at Lv1, steep Lv 6-12, gentle Lv 12-22, steep again from Lv 22 / 38", () => {
+  test("curve: 3 at Lv1, rising Lv 6-12, gentle Lv 12-22, steep again from Lv 22 / 38", () => {
     expect(xpToNext(1)).toBe(3); // the first level-up in a few seconds (+ the starter vacuum)
     expect(xpToNext(2)).toBe(15);
     expect(xpToNext(6)).toBe(55);
-    expect(xpToNext(7)).toBe(93); // +38 per level from Lv 6
-    expect(xpToNext(12)).toBe(283);
-    expect(xpToNext(13)).toBe(295); // only +12 per level through the early mid-game
-    expect(xpToNext(22)).toBe(403);
-    expect(xpToNext(23)).toBe(475); // +72 per level from Lv 22
+    expect(xpToNext(7)).toBe(81); // +26 per level from Lv 6 (Season 2: the tougher early horde needs the level-ups to keep coming)
+    expect(xpToNext(12)).toBe(211);
+    expect(xpToNext(13)).toBe(223); // only +12 per level through the early mid-game
+    expect(xpToNext(22)).toBe(331);
+    expect(xpToNext(23)).toBe(403); // +72 per level from Lv 22
     expect(xpToNext(39) - xpToNext(38)).toBe(132); // +132 per level from Lv 38
-    // strictly increasing, and the late game costs far more than the early game
-    for (let L = 1; L < 80; L++) expect(xpToNext(L + 1)).toBeGreaterThan(xpToNext(L));
+    // strictly increasing up to the cap, then flat (the long stages never go 30+ s without a level-up)
+    const cap = CFG.xpCurve.max;
+    for (let L = 1; L < 120; L++) {
+      if (xpToNext(L + 1) < cap) expect(xpToNext(L + 1)).toBeGreaterThan(xpToNext(L));
+      else expect(xpToNext(L + 1)).toBe(cap);
+    }
+    expect(xpToNext(44)).toBeLessThan(cap);
+    expect(xpToNext(46)).toBe(cap);
+    // the late game still costs far more than the early game
     expect(xpToNext(50)).toBeGreaterThan(xpToNext(20) * 7);
   });
   test("addXp levels up, queues pending levels and carries overflow", () => {
@@ -106,7 +113,7 @@ describe("level-up cards", () => {
     expect(w.hasWeapon("galaxy_barrage")).toBeTruthy();
     expect(w.hasWeapon("star_shot")).toBeFalsy();
   });
-  test("everything maxed -> Heal 30 HP / +50 coins fallbacks", () => {
+  test("everything maxed -> Heal 30 HP / Star Pouch coins fallbacks", () => {
     const w = new World({ hero: "mochi", seed: 4, director: false });
     for (const def of WEAPONS.values()) if (!def.evolved) w.addWeapon(def.id, 5);
     for (const p of PASSIVES.slice(0, CFG.passiveSlots)) w.addPassive(p.id, 5);
@@ -131,7 +138,7 @@ describe("level-up cards", () => {
     w.choose({ kind: "passive", id: "power_bow", name: "", icon: "", desc: "", from: 0, to: 1, rarity: "common" });
     expect(w.stats.might).toBeCloseTo(1.1);
     w.choose({ kind: "passive", id: "heart_locket", name: "", icon: "", desc: "", from: 0, to: 2, rarity: "epic" });
-    expect(w.player.maxHp).toBe(140);
+    expect(w.player.maxHp).toBe(CFG.playerHp + 40);
     w.choose({ kind: "weapon", id: "yarn_orbit", name: "", icon: "", desc: "", from: 0, to: 1, rarity: "rare" });
     expect(w.hasWeapon("yarn_orbit")?.level).toBe(1);
   });
@@ -188,7 +195,7 @@ describe("chests", () => {
       const res = w.openChest()!;
       expect(res.rewards.every((r) => r.kind === "coins")).toBe(true);
       expect(w.coins - before).toBe(res.coins);
-      expect(res.coins).toBeGreaterThanOrEqual(50 * res.rewards.length);
+      expect(res.coins).toBeGreaterThanOrEqual(CFG.starPouchCoins * res.rewards.length);
     }
   });
   test("chests prioritise evolutions", () => {
@@ -208,7 +215,7 @@ describe("meta shop", () => {
     expect(metaCost(m, 1) / metaCost(m, 0)).toBeGreaterThan(1.4);
     const w = new World({ hero: "hoshi", seed: 1, director: false, meta: { might: 2, vitality: 3 } });
     expect(w.stats.might).toBeCloseTo(1.08);
-    expect(w.player.maxHp).toBe(124);
+    expect(w.player.maxHp).toBe(CFG.playerHp + 24);
   });
 });
 
@@ -268,19 +275,28 @@ describe("pacing mechanics (balance pass)", () => {
     expect(w.ultMeter - m1).toBeCloseTo(CFG.ultPerElite);
   });
 
-  test("boss HP follows the player's level around the boss's tuning level (clamped)", () => {
+  test("boss HP is fixed (Season 2): account power shows as faster kills; the level scaling stays clamped when enabled", () => {
+    expect(CFG.bossHpPerLevel).toBe(0);
     expect(bossHpScale(undefined, 40)).toBe(1);
     expect(bossHpScale(30, 30)).toBe(1);
-    expect(bossHpScale(30, 40)).toBeCloseTo(1 + 10 * CFG.bossHpPerLevel);
-    expect(bossHpScale(30, 200)).toBe(CFG.bossHpMax);
-    expect(bossHpScale(30, 1)).toBe(CFG.bossHpMin);
+    expect(bossHpScale(30, 200)).toBe(1);
     const lo = new World({ hero: "hoshi", seed: 1, director: false });
     const hi = new World({ hero: "hoshi", seed: 1, director: false });
     hi.level = 60;
     const a = lo.spawnEnemy("lady_lunatic", 0, -100)!;
     const b = hi.spawnEnemy("lady_lunatic", 0, -100)!;
-    expect(b.maxHp).toBeGreaterThan(a.maxHp * 2.5);
-    expect(b.maxHp).toBeLessThanOrEqual(Math.round(a.def.hp * CFG.bossHpMax));
+    expect(b.maxHp).toBe(a.maxHp);
+    expect(a.maxHp).toBe(Math.round(a.def.hp * lo.scaling.bossHp));
+    // (the clamp still holds if a tuning pass turns the per-level scaling back on)
+    const cfg = CFG as { bossHpPerLevel: number };
+    cfg.bossHpPerLevel = 0.035;
+    try {
+      expect(bossHpScale(30, 40)).toBeCloseTo(1.35);
+      expect(bossHpScale(30, 200)).toBe(CFG.bossHpMax);
+      expect(bossHpScale(30, 1)).toBe(CFG.bossHpMin);
+    } finally {
+      cfg.bossHpPerLevel = 0;
+    }
   });
 
   test("adaptive toughness: a build that keeps the screen empty gets tougher arrivals", () => {
@@ -292,9 +308,10 @@ describe("pacing mechanics (balance pass)", () => {
       w.step(1 / 60);
     }
     expect(w.director.adapt).toBeGreaterThan(0.5);
-    expect(w.director.adapt).toBeLessThanOrEqual(ADAPT_MAX);
+    expect(w.director.adapt).toBeLessThanOrEqual(w.scaling.adaptMax);
+    expect(w.scaling.adaptMax).toBe(ADAPT_MAX);
     const e = w.spawnEnemy("puff", w.player.x + 200, w.player.y)!;
-    expect(e.maxHp).toBeGreaterThanOrEqual(Math.floor(8 * enemyHpScale(w.t) * (1 + w.director.adapt) * 0.99));
+    expect(e.maxHp).toBeGreaterThanOrEqual(Math.floor(8 * enemyHpScale(w.t, w.scaling) * (1 + w.director.adapt) * 0.99));
     // a weaker device (lower enemy cap) fights fewer, tougher enemies
     const low = new World({ hero: "hoshi", seed: 13, maxEnemies: 150 });
     low.t = 500;

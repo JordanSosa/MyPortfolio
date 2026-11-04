@@ -12,7 +12,6 @@
  * b = its contact damage (parked while finned), c/d = lunge direction.
  */
 import { C } from "../../art/palette";
-import { enemyDmgScale } from "../config";
 import type { Enemy, EnemyDef } from "../types";
 import type { World } from "../world";
 import { ring } from "./_bullets";
@@ -80,7 +79,7 @@ export const tinyShark: EnemyDef = {
           e.face = dir.x >= 0 ? 1 : -1;
           e.sqV += 8;
           cue(w, BX_SURFACE, e.x, e.y, dir.x, dir.y, e.elite ? 2 : 1, e);
-          if (e.elite) ring(w, e.x, e.y - e.cy, 6, w.rng.angle(), 62, 5 * enemyDmgScale(w.t), "eb_seed", 7);
+          if (e.elite) ring(w, e.x, e.y - e.cy, 6, w.rng.angle(), 62, 5 * w.enemyDmgMul(), "eb_seed", 7);
           quip(w, e, "Nom?", Q_NOM, 6);
         }
         break;

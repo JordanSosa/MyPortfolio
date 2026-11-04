@@ -5,6 +5,7 @@
  * Plot Armor / Power of Friendship / revives / free rerolls) and the bot's
  * level-up policy with banishes and skips.
  */
+import { earlyAccountRun } from "./fixtures/account";
 import { describe, expect, test } from "vitest";
 import { Bot, simulate } from "../src/debug/bot";
 import { CFG, CH_MISC, CH_ULT, MAX_WEAPON_SLOTS } from "../src/game/config";
@@ -298,7 +299,8 @@ describe("banish and skip", () => {
   });
 
   test("the bot banishes cards it would never take and skips filler-only offers", () => {
-    const w = new World({ hero: "mochi", seed: 6, maxEnemies: 250, run: run({ flags: { banish: 3, skip: 3 } }) });
+    // (an early account so the run lasts long enough for a full build)
+    const w = new World({ hero: "mochi", seed: 6, maxEnemies: 250, run: earlyAccountRun({ flags: { banish: 3, skip: 3 } }) });
     simulate(w, 240, DT, new Bot(2));
     const s = w.summary().stats;
     expect(s.banishesUsed).toBeGreaterThan(0);

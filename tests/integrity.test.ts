@@ -10,6 +10,7 @@ import type { GameEvents } from "../src/game/events";
 import { BOSSES } from "../src/game/registry";
 import type { Enemy } from "../src/game/types";
 import { defaultRunConfig } from "../src/game/run-config";
+import { earlyAccountRun } from "./fixtures/account";
 import { World } from "../src/game/world";
 
 const DT = 1 / 30;
@@ -75,7 +76,9 @@ describe("run integrity", () => {
 
   test("full unmuted run (listener on every event): victory, no exceptions, every list bounded", () => {
     // (the shipped slice's card pool: Season 2 content changes every level-up roll of this frozen seed)
-    const run = defaultRunConfig({
+    // (+ an early account's damage: since the verification pass's Dream Meadow retune a no-account hero can't kill
+    // Lady Lunatic inside the 15 minutes even in god mode - the test is about a full run to the victory)
+    const run = earlyAccountRun({
       weaponPool: ["star_shot", "petal_slash", "yarn_orbit", "heart_boomerang", "thunder_bell", "candy_bomb", "bubble_aura", "prism_beam"],
       passivePool: ["power_bow", "wish_charm", "big_ribbon", "twin_charm", "swift_shoes", "magnet_star", "lucky_clover", "heart_locket"],
     });

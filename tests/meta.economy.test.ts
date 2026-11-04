@@ -115,8 +115,9 @@ describe("hero XP curve", () => {
     const fullRun = heroXpForRun(runStats({ time: 600, killsByEnemy: { puff: 3000 }, bossKills: ["a", "b", "c"], stageCleared: true }), DM);
     const firstRun = heroXpForRun(runStats(), DM);
     expect(heroLevelInfo(firstRun).level).toBeGreaterThanOrEqual(2);
+    // (measured in full Dream Meadow clears: a Final Arc run pays ~4x the XP, so Lv 30 is ~100-150 late-game runs)
     expect(heroXpForLevel(30) / fullRun).toBeGreaterThan(60);
-    expect(heroXpForLevel(30) / fullRun).toBeLessThan(250);
+    expect(heroXpForLevel(30) / fullRun).toBeLessThan(600);
   });
 });
 

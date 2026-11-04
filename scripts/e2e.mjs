@@ -217,8 +217,16 @@ for (let di = 0; di < DEVICES.length; di++) {
       }
     });
     await step("pause -> QUIT RUN -> Episode Results", async () => {
-      await resolveModal(page, mobile);
-      await tap(".pause-btn");
+      // (a level-up can pop between resolving the modals and the tap: pick it, then tap pause again)
+      for (let i = 0; ; i++) {
+        await resolveModal(page, mobile);
+        try {
+          await tap(".pause-btn", 4000);
+          break;
+        } catch (e) {
+          if (i >= 2) throw e;
+        }
+      }
       await waitFor(page, () => window.__kk.modal === "pause", null, 10000, "pause modal");
       await sleep(500);
       await tap('.pause [data-act="quit"]');
@@ -330,7 +338,9 @@ for (let di = 0; di < DEVICES.length; di++) {
     // ---------------------------------------------------------------- C) autoplay + skip
     const hero = HEROES[di % 3];
     await step(`autoplay ${hero} skip 90`, async () => {
-      await page.goto(`${url}/?autoplay=1&skip=90&seed=${3 + di}&mute=1&hero=${hero}`, { waitUntil: "load" });
+      // (god=1: a no-account practice run is meant to die around 2:00-3:30 since the Season 2 retune - this
+      // section checks the in-run UI (level-up modal, chest reel, pause, results), not survival)
+      await page.goto(`${url}/?autoplay=1&skip=90&seed=${3 + di}&mute=1&god=1&hero=${hero}`, { waitUntil: "load" });
       await waitFor(page, () => window.__kk && window.__kk.screen === "game" && window.__kk.world.t > 90, null, 40000, "skipped run");
       await waitFor(page, () => window.__kk.modal === "", null, 20000, "no modal");
       await sleep(2500);

@@ -15,9 +15,9 @@ import type { SpawnPhase, StageDef, TimelineEvent } from "../stage";
 import type { World } from "../world";
 import { dropSnack } from "../weapons/_heroes-a";
 
-const EARLY = { exam_paper: 3, love_letter: 2 };
-const MID = { exam_paper: 2, love_letter: 2, tsundere_slime: 2 };
-const L1 = { ...MID, hall_monitor: 1.2 };
+const EARLY = { exam_paper: 3, love_letter: 2, council_ninja: 0.4 };
+const MID = { exam_paper: 2, love_letter: 2, tsundere_slime: 2, council_ninja: 0.8, hall_monitor: 0.6 };
+const L1 = { exam_paper: 2, love_letter: 2, tsundere_slime: 2, hall_monitor: 1.2 };
 const L2 = { exam_paper: 2, love_letter: 2, tsundere_slime: 2, hall_monitor: 1.4, council_ninja: 0.8 };
 const L3 = { ...L2, transfer_student: 0.6 };
 const ALL = { exam_paper: 1.8, love_letter: 2, tsundere_slime: 1.8, hall_monitor: 1.4, council_ninja: 1.2, transfer_student: 1 };
@@ -71,12 +71,16 @@ export const shoujoAcademy: StageDef = {
   blurb: "cherry blossoms, hall passes, unspoken feelings",
   order: 3,
   duration: 840,
-  rewardMul: 1.5,
+  rewardMul: 2,
   requires: "candy_kingdom",
   bpm: 136,
 
   phases: ACADEMY_PHASES,
   events: ACADEMY_EVENTS,
+  // intended clear power P4 (~15 h, ARCHITECTURE section 6): front-loaded (x5.0 HP at 1:00, x9.3 at 3:00, x28 at 7:00,
+  // x106 at 13:00), x1.4 spawns, +15 % enemy speed, contact x1.8 (+4 %/min); council ninjas throw shurikens from 0:30
+  // (verification pass: tier 2.5 -> 3.4, pace 0.62 -> 0.68, President 125k, Bishounen 230k: first clear 5 h -> ~11 h)
+  scaling: { hp: 3.4, curve: [0.65, 0.03, 0.032], pace: 0.68, dmg: 1.8, dmgPerMinute: 0.04, dmgFrom: 1, spawn: 1.4, speed: 1.15 },
   opening: { enemy: "exam_paper", count: 12 },
   finalBoss: "bishounen",
   enrageAt: 870,

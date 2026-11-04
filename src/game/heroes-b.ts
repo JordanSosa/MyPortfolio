@@ -128,7 +128,7 @@ export const TRUCK_KUN: HeroDef = {
   portrait: "portrait_truck_kun",
   weapon: "horn_of_reincarnation",
   ult: "isekai_express",
-  trait: "180 max HP, 3 armor, +50% pickup, -15% move speed, can't be knocked back, bigger hitbox",
+  trait: "+80 max HP, 3 armor, +50% pickup, -15% move speed, can't be knocked back, bigger hitbox",
   color: C.white,
   colors: [C.white, C.lightBlue, C.yellow, C.blue],
   band: ["#e9e3f7", "#5aa8ff", "#1f2a73"],

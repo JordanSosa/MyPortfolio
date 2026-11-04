@@ -34,6 +34,7 @@ import {
   enemyHpScale,
   gemXpScale,
   rankFor,
+  stageScaling,
   xpToNext,
 } from "./config";
 import { createBus, type GameEvents, type HitEvent, type KillEvent, type GemEvent } from "./events";
@@ -44,7 +45,7 @@ import { PASSIVE_BY_ID } from "./passives";
 import { RELICS, TALENT_TREES, TWISTS, ULTIMATES, WEAPONS, baseWeaponOf, enemyDef, stageDef, twistHeat } from "./registry";
 import { defaultRunConfig, type RunConfig, type RunStatCounter, type RunStats } from "./run-config";
 import { RunStatsCollector } from "./run-stats";
-import type { StageDef } from "./stage";
+import type { StageDef, StageScaling } from "./stage";
 import { baseStats, finalizeStats, type StatMod, type Stats } from "./stats";
 import { Director } from "./director/director";
 import { applyCard, banishCard, canChangeOffer, makeOffer, rollChest } from "./upgrades";
@@ -353,6 +354,8 @@ export class World {
   /** The loadout this run was built from (defaultRunConfig() when none was given). */
   readonly run: RunConfig;
   readonly stage: StageDef;
+  /** The stage's enemy toughness (StageDef.scaling over the CFG defaults). */
+  readonly scaling: StageScaling;
   /** Plot Twist ids active this run (registered ones only) and their ranks. */
   readonly twistIds: string[] = [];
   readonly twistRanks: Record<string, number> = {};
@@ -585,6 +588,7 @@ export class World {
     this.directorOn = opts.director ?? true;
     const run = (this.run = opts.run ?? defaultRunConfig());
     this.stage = stageDef(run.stage);
+    this.scaling = stageScaling(this.stage.scaling);
     this.ultId = this.hero.ult;
     this.weaponSlots = Math.max(1, Math.min(MAX_WEAPON_SLOTS, Math.floor(run.weaponSlots || CFG.weaponSlots)));
     this.passiveSlots = Math.max(0, Math.min(MAX_PASSIVE_SLOTS, Math.floor(run.passiveSlots ?? CFG.passiveSlots)));
@@ -1190,11 +1194,11 @@ export class World {
     const hpScale = d.prop
       ? 1
       : d.boss
-        ? bossHpScale(d.boss.level, this.level) * df.bossHp
-        : enemyHpScale(this.t) * (this.director?.hpMul ?? 1) * df.enemyHp * this.extraHpMul();
+        ? bossHpScale(d.boss.level, this.level) * this.scaling.bossHp * df.bossHp
+        : enemyHpScale(this.t, this.scaling) * (this.director?.hpMul ?? 1) * df.enemyHp * this.extraHpMul();
     e.maxHp = e.hp = Math.max(1, Math.round(d.hp * hpScale * (e.elite ? CFG.elite.hp * df.eliteHp : 1)));
-    e.speed = d.speed * (e.elite ? CFG.elite.speed : 1) * (d.boss || d.prop ? 1 : df.enemySpeed);
-    e.dmg = d.dmg * (e.elite ? CFG.elite.dmg : 1) * (d.boss || d.prop ? 1 : enemyDmgScale(this.t)) * df.enemyDmg;
+    e.speed = d.speed * (e.elite ? CFG.elite.speed : 1) * (d.boss || d.prop ? 1 : df.enemySpeed * this.scaling.speed);
+    e.dmg = d.dmg * (e.elite ? CFG.elite.dmg : 1) * (d.boss || d.prop ? 1 : enemyDmgScale(this.t, this.scaling)) * df.enemyDmg;
     e.face = x < this.player.x ? 1 : -1;
     e.t = 0;
     e.flash = 0;
@@ -1223,6 +1227,11 @@ export class World {
       this.hooks.emit("eliteSpawn", this.hEnemy);
     }
     return e;
+  }
+
+  /** Enemy contact / shot damage multiplier now (the stage's toughness; enemy bullets that don't use `e.dmg` read it). */
+  enemyDmgMul(): number {
+    return enemyDmgScale(this.t, this.scaling);
   }
 
   /** Regular-enemy HP multiplier from the curse stat and the Filler Arc (1 in a plain run). */
@@ -1462,11 +1471,11 @@ export class World {
     if (d.boss) {
       this.dropGem(e.x, e.y, 100 * xs);
       this.dropPickup("chest", e.x, e.y, 1, true);
-      for (let i = 0; i < 16; i++) this.dropPickup("coin", e.x, e.y, 1);
+      for (let i = 0; i < CFG.bossCoinDrops; i++) this.dropPickup("coin", e.x, e.y, 1);
     } else if (e.elite) {
       this.dropGem(e.x, e.y, Math.max(25, d.xp * 10) * xs);
       this.dropPickup("chest", e.x, e.y, 1, false);
-      for (let i = 0; i < 8; i++) this.dropPickup("coin", e.x, e.y, 1);
+      for (let i = 0; i < CFG.eliteCoinDrops; i++) this.dropPickup("coin", e.x, e.y, 1);
     } else {
       if (d.xp > 0) this.dropGem(e.x, e.y, d.xp * xs);
       if (this.rng.next() < CFG.coinDropChance * this.stats.luck) this.dropPickup("coin", e.x, e.y, 1);

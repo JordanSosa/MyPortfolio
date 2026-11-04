@@ -61,7 +61,7 @@ describe("Beach Episode: registry + data", () => {
   test("registers with the bible's numbers, roster, bosses, props and look", () => {
     expect(STAGES.get("beach_episode")).toBe(beachEpisode);
     const info = stageInfo(beachEpisode);
-    expect(info).toMatchObject({ id: "beach_episode", order: 4, duration: 960, rewardMul: 1.8, requires: "shoujo_academy", finalBoss: "firework_dragon" });
+    expect(info).toMatchObject({ id: "beach_episode", order: 4, duration: 960, rewardMul: 5, requires: "shoujo_academy", finalBoss: "firework_dragon" });
     expect(stageBosses(beachEpisode)).toEqual(["kraken_chan", "firework_dragon"]);
     expect(beachEpisode.enrageAt).toBe(990);
     expect(beachEpisode.bpm).toBe(128);

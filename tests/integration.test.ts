@@ -21,6 +21,7 @@ import { reconcileProfile } from "../src/meta/reconcile";
 import { applyRunToProfile } from "../src/meta/rewards";
 import { TUNING } from "../src/meta/tuning";
 import { unlockRule } from "../src/meta/unlocks";
+import { EARLY_ACCOUNT } from "./fixtures/account";
 
 const ctx = gameContent();
 const DT = 1 / 30;
@@ -77,7 +78,7 @@ describe("fail forward: run -> bank -> buy -> a stronger run", () => {
     const base = new World({ hero: "hoshi", seed: 1, run: defaultRunConfig() });
     const w = startWorld(p);
     expect(w.stats.might).toBeCloseTo(base.stats.might + 0.01 * (lvl - 1), 6);
-    expect(w.stats.maxHp).toBeCloseTo(base.stats.maxHp * (1 + 0.01 * (lvl - 1)), 6);
+    expect(w.stats.maxHp).toBe(Math.round(base.stats.maxHp * (1 + 0.01 * (lvl - 1))));
   });
 });
 
@@ -239,7 +240,9 @@ describe("banking", () => {
     cleared(p);
     const plan = buildRunConfig(p, { endless: true }, ctx);
     expect(plan.config.endless).toBe(true);
-    const w = new World({ hero: plan.hero, seed: 6, run: plan.config, maxEnemies: 200 });
+    // (a Dream Meadow clearer has more than a fresh save's power: the early-account board on top, so the 45 s of
+    // Filler Arc below are played out - the test is about banking the endless clear, not about survival)
+    const w = new World({ hero: plan.hero, seed: 6, run: { ...plan.config, mods: [...plan.config.mods, EARLY_ACCOUNT] }, maxEnemies: 200 });
     simulate(w, 30, DT, new Bot(6));
     // (the final boss's death, as the director would see it)
     w.stageCleared = true;

@@ -241,8 +241,10 @@ describe("homing projectiles and pooled enemies", () => {
     const w = new World({ hero: "hoshi", seed: 21 });
     const bot = new Bot(3);
     simulate(w, 150, 1 / 30, bot);
-    // per projectile: the enemy object + uid it was chasing last step
-    const seen = new Map<number, { obj: Enemy; uid: number }>();
+    // A target that dies and whose pooled object is re-spawned AFTER this step's homing update (a kill-hook spawn
+    // such as a spore reusing the object) is seen here once with a foreign uid; the next homing update must drop
+    // it before steering. A projectile still holding the same foreign object one step later is chasing a stranger.
+    const pending = new Map<number, Enemy>();
     let stale = 0;
     let checks = 0;
     simulate(w, 60, DT, bot, (ww) => {
@@ -251,12 +253,10 @@ describe("homing projectiles and pooled enemies", () => {
         if (p.dead || p.homing <= 0 || !p.target) continue;
         checks++;
         const t = p.target;
-        // the locked-on uid must still be the object's uid (a retarget re-locks: targetUid follows)
-        if (t.uid !== p.targetUid) stale++;
-        const rec = seen.get(p.uid);
-        // same object, new uid, but the projectile never re-locked onto it: it is chasing a stranger
-        if (rec && rec.obj === t && rec.uid !== t.uid && p.targetUid !== t.uid) stale++;
-        seen.set(p.uid, { obj: t, uid: t.uid });
+        if (t.uid !== p.targetUid) {
+          if (pending.get(p.uid) === t) stale++;
+          pending.set(p.uid, t);
+        } else pending.delete(p.uid);
       }
     });
     expect(checks).toBeGreaterThan(1000);

@@ -162,7 +162,7 @@ export const nightmareTeddy: EnemyDef = {
   name: "Nightmare Teddy",
   sprite: "boss_teddy",
   fps: 6,
-  hp: 17500,
+  hp: 65000,
   speed: 34,
   dmg: 18,
   radius: 19,

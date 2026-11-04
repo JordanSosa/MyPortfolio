@@ -13,8 +13,8 @@ import type { SpawnPhase, StageDef, TimelineEvent } from "../stage";
 import type { World } from "../world";
 import { dropSnack } from "../weapons/_heroes-a";
 
-const EARLY = { gummy_bear: 3, candy_corn: 1 };
-const MID = { gummy_bear: 3, candy_corn: 2 };
+const EARLY = { gummy_bear: 3, candy_corn: 2, lollipop_mage: 0.5 };
+const MID = { gummy_bear: 2.5, candy_corn: 2, lollipop_mage: 1, donut_roller: 0.5 };
 const L1 = { gummy_bear: 2, candy_corn: 2, donut_roller: 1, lollipop_mage: 1 };
 const L2 = { ...L1, marshmallow_brute: 0.6 };
 const ALL = { gummy_bear: 2, candy_corn: 2, donut_roller: 1.2, lollipop_mage: 1, marshmallow_brute: 0.8 };
@@ -68,12 +68,17 @@ export const candyKingdom: StageDef = {
   blurb: "sugar rush, sprinkle storms, a very sticky tyrant",
   order: 2,
   duration: 720,
-  rewardMul: 1.25,
+  rewardMul: 1.5,
   requires: "dream_meadow",
   bpm: 150,
 
   phases: CANDY_PHASES,
   events: CANDY_EVENTS,
+  // intended clear power P3 (~8 h, ARCHITECTURE section 6): on the candy roster's own base stats x3.7 HP at 1:00,
+  // x9.1 at 3:00, x30 at 6:00, x130 at 11:00; x1.4 spawns, +15 % enemy speed, contact x1.8 (+4 %/min);
+  // lollipop mages and the first donut rollers arrive in the first two minutes so a ring-2 account is hit from 1:30
+  // (verification pass: tier 1.3 -> 2.1, pace 0.85 -> 1.05, Golem 90k, Tyrant 200k: first clear 1.75 h -> ~4.5 h)
+  scaling: { hp: 2.1, curve: [0.65, 0.03, 0.032], pace: 1.05, dmg: 1.8, dmgPerMinute: 0.04, dmgFrom: 1, spawn: 1.4, speed: 1.15 },
   opening: { enemy: "gummy_bear", count: 12 },
   finalBoss: "sugar_plum_tyrant",
   enrageAt: 750,

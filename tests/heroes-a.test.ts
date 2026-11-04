@@ -8,6 +8,7 @@
  *   - talents (capstones read by weapon / ult code) and constellations apply
  *   - a 3-minute bot run per hero (plus a maxed-out talent + C6 run) survives without exceptions
  */
+import { earlyAccountRun } from "./fixtures/account";
 import { describe, expect, test } from "vitest";
 import { Bot, simulate } from "../src/debug/bot";
 import { CFG } from "../src/game/config";
@@ -181,7 +182,8 @@ describe.each(HEROES)("$hero", ({ hero, weapon, evo, passive, ult }) => {
   });
 
   test("a 3-minute bot run survives without exceptions", () => {
-    const w = new World({ hero, seed: 1234, maxEnemies: 250 });
+    // (an early account: a no-account run is meant to die early since the Season 2 retune)
+    const w = new World({ hero, seed: 1234, maxEnemies: 250, run: earlyAccountRun() });
     let ults = 0;
     w.bus.on("ultStart", () => ults++);
     simulate(w, 180, 1 / 30, new Bot(77), () => {
@@ -225,10 +227,10 @@ describe("Kuro", () => {
     heroDef("kuro").apply(s);
     expect(s.area).toBeCloseTo(1.15);
     expect(s.duration).toBeCloseTo(1.1);
-    expect(s.maxHp).toBe(90);
-    expect(sandbox("kuro").stats.maxHp).toBe(90);
+    expect(s.maxHp).toBe(CFG.playerHp - 10);
+    expect(sandbox("kuro").stats.maxHp).toBe(CFG.playerHp - 10);
     const c3 = sandbox("kuro", { constellation: 3 }).stats;
-    expect(c3.maxHp).toBe(100);
+    expect(c3.maxHp).toBe(CFG.playerHp);
     expect(c3.area).toBeCloseTo(1.15 + 0.06 + 0.05);
   });
 
@@ -480,7 +482,9 @@ describe("Akane", () => {
     const w = sandbox("akane");
     let dazed = 0;
     crowd(w, 20, 14, 40, "teddy");
-    run(w, 6, () => {
+    // (12 s: a smack that hits pops BAKA! 35 % of the time with a 1.2 s cooldown - ~8 smacks so the roll can't miss
+    // them all; the Dream Meadow retune's tougher teddies shifted the old 6 s window's RNG to zero pops)
+    run(w, 12, () => {
       topUp(w, 20, "teddy");
       for (let i = 0; i < w.enemies.count; i++) if (w.enemies.items[i].stun > 0) dazed++;
     });

@@ -204,7 +204,7 @@ export function applyRunToProfile(p: Profile, summary: RunInput, ctx: MetaConten
   hp.kills += kills;
   hp.time += s.time;
   hp.bestTime = Math.max(hp.bestTime, s.time);
-  const heroXp = addHeroXp(p, s.hero, heroXpForRun(s, stage));
+  const heroXp = addHeroXp(p, s.hero, Math.round(heroXpForRun(s, stage) * catchUpMul(p, s.hero)));
 
   // --- weapon mastery (evolutions feed their base weapon)
   const dmgByBase: Record<string, number> = {};
@@ -297,6 +297,19 @@ export function applyRunToProfile(p: Profile, summary: RunInput, ctx: MetaConten
     },
     newBest,
   };
+}
+
+/**
+ * Hero XP multiplier for a hero that trails the account's best hero ("Recap Episode": a
+ * newly unlocked hero catches up quickly): x (1 + TUNING.hero.catchUp) while its level is
+ * more than TUNING.hero.catchUpGap below the highest hero level, else x1.
+ */
+export function catchUpMul(p: Profile, hero: string): number {
+  const H = TUNING.hero;
+  let best = 1;
+  for (const id in p.heroes) best = Math.max(best, p.heroes[id]?.level ?? 1);
+  const lv = p.heroes[hero]?.level ?? 1;
+  return lv < best - H.catchUpGap ? 1 + H.catchUp : 1;
 }
 
 /**

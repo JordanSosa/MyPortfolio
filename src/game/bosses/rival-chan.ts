@@ -240,7 +240,7 @@ export const rivalChan: EnemyDef = {
   // (re-skinned per move as the hero's own animations, see dress())
   sprite: "hoshi_idle",
   fps: 10,
-  hp: 650000,
+  hp: 600000,
   speed: 70,
   dmg: 20,
   radius: 12,

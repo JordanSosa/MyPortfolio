@@ -6,6 +6,7 @@
  * Sugar Plum Tyrant's death clears the stage (victory, or the Filler Arc when
  * endless), and full bot runs finish without exceptions.
  */
+import { earlyAccountRun } from "./fixtures/account";
 import { describe, expect, test } from "vitest";
 import { Bot, simulate } from "../src/debug/bot";
 import { CFG } from "../src/game/config";
@@ -62,7 +63,7 @@ describe("candy kingdom: stage", () => {
     expect(st).toBeDefined();
     expect(st.order).toBe(2);
     expect(st.duration).toBe(720);
-    expect(st.rewardMul).toBe(1.25);
+    expect(st.rewardMul).toBe(1.5);
     expect(st.requires).toBe("dream_meadow");
     expect(st.bpm).toBe(150);
     expect(st.finalBoss).toBe("sugar_plum_tyrant");
@@ -77,7 +78,7 @@ describe("candy kingdom: stage", () => {
     for (const id of stageBosses(st)) expect(BOSSES.get(id)?.boss, id).toBeDefined();
     const info = stageInfos().find((s) => s.id === "candy_kingdom")!;
     expect(info.bosses).toEqual(["gingerbread_golem", "sugar_plum_tyrant"]);
-    expect(info.rewardMul).toBe(1.25);
+    expect(info.rewardMul).toBe(1.5);
   });
 
   test("its timeline spawns the whole roster, its props and the new event kinds", () => {
@@ -204,7 +205,8 @@ describe("candy kingdom: enemies", () => {
       }
       if (d.state === DONUT_ROLLING && d.timer > 0.05) {
         rolled = true;
-        expect(Math.hypot(d.vx, d.vy)).toBeCloseTo(165, 0);
+        // (x the stage's enemy speed, StageScaling.speed)
+        expect(Math.hypot(d.vx, d.vy)).toBeCloseTo(165 * w.scaling.speed, 0);
         if (d.c > 0) flipped = true;
       }
     });
@@ -435,7 +437,8 @@ describe("candy kingdom: full runs", () => {
 
   test("a mortal bot run plays out without exceptions", () => {
     for (const hero of ["hoshi", "mochi"]) {
-      const w = new World({ hero, seed: 21, maxEnemies: 250, run: defaultRunConfig({ stage: "candy_kingdom" }) });
+      // (an early account: since the Season 2 retune a no-account run is meant to die in Candy Kingdom's opening)
+      const w = new World({ hero, seed: 21, maxEnemies: 250, run: earlyAccountRun({ stage: "candy_kingdom" }) });
       simulate(w, 760, DT, new Bot(8));
       expect(["play", "dead", "victory"]).toContain(w.phase);
       expect(w.t).toBeGreaterThan(30);

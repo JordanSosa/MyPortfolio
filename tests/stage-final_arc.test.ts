@@ -58,7 +58,7 @@ function spawnBoss(w: World, id: string): Enemy {
 describe("The Final Arc: registry + data", () => {
   test("registers with the bible's numbers, roster, three bosses, props, music and its restoration hook", () => {
     expect(STAGES.get("final_arc")).toBe(finalArc);
-    expect(stageInfo(finalArc)).toMatchObject({ id: "final_arc", order: 5, duration: 1200, rewardMul: 2.2, requires: "beach_episode", finalBoss: "cancel_sama" });
+    expect(stageInfo(finalArc)).toMatchObject({ id: "final_arc", order: 5, duration: 1200, rewardMul: 8, requires: "beach_episode", finalBoss: "cancel_sama" });
     expect(stageBosses(finalArc)).toEqual(["truck_kun_boss", "rival_chan", "cancel_sama"]);
     expect(finalArc.enrageAt).toBe(1230);
     expect(finalArc.bpm).toBe(160);

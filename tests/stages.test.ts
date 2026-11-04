@@ -72,15 +72,16 @@ describe("stage registry", () => {
     expect(finalBossAt(dreamMeadow)).toBe(540);
   });
 
-  test("the timeline moved into the stage file unchanged (the old director/timeline exports still work)", () => {
+  test("the timeline lives in the stage file (the old director/timeline exports still work)", () => {
     expect(dreamMeadow.phases).toBe(PHASES);
     expect(dreamMeadow.events).toBe(EVENTS);
+    // (Season 2 retune: same phase boundaries, caps up for the denser early horde)
     expect(PHASES.map((p) => [p.from, p.to, p.max])).toEqual([
-      [0, 60, 55],
-      [60, 120, 100],
-      [120, 180, 140],
-      [180, 210, 140],
-      [210, 300, 175],
+      [0, 60, 75],
+      [60, 120, 120],
+      [120, 180, 160],
+      [180, 210, 160],
+      [210, 300, 190],
       [300, 360, 220],
       [360, 390, 240],
       [390, 540, 260],
@@ -189,6 +190,8 @@ const TEST_STAGE: StageDef = {
     { at: 40, kind: "boss", enemy: "king_puff", spawnMul: 0.5 },
   ],
   opening: { enemy: "boo", count: 6 },
+  // its own toughness (StageScaling): the default curve, and a 0:40 final King Puff at a third of his HP
+  scaling: { bossHp: 0.33 },
   finalBoss: "king_puff",
   enrageAt: 150,
   props: { ids: ["prop_gift"], interval: 10, max: 2 },

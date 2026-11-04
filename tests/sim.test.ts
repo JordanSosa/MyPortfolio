@@ -2,6 +2,7 @@
  * Headless simulation: 3-minute bot runs at fixed dt for every hero.
  * Asserts no exceptions, sane entity counts, progression and determinism.
  */
+import { earlyAccountRun } from "./fixtures/account";
 import { describe, expect, test } from "vitest";
 import { Bot, simulate } from "../src/debug/bot";
 import { CFG, CH_ULT } from "../src/game/config";
@@ -13,7 +14,8 @@ const DT = 1 / 30;
 
 describe.each(HERO_IDS)("3-minute run: %s", (hero) => {
   test("plays through 3:00 with sane counts and progression", () => {
-    const w = new World({ hero, seed: 1234, maxEnemies: 250 });
+    // (an early account: a no-account run is meant to die early since the Season 2 retune)
+    const w = new World({ hero, seed: 1234, maxEnemies: 250, run: earlyAccountRun() });
     // (a hero that starts above Lv 1 - Isekai-kun's Cheat Skill - has its first level-up picks at 0:00)
     let firstLevel = w.pendingLevels > 0 ? 1e-3 : -1;
     let ults = 0;
@@ -45,8 +47,10 @@ describe.each(HERO_IDS)("3-minute run: %s", (hero) => {
     expect(w.t).toBeGreaterThan(deaths > 0 ? 30 : 179.9);
     expect(firstLevel).toBeGreaterThan(0);
     expect(firstLevel).toBeLessThan(8); // DESIGN pillar: first level-up inside 8 s
-    expect(w.level).toBeGreaterThanOrEqual(8);
-    expect(w.kills).toBeGreaterThan(250);
+    // (a real run: the slowest starters at early-account power - Truck-kun's ram, Akane's knockback fan - reach
+    // Lv 7-8 and ~140-600 kills by 3:00 in the Season 2 Dream Meadow; the rest Lv 10-25 and 800-3,000)
+    expect(w.level).toBeGreaterThanOrEqual(7);
+    expect(w.kills).toBeGreaterThan(120);
     expect(hits).toBeGreaterThan(w.kills);
     expect(maxEnemies).toBeLessThanOrEqual(250 + 60); // cap + event waves / splits
     expect(maxProj).toBeLessThan(800);

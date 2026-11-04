@@ -268,7 +268,7 @@ export const bishounen: EnemyDef = {
   name: "The Bishounen Who Never Notices You",
   sprite: "boss_bishounen",
   fps: 4,
-  hp: 200000,
+  hp: 230000,
   speed: 36,
   dmg: 18,
   radius: 13,

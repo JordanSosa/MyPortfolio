@@ -29,7 +29,7 @@ export function gradeRun(s: RunStats): Grade {
     if (s.damageTaken < G.clearSS && s.maxRank >= 5) return "SS";
     return s.damageTaken < G.clearS ? "S" : "A";
   }
-  const score = s.time / 60 + runKills(s) / 400 + s.level / 12 + s.maxCombo / 300;
+  const score = s.time / 60 + runKills(s) / G.scoreKills + s.level / G.scoreLevel + s.maxCombo / G.scoreCombo;
   return score > G.deathA ? "A" : score > G.deathB ? "B" : score > G.deathC ? "C" : "D";
 }
 
@@ -126,14 +126,27 @@ export function bossCoins(stage: StageInfo | undefined, id: string): number {
   return t[Math.min(t.length - 1, i)];
 }
 
+/**
+ * A stage's reward multipliers ("Ratings", StageInfo.rewardMul): coins get the whole
+ * multiplier, run gems and hero XP a gentler power of it (TUNING.payout.gemStageExp /
+ * TUNING.hero.xpStageExp), so later stages pay many more coins without flooding the
+ * Merch Machine or the hero levels.
+ */
+export function stageRewardMul(stage: StageInfo | undefined, what: "coins" | "gems" | "xp" = "coins"): number {
+  const m = Math.max(0, stage?.rewardMul ?? 1);
+  if (what === "coins") return m;
+  return Math.pow(m, what === "gems" ? TUNING.payout.gemStageExp : TUNING.hero.xpStageExp);
+}
+
 /** Heat reward multiplier: x (1 + heat x per). */
 export function heatMul(heat: number, per: number): number {
   return 1 + Math.max(0, heat) * per;
 }
 
 /**
- * The run payout, line by line: coins (picked up, time, kills, each boss,
- * clear, endless, then the grade / heat / curse / stage multipliers) and gems
+ * The run payout, line by line: coins (picked up, then the episode bonuses - time,
+ * kills, each boss, clear, endless - with greed, the rank and the stage's Ratings on
+ * the bonuses, then heat / curse on everything) and gems
  * (trickle, gem find, heat, first clear, first boss kills, heat badges).
  * Codex bounties are added by applyRunToProfile.
  */
@@ -142,12 +155,15 @@ export function computePayout(inp: PayoutInput): Payout {
   const s = inp.stats;
   const name = inp.names ?? ((id: string) => id);
   const kills = runKills(s);
-  const stageMul = inp.stage?.rewardMul ?? 1;
+  const stageMul = stageRewardMul(inp.stage, "coins");
+  const stageGemMul = stageRewardMul(inp.stage, "gems");
   const curse = Math.max(0, s.curse ?? 0);
   const final = inp.stage && inp.stage.bosses.length > 0 ? inp.stage.bosses[inp.stage.bosses.length - 1] : undefined;
   const c = new Ledger();
   c.add("picked", "Coins picked up", s.coins);
-  c.add("time", "Time bonus", (s.time / 60) * P.coinsPerMinute, `${fmtMin(s.time)} survived`);
+  // (the first P.earlySeconds count double: even a 90 s death buys a cheap board node, and quitting early never pays more)
+  const early = Math.min(s.time, P.earlySeconds);
+  c.add("time", "Time bonus", ((early * (1 + P.earlyBoost) + Math.max(0, s.time - early)) / 60) * P.coinsPerMinute, `${fmtMin(s.time)} survived`);
   c.add("kills", "Kill bonus", kills * P.coinsPerKill + s.eliteKills * P.coinsPerElite, `${grouped(kills)} kill${kills === 1 ? "" : "s"}${s.eliteKills ? `, ${grouped(s.eliteKills)} elite${s.eliteKills === 1 ? "" : "s"}` : ""}`);
   for (let i = 0; i < s.bossKills.length; i++) {
     const b = s.bossKills[i];
@@ -155,20 +171,23 @@ export function computePayout(inp: PayoutInput): Payout {
   }
   if (s.stageCleared) c.add("clear", "Stage clear", P.clearCoins, inp.stage?.name);
   if (s.endlessTime > 0) c.add("endless", "Filler Arc bonus", (s.endlessTime / 60) * P.endlessCoinsPerMinute, `${fmtMin(s.endlessTime)} of filler`);
-  // greed (board / passives / relics): the coins picked up already include it, the bonuses get it here
+  // The EPISODE BONUSES (time, kills, bosses, clear, endless) get greed, the rank and the
+  // stage's "Ratings"; the coins picked up count as they are (they already include greed, and
+  // they grow with raw power - a maxed build's Star Pouches - not with the stage). Heat and
+  // curse multiply everything.
   const picked = c.lines.length && c.lines[0].id === "picked" ? c.lines[0].amount : 0;
   c.scale("greed", "Greed", c.total - picked, Math.max(1, s.greed ?? 1), "Coin bonuses");
-  c.mul("grade", `Rank ${inp.grade}`, gradeMul(inp.grade));
+  c.scale("grade", `Rank ${inp.grade}`, c.total - picked, gradeMul(inp.grade), "Coin bonuses");
+  c.scale("stage", inp.stage ? inp.stage.name : "Stage", c.total - picked, stageMul, "Ratings: coin bonuses");
   c.mul("heat", `Heat ${s.heat}`, heatMul(s.heat, P.heatCoinPer), "Plot Twists");
   c.mul("curse", "Curse", heatMul(curse, P.curseRewardPer), "More enemies, more rewards");
-  c.mul("stage", inp.stage ? inp.stage.name : "Stage", stageMul, "Stage reward");
 
   const g = new Ledger();
   g.add("trickle", "Episode stipend", P.gemsPerRun + (s.time / 60) * P.gemsPerMinute + (s.endlessTime / 60) * P.endlessGemsPerMinute);
   g.mul("gemFind", "Gem find", Math.max(0, s.gemFind ?? 1));
   g.mul("heat", `Heat ${s.heat}`, heatMul(s.heat, P.heatGemPer));
   g.mul("curse", "Curse", heatMul(curse, P.curseRewardPer));
-  g.mul("stage", inp.stage ? inp.stage.name : "Stage", stageMul);
+  g.mul("stage", inp.stage ? inp.stage.name : "Stage", stageGemMul);
   if (inp.firstClear && inp.stage) {
     const t = P.firstClearGems;
     g.add("firstClear", "FIRST CLEAR!", t[Math.min(t.length - 1, Math.max(0, inp.stage.order - 1))], inp.stage.name);
@@ -192,7 +211,8 @@ export function newHeatBadges(heat: number, previousBest: number): number[] {
 export function heroXpToNext(level: number): number {
   const H = TUNING.hero;
   if (level >= H.maxLevel) return Infinity;
-  return Math.round(H.xpBase * Math.pow(Math.max(1, level), H.xpExp));
+  const L = Math.max(1, level);
+  return Math.round(H.xpBase * Math.pow(L, H.xpExp) * Math.pow(H.xpGrowth, L - 1));
 }
 
 /** Total hero XP needed to reach `level` from level 1. */
@@ -234,7 +254,7 @@ export function heroLevel(xp: number): number {
 export function heroXpForRun(s: RunStats, stage: StageInfo | undefined): number {
   const H = TUNING.hero;
   const raw = s.time * H.xpPerSecond + runKills(s) * H.xpPerKill + s.bossKills.length * H.xpPerBoss + (s.stageCleared ? H.xpPerClear : 0);
-  return Math.max(0, Math.round(raw * (stage?.rewardMul ?? 1)));
+  return Math.max(0, Math.round(raw * stageRewardMul(stage, "xp")));
 }
 
 /** Coins to buy the rest of the current level ("optional accelerator"); 0 at max level. */

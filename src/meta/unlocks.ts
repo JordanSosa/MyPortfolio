@@ -82,7 +82,7 @@ export const UNLOCK_RULES: readonly UnlockRule[] = [
   { id: "horn_of_reincarnation", kind: "weapon", cond: { t: "hero", hero: "truck_kun" }, hint: "HONK." },
   // ---- the 4 general Season 2 weapons
   { id: "bubble_tea_cannon", kind: "weapon", cond: { t: "enemyKills", enemy: "puff", count: 1000 }, hint: "Puffs are chewy. Squish a thousand of them." },
-  { id: "paper_crane_flock", kind: "weapon", cond: { t: "life", key: "evolutions", count: 10 }, hint: "Fold ten evolutions. Origami is just paper evolving." },
+  { id: "paper_crane_flock", kind: "weapon", cond: { t: "life", key: "evolutions", count: 600 }, hint: "Fold 600 evolutions. Legend says a thousand folds grant a wish; the other 400 are sold separately." },
   { id: "idol_lightstick_wave", kind: "weapon", cond: { t: "life", key: "maxRank", count: 5 }, hint: "The crowd only cheers for SSS." },
   { id: "kotatsu_of_sloth", kind: "weapon", cond: { t: "life", key: "noDashBest", count: 180 }, hint: "Have you tried... not dashing? For three whole minutes?" },
   // ---- the 8 Season 2 passives

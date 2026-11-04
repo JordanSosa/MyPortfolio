@@ -11,8 +11,8 @@
  */
 import type { SpawnPhase, StageDef, TimelineEvent } from "../stage";
 
-const EARLY = { crab_kun: 3, seagull: 1 };
-const MID = { crab_kun: 3, seagull: 2, tiny_shark: 1 };
+const EARLY = { crab_kun: 3, seagull: 2, watermelon: 0.6 };
+const MID = { crab_kun: 2.5, seagull: 2, tiny_shark: 1.5, watermelon: 1 };
 const L1 = { crab_kun: 2, seagull: 2, tiny_shark: 1.5, jellyfish: 1.5 };
 const L2 = { ...L1, watermelon: 1 };
 const L3 = { ...L2, sandcastle_golem: 0.5 };
@@ -65,12 +65,18 @@ export const beachEpisode: StageDef = {
   blurb: "sand, sun, sidestepping crabs, fireworks after dark",
   order: 4,
   duration: 960,
-  rewardMul: 1.8,
+  rewardMul: 5,
   requires: "shoujo_academy",
   bpm: 128,
 
   phases: BEACH_PHASES,
   events: BEACH_EVENTS,
+  // intended clear power P5 (~30 h, ARCHITECTURE section 6): a x7.5 toughness tier, front-loaded (x11 HP at 1:00,
+  // x18 at 3:00, x63 at 8:00, x245 at 15:00: x23 growth across the stage), x1.4 spawns, +15 % enemy speed, contact x1.8
+  // ramping +16 %/min (x5.8 at 15:00: armour and HP decide the late game); watermelons spit seeds from 0:30
+  // (verification pass: tier 5.5 -> 7.5, pace 0.55 -> 0.6, Kraken-chan 270k, Firework Dragon 430k: first clear
+  // ~11 h -> ~20 h for the average player, EXPANSION section 2: 15-25 h)
+  scaling: { hp: 7.5, curve: [0.65, 0.03, 0.032], pace: 0.6, dmg: 1.8, dmgPerMinute: 0.16, dmgFrom: 1, spawn: 1.4, speed: 1.15 },
   opening: { enemy: "crab_kun", count: 12 },
   finalBoss: "firework_dragon",
   enrageAt: 990,

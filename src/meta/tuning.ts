@@ -13,20 +13,22 @@ import type { Rarity } from "../game/defs";
 export const TUNING = {
   /** End-of-run payout (§4 "Episode Results"). */
   payout: {
-    /** Time bonus: coins per minute survived (before multipliers). */
-    coinsPerMinute: 18,
+    /** Time bonus: coins per minute survived (before multipliers); the first earlySeconds pay x (1 + earlyBoost). */
+    coinsPerMinute: 9,
+    earlySeconds: 120,
+    earlyBoost: 1,
     /** Kill bonus: coins per kill. */
-    coinsPerKill: 0.008,
+    coinsPerKill: 0.0002,
     /** Extra coins per elite kill. */
-    coinsPerElite: 3,
+    coinsPerElite: 0.2,
     /** Coins per boss kill: `bossCoins[i]` for the i-th boss of the stage (last = final boss); extra bosses use the last. */
-    bossCoins: [60, 140, 260, 400],
+    bossCoins: [5, 10, 18, 28],
     /** Flat bonus for clearing the stage. */
-    clearCoins: 150,
+    clearCoins: 20,
     /** Endless ("Filler Arc") coins per minute after the final boss (stacks with the time bonus). */
-    endlessCoinsPerMinute: 30,
+    endlessCoinsPerMinute: 4,
     /** Results grade -> coin multiplier. */
-    gradeMul: { D: 1, C: 1.1, B: 1.2, A: 1.35, S: 1.5, SS: 1.75 } as Record<string, number>,
+    gradeMul: { D: 1, C: 1.05, B: 1.1, A: 1.15, S: 1.25, SS: 1.35 } as Record<string, number>,
     /** Plot Twist heat: coins x (1 + heat x this). */
     heatCoinPer: 0.08,
     /** Plot Twist heat: run gems x (1 + heat x this). */
@@ -40,17 +42,22 @@ export const TUNING = {
     /** Endless gems per minute after the final boss. */
     endlessGemsPerMinute: 3,
     /** First clear of a stage, by stage order (1-based; extra stages use the last). */
-    firstClearGems: [480, 640, 800, 960, 1600],
+    firstClearGems: [240, 320, 400, 480, 800],
     /** First kill of a boss: mid bosses / final bosses. */
-    bossFirstKillGems: 60,
-    finalBossFirstKillGems: 120,
+    bossFirstKillGems: 30,
+    finalBossFirstKillGems: 60,
+    /** Run gems x stage rewardMul ^ this (coins get the whole "Ratings" multiplier). */
+    gemStageExp: 0.5,
     /** Heat badges per stage (§10): first clear at heat >= badge pays the gems. */
     heatBadges: [4, 8, 16, 32],
     heatBadgeGems: [200, 400, 800, 1600],
   },
 
-  /** Results grade thresholds (score = minutes + kills/400 + level/12 + maxCombo/300 + rank, see economy.ts). */
+  /** Results grade thresholds (death score = minutes + kills / scoreKills + level / scoreLevel + maxCombo / scoreCombo, see economy.ts). */
   grade: {
+    scoreKills: 2000,
+    scoreLevel: 20,
+    scoreCombo: 500,
     /** Score thresholds for C / B / A on a death. */
     deathC: 2.5,
     deathB: 5,
@@ -63,14 +70,20 @@ export const TUNING = {
   /** Hero levels (§6): automatic from hero XP, every level gives a talent point and +1% damage / HP. */
   hero: {
     maxLevel: 30,
-    /** XP for level L -> L+1 = round(base x L^exp). */
-    xpBase: 140,
-    xpExp: 1.32,
+    /** XP for level L -> L+1 = round(base x L^exp x growth^(L-1)): gentle early levels, a long climb to 30. */
+    xpBase: 120,
+    xpExp: 1.3,
+    xpGrowth: 1.06,
     /** Hero XP per second survived / per kill / per boss / per clear. */
     xpPerSecond: 1,
-    xpPerKill: 0.02,
-    xpPerBoss: 60,
-    xpPerClear: 250,
+    xpPerKill: 0.004,
+    xpPerBoss: 40,
+    xpPerClear: 150,
+    /** Hero XP x stage rewardMul ^ this. */
+    xpStageExp: 0.3,
+    /** "Recap Episode" catch-up: a hero more than catchUpGap levels below the account's best hero earns x (1 + catchUp) XP. */
+    catchUp: 2,
+    catchUpGap: 2,
     /** Per level above 1: +1% damage, +1% max HP. */
     mightPerLevel: 0.01,
     hpPerLevel: 0.01,
@@ -90,7 +103,7 @@ export const TUNING = {
     /** Mastery XP per point of damage. */
     xpPerDamage: 0.001,
     /** Cumulative mastery XP to reach rank 1..10. */
-    thresholds: [300, 1000, 2500, 5000, 9000, 16000, 28000, 46000, 72000, 110000],
+    thresholds: [500, 2500, 12000, 35000, 80000, 160000, 320000, 900000, 3000000, 10000000],
     /** +3% damage with that weapon per rank. */
     mightPerRank: 0.03,
     /** Rank -> extra max weapon levels (rank 5 Limit Break: max Lv 6; rank 10: max Lv 7). */
@@ -106,7 +119,7 @@ export const TUNING = {
   /** Training Arc board (§5). */
   board: {
     /** Base cost of rank 1 of a plain node per ring 1..5. */
-    ringCost: [25, 220, 1500, 7000, 22000],
+    ringCost: [15, 220, 1500, 7000, 22000],
     /** Each further rank costs x this. */
     rankGrowth: 1.55,
     /** Within a ring, nodes farther along a sector path cost up to +this (fraction). */
@@ -172,7 +185,7 @@ export const TUNING = {
   gemExchange: { coins: 1000, gems: 10 },
 
   /** Codex (§11): gems for discovering an entry. */
-  codex: { hero: 20, weapon: 10, passive: 6, enemy: 5, boss: 25, relic: 4, stage: 30 } as Record<string, number>,
+  codex: { hero: 10, weapon: 5, passive: 3, enemy: 3, boss: 12, relic: 2, stage: 15 } as Record<string, number>,
 
   /** Save migration (§14). */
   migration: {

@@ -21,8 +21,14 @@ import { CFG } from "../game/config";
 import type { UpgradeCard } from "../game/types";
 import type { SimInput, World } from "../game/world";
 import { LUNA_RING_N, lunaRing } from "../game/bosses/_luna";
+import { WEAPONS } from "../game/registry";
 
 const ringPt = { x: 0, y: 0 };
+
+/** Evolution passive of a base weapon id (NEW weapon cards: the weapon is not in the build yet). */
+function weaponEvoWith(id: string): string | undefined {
+  return WEAPONS.get(id)?.evolution?.with;
+}
 
 const PREF: Record<string, number> = { hoshi: 70, rin: 26, mochi: 24, senpai: 22, magical_girl_47: 30, isekai_kun: 72, truck_kun: 0, kuro: 40, pudding: 30, aoi: 74, akane: 26 };
 /** Distance a player keeps from a boss while healthy: melee heroes walk up to it, Hoshi stays in range. */
@@ -32,17 +38,87 @@ const BOSS_ENGAGE: Record<string, number> = { hoshi: 80, rin: 24, mochi: 26, sen
  * (the ram and the forward honk need it) and only shies away from big hitters, elites and bosses.
  */
 const BRAVE: Record<string, number> = { truck_kun: 0.3 };
-/** How much an average player values each passive (damage first; utility last unless it evolves something). */
+/**
+ * How much an average player values each passive (0-10): damage first, then survival, utility last
+ * unless it evolves something (the recipe bonus in `Bot.score` comes on top). Covers all 16.
+ */
 const PASSIVE_VALUE: Record<string, number> = {
   power_bow: 8,
   wish_charm: 7,
   big_ribbon: 6,
   twin_charm: 6,
+  friendship_bracelet: 5,
+  plot_armor: 5,
   heart_locket: 5,
+  inner_monologue: 4,
+  bento_box: 4,
+  main_character_aura: 3,
+  training_montage: 3,
+  chibi_charm: 3,
   swift_shoes: 3,
+  speed_lines: 2,
   magnet_star: 1,
   lucky_clover: 0,
 };
+/**
+ * How much an average player wants each weapon as a NEW pick (0-10): crowd clearing first (the gauge's
+ * dense-crowd dps, docs/content/weapons.md), boss damage and a strong evolution a plus. Covers all 20.
+ */
+const WEAPON_VALUE: Record<string, number> = {
+  cheat_fireball: 10,
+  candy_bomb: 8,
+  idol_lightstick_wave: 7,
+  petal_slash: 7,
+  baka_harisen: 7,
+  bubble_aura: 7,
+  teapot_tempest: 6,
+  yarn_orbit: 6,
+  heart_boomerang: 6,
+  thunder_bell: 6,
+  prism_beam: 6,
+  notice_me_sparkles: 6,
+  dark_flame_dragon: 6,
+  star_shot: 5,
+  micro_missile_swarm: 5,
+  henshin_burst: 5,
+  kotatsu_of_sloth: 4,
+  paper_crane_flock: 3,
+  horn_of_reincarnation: 3,
+  bubble_tea_cannon: 2,
+};
+
+/**
+ * Bot skill presets (balance probe, progression simulator, matrix):
+ * - `lazy`  the weak-player proxy: random level-up picks, never dashes;
+ * - `mid`   the AVERAGE player (what the difficulty curve is tuned for): knows the build rules but
+ *           takes the shiny card a third of the time, reacts slower and steers sloppier;
+ * - `good`  the autoplay bot (`new Bot()`, attract mode, e2e): dodges at human speed, picks well;
+ * - `strong` a very good player: faster reactions, almost no slop.
+ */
+export type BotSkill = "lazy" | "mid" | "good" | "strong";
+export const BOT_SKILLS: readonly BotSkill[] = ["lazy", "mid", "good", "strong"];
+
+/** A bot of the given skill (`weak` = `lazy`). */
+export function makeBot(kind: string, seed = 1234): Bot {
+  const b = new Bot(seed);
+  switch (kind) {
+    case "lazy":
+    case "weak":
+      b.noDash = true;
+      b.randomPicks = true;
+      break;
+    case "mid":
+      b.pickNoise = 0.35;
+      b.reaction = 0.24;
+      b.sloppiness = 0.25;
+      break;
+    case "strong":
+      b.sloppiness = 0.05;
+      b.reaction = 0.12;
+      break;
+  }
+  return b;
+}
 
 export class Bot {
   private rng: Rng;
@@ -59,6 +135,8 @@ export class Bot {
   noDash = false;
   /** Weak-player proxy (balance probe): picks level-up cards at random. */
   randomPicks = false;
+  /** Average-player proxy: chance (0..1) a level-up pick is a random card instead of the best one. */
+  pickNoise = 0;
   /** Human reaction time: bullets younger than this (s) are not dodged yet. */
   reaction = 0.18;
   /** Level-up policy (only matters when the run has banishes / skips, RunConfig.flags). */
@@ -322,13 +400,25 @@ export class Bot {
       case "evolution":
         s = 1000;
         break;
-      case "weapon":
-        s = c.from > 0 ? 40 + c.to * 2 : w.weapons.length < 4 ? 34 : 8;
+      case "weapon": {
+        const def = w.hasWeapon(c.id)?.def;
+        const evoWith = def?.evolution?.with ?? weaponEvoWith(c.id);
+        // its evolution passive is already in the build: this weapon is on the way to an evolution
+        const recipe = evoWith && w.passiveLevel(evoWith) > 0 ? 1 : 0;
+        if (c.from > 0) s = 40 + c.to * 2 + recipe * 6 - (c.limitBreak ? 3 : 0);
+        else if (w.weapons.length < 4) s = 30 + (WEAPON_VALUE[c.id] ?? 4) + recipe * 5;
+        else s = 6 + (WEAPON_VALUE[c.id] ?? 4) * 0.4 + recipe * 4;
         break;
+      }
       case "passive": {
-        s = (c.from > 0 ? 22 : 16) + (PASSIVE_VALUE[c.id] ?? 3);
+        let v = PASSIVE_VALUE[c.id] ?? 3;
+        // build-aware values: friendship grows with the weapon count, XP is worth most early, armour when hurt
+        if (c.id === "friendship_bracelet") v += Math.max(0, w.weapons.length - 3);
+        else if (c.id === "training_montage" && w.level < 15) v += 2;
+        else if ((c.id === "plot_armor" || c.id === "heart_locket" || c.id === "bento_box") && hpK < 0.5) v += 6;
+        s = (c.from > 0 ? 22 : 16) + v;
+        // the recipe: it evolves a weapon in the build
         for (const inst of w.weapons) if (inst.def.evolution?.with === c.id) s += 26;
-        if (c.id === "heart_locket" && hpK < 0.5) s += 10;
         break;
       }
       case "heal":
@@ -344,7 +434,7 @@ export class Bot {
 
   /** Pick a level-up card. */
   pick(w: World, cards: UpgradeCard[]): UpgradeCard {
-    if (this.randomPicks) return cards[this.rng.int(0, cards.length - 1)];
+    if (this.randomPicks || (this.pickNoise > 0 && this.rng.next() < this.pickNoise)) return cards[this.rng.int(0, cards.length - 1)];
     let best = cards[0];
     let bs = -1e9;
     for (const c of cards) {

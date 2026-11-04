@@ -12,7 +12,6 @@
  * Half state 0 hop (timer = next spit); a = hop phase.
  */
 import { C } from "../../art/palette";
-import { enemyDmgScale } from "../config";
 import { MODE_STRAIGHT, type EnemyDef } from "../types";
 import { aimAt, fan } from "./_bullets";
 import { EFX_DASH, EFX_SKID, efx, onScreen } from "./_fx";
@@ -153,7 +152,7 @@ export const watermelonHalf: EnemyDef = {
       e.timer = SEED_EVERY;
       if (onScreen(w, e.x, e.y, -6)) {
         const y = e.y - e.cy;
-        const n = fan(w, e.x, y, 3, aimAt(w, e.x, y), 0.32, SEED_SPEED, SEED_DMG * enemyDmgScale(w.t), "eb_seed");
+        const n = fan(w, e.x, y, 3, aimAt(w, e.x, y), 0.32, SEED_SPEED, SEED_DMG * w.enemyDmgMul(), "eb_seed");
         if (n > 0) {
           e.sqV -= 5;
           quip(w, e, "Seedy...", Q_SEEDY, 7);

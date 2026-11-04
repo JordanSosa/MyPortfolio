@@ -6,6 +6,7 @@
  * stage (victory, or the Filler Arc when endless), and full bot runs finish
  * without exceptions.
  */
+import { earlyAccountRun } from "./fixtures/account";
 import { describe, expect, test } from "vitest";
 import { Bot, simulate } from "../src/debug/bot";
 import { CFG } from "../src/game/config";
@@ -53,7 +54,7 @@ describe("shoujo academy: stage", () => {
     expect(st).toBeDefined();
     expect(st.order).toBe(3);
     expect(st.duration).toBe(840);
-    expect(st.rewardMul).toBe(1.5);
+    expect(st.rewardMul).toBe(2);
     expect(st.requires).toBe("candy_kingdom");
     expect(st.bpm).toBe(136);
     expect(st.finalBoss).toBe("bishounen");
@@ -134,7 +135,8 @@ describe("shoujo academy: enemies", () => {
       }
       if (m.state === MON_DASH && m.timer > 0.05) {
         dashed = true;
-        expect(Math.hypot(m.vx, m.vy)).toBeCloseTo(150, 0);
+        // (x the stage's enemy speed, StageScaling.speed)
+        expect(Math.hypot(m.vx, m.vy)).toBeCloseTo(150 * w.scaling.speed, 0);
       }
     });
     expect(whistled && dashed).toBe(true);
@@ -454,7 +456,8 @@ describe("shoujo academy: full runs", () => {
 
   test("a mortal bot run plays out without exceptions", () => {
     for (const hero of ["rin", "mochi"]) {
-      const w = new World({ hero, seed: 22, maxEnemies: 250, run: defaultRunConfig({ stage: "shoujo_academy" }) });
+      // (an early account: since the Season 2 retune a no-account run is meant to hit the Academy's opening like a wall)
+      const w = new World({ hero, seed: 22, maxEnemies: 250, run: earlyAccountRun({ stage: "shoujo_academy" }) });
       simulate(w, 880, DT, new Bot(8));
       expect(["play", "dead", "victory"]).toContain(w.phase);
       expect(w.t).toBeGreaterThan(30);

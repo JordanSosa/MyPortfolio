@@ -308,6 +308,8 @@ describe("Paper Crane Flock", () => {
     expect(wishes).toBe(1);
     expect(w.player.hp).toBe(w.player.maxHp);
     expect(F.wish).toBe(0);
+    // (the storm is the point here: keep the hero out of the 30 teddies' reach while it plays)
+    w.player.iframes = STORM_TIME + 1;
     run(w, STORM_TIME + 0.4);
     // every enemy in view took the storm, exactly once
     let inView = 0;
@@ -702,7 +704,7 @@ describe("unlock rules (weapons.md §6, achievements.md §1)", () => {
   const ctx = gameContent();
   const RULES: { id: string; kind: "weapon" | "passive"; hint: string; set: (L: ReturnType<typeof defaultProfile>, v: number) => void; target: number; run?: (v: number) => Parameters<typeof runStats>[0] }[] = [
     { id: "bubble_tea_cannon", kind: "weapon", hint: "Puffs are chewy. Squish a thousand of them.", target: 1000, set: (p, v) => void (p.lifetime.killsByEnemy.puff = v), run: (v) => ({ killsByEnemy: { puff: v } }) },
-    { id: "paper_crane_flock", kind: "weapon", hint: "Fold ten evolutions. Origami is just paper evolving.", target: 10, set: (p, v) => void (p.lifetime.evolutions = v) },
+    { id: "paper_crane_flock", kind: "weapon", hint: "Fold 600 evolutions. Legend says a thousand folds grant a wish; the other 400 are sold separately.", target: 600, set: (p, v) => void (p.lifetime.evolutions = v) },
     { id: "idol_lightstick_wave", kind: "weapon", hint: "The crowd only cheers for SSS.", target: 5, set: (p, v) => void (p.lifetime.maxRank = v), run: (v) => ({ maxRank: v }) },
     { id: "kotatsu_of_sloth", kind: "weapon", hint: "Have you tried... not dashing? For three whole minutes?", target: 180, set: (p, v) => void (p.lifetime.noDashBest = v), run: (v) => ({ time: v, dashes: 0, firstDashAt: -1 }) },
     { id: "plot_armor", kind: "passive", hint: "Take five thousand damage. Walk it off. Character building.", target: 5000, set: (p, v) => void (p.lifetime.damageTaken = v), run: (v) => ({ damageTaken: v }) },

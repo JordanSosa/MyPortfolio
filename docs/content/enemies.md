@@ -430,10 +430,12 @@ Death: drops a chest and the bubble "Next time… for sure!".
 Boss conventions from ARCHITECTURE §4 apply (WeakMap state, pattern cycle,
 phase change = `inv` 1.2 s + `clearBullets()` + `bossPhase` banner + shockwave,
 patterns only while on screen). HP is absolute (stage toughness is NOT applied
-to bosses) and scales with the player level through `BossInfo.level`. HP numbers
-are starting targets for the economy pass; the real requirement is the fight
-length for the mid-skill bot at the milestone account in EXPANSION §2: mid
-bosses 45-60 s, finals 75-100 s, Cancel-sama ~150 s over four phases.
+to bosses). Since the Season 2 combat-curve pass boss HP is FIXED (`CFG.bossHpPerLevel = 0`: the old player-level
+scaling soaked up account power); the live values are in `docs/ARCHITECTURE.md` §6.3 (raised again by the
+verification pass, §6.7, so the average player's first clears land at EXPANSION §2's hours). The design
+requirement is the fight length for the mid-skill bot at the milestone account in EXPANSION §2: mid
+bosses 45-60 s, finals 75-100 s, Cancel-sama ~150 s over four phases. (The `hp` cells of the boss tables
+below are the live, fixed values.)
 
 Enemy bullets: aimed ones use `shoot / fan / ring` from `_bullets.ts` (never
 spawned near the player); falling ones use ground shadows as telegraphs. Bullet
@@ -442,7 +444,7 @@ damage 13-16 like Dream Meadow; `enemyDmgScale(t)` applies as usual.
 ### 5.1 Gingerbread Golem — `gingerbread_golem` (Candy Kingdom 6:00)
 | sprite | hp | ref Lv | speed | dmg | radius | height | shadow | knockResist |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `boss_gingerbread` 56×56×6 | 30,000 | 34 | 30 | 18 | 18 | 40 | 42 | 0.95 |
+| `boss_gingerbread` 56×56×6 | 90,000 | 34 | 30 | 18 | 18 | 40 | 42 | 0.95 |
 
 Name card: **GINGERBREAD GOLEM** — *Baked With Malice (and Cinnamon)*
 
@@ -477,7 +479,7 @@ angry face, a candy-cane club. f0-1 stomp, f2 jump crouch, f3 slam, f4 half-bake
 ### 5.2 Sugar Plum Tyrant — `sugar_plum_tyrant` (Candy Kingdom FINAL 11:00)
 | sprite | hp | ref Lv | speed | dmg | radius | height | shadow | knockResist |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `boss_sugarplum` 48×64×6 | 90,000 | 60 | 44 | 18 | 14 | 46 | 30 | 0.95 |
+| `boss_sugarplum` 48×64×6 | 200,000 | 60 | 44 | 18 | 14 | 46 | 30 | 0.95 |
 
 Name card: **SUGAR PLUM TYRANT** — *Her Royal Hyperactivity* · `final: true`
 
@@ -512,7 +514,7 @@ pointed slippers, imperious face. f0-1 float, f2 cast (scepter up), f3 pirouette
 ### 5.3 Student Council President — `council_president` (Shoujo Academy 7:00)
 | sprite | hp | ref Lv | speed | dmg | radius | height | shadow | knockResist |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `boss_president` 48×56×6 | 70,000 | 40 | 40 | 17 | 13 | 40 | 28 | 0.95 |
+| `boss_president` 48×56×6 | 125,000 | 40 | 40 | 17 | 13 | 40 | 28 | 0.95 |
 
 Name card: **STUDENT COUNCIL PRESIDENT** — *Supreme Authority of Room 2-B (and Every Other Room)*
 
@@ -548,7 +550,7 @@ stamp slam, f4 cape-blazer swish, f5 rage (cracked glasses, hair wild).
 ### 5.4 The Bishounen Who Never Notices You — `bishounen` (Shoujo Academy FINAL 13:00)
 | sprite | hp | ref Lv | speed | dmg | radius | height | shadow | knockResist |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `boss_bishounen` 48×64×6 | 200,000 | 70 | 36 | 18 | 13 | 46 | 28 | 0.97 |
+| `boss_bishounen` 48×64×6 | 230,000 | 70 | 36 | 18 | 13 | 46 | 28 | 0.97 |
 
 Name card: **THE BISHOUNEN WHO NEVER NOTICES YOU** — *Fan Club: 9,999 Members (You Are Not One)* · `final: true`
 
@@ -588,7 +590,7 @@ eyes, rose offered) — used only in phase 3.
 ### 5.5 Kraken-chan — `kraken_chan` (Beach Episode 8:00)
 | sprite | hp | ref Lv | speed | dmg | radius | height | shadow | knockResist |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `boss_kraken` 72×56×6 (+ `boss_kraken_tentacle` 16×48×4) | 160,000 | 45 | 28 | 18 | 22 | 36 | 52 | 0.98 |
+| `boss_kraken` 72×56×6 (+ `boss_kraken_tentacle` 16×48×4) | 270,000 | 45 | 28 | 18 | 22 | 36 | 52 | 0.98 |
 
 Name card: **KRAKEN-CHAN** — *She Just Wants a Hug (Lethally)*
 
@@ -625,7 +627,7 @@ along the bottom. f0-1 bob/wiggle, f2 ink cannon (cheeks puffed), f3 submerge
 ### 5.6 Summer Festival Firework Dragon — `firework_dragon` (Beach Episode FINAL 15:00)
 | sprite | hp | ref Lv | speed | dmg | radius | height | shadow | knockResist |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `boss_firework_dragon` 72×48×6 head + 6× `boss_firework_body` 16×16×2 | 420,000 | 78 | 60 | 18 | 18 | 30 | 40 | 1.0 |
+| `boss_firework_dragon` 72×48×6 head + 6× `boss_firework_body` 16×16×2 | 430,000 | 78 | 60 | 18 | 18 | 30 | 40 | 1.0 |
 
 Name card: **SUMMER FESTIVAL FIREWORK DRAGON** — *Tonight's Main Event (Do Not Look Directly At)* · `final: true`
 
@@ -659,7 +661,7 @@ round paper lanterns with sparklers. f0-1 slither, f2 inhale, f3 breathe
 ### 5.7 Truck-kun — `truck_kun_boss` (The Final Arc 8:00)
 | sprite | hp | ref Lv | speed | dmg | radius | height | shadow | knockResist |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `boss_truck` 72×48×6 | 300,000 | 45 | 60 (charge 320) | 22 | 18 | 26 | 60 | 1.0 |
+| `boss_truck` 72×48×6 | 520,000 | 45 | 60 (charge 320) | 22 | 18 | 26 | 60 | 1.0 |
 
 Name card: **TRUCK-KUN** — *Reincarnation Services, Est. Too Many Protagonists Ago*
 If the player IS Truck-kun: **TRUCK-KUN?!** — *The Evil Alternate-Universe One
@@ -692,7 +694,7 @@ charge (tilted forward, dust), f4 drift (angled, tyre smoke), f5 reverse
 ### 5.8 Rival-chan — `rival_chan` (The Final Arc 14:00)
 | sprite | hp | ref Lv | speed | dmg | radius | height | shadow | knockResist |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `boss_rival` 48×56×6 | 650,000 | 68 | 70 | 20 | 12 | 40 | 24 | 0.95 |
+| `boss_rival` 48×56×6 | 600,000 | 68 | 70 | 20 | 12 | 40 | 24 | 0.95 |
 
 Name card: **RIVAL-CHAN** — *Your Rival Since Episode 1 (You Don't Remember Her)*
 
@@ -726,7 +728,7 @@ beam cast (both palms forward), f4 frustrated (gritted teeth), f5 power-up
 ### 5.9 CANCEL-SAMA, the Network Executive — `cancel_sama` (The Final Arc FINAL 19:00)
 | sprite | hp | ref Lv | speed | dmg | radius | height | shadow | knockResist |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `boss_cancel` 64×72×8 | 1,400,000 | 90 | 30 | 22 | 18 | 52 | 44 | 1.0 |
+| `boss_cancel` 64×72×8 | 1,900,000 | 90 | 30 | 22 | 18 | 52 | 44 | 1.0 |
 
 Name card: **CANCEL-SAMA** — *The Network Executive. Your Ratings Are Concerning.* · `final: true`, music `cancel`
 

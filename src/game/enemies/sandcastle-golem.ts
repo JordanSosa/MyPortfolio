@@ -13,7 +13,7 @@
  * a = gait phase, b = last stride frame, c = rebuilds left.
  */
 import { C } from "../../art/palette";
-import { CFG, enemyDmgScale } from "../config";
+import { CFG } from "../config";
 import type { Enemy, EnemyDef } from "../types";
 import type { World } from "../world";
 import { EFX_STOMP, efx, onScreen } from "./_fx";
@@ -51,18 +51,26 @@ function install(w: World): GolemWorld {
     collapse(e, w, gw);
   });
   // explosions crumble piles in reach
+  // (crumbling kills the pile, and a kill hook - Rin's talent, a relic - may set off another blast that
+  // re-enters this hook and prunes the list: walk a snapshot, prune afterwards)
   w.hooks.on("blast", (b) => {
+    if (!gw.piles.length) return;
+    const piles = gw.piles.slice();
+    const uids = gw.uids.slice();
+    for (let i = 0; i < piles.length; i++) {
+      const e = piles[i];
+      if (e.dead || e.uid !== uids[i] || e.state !== GOLEM_PILE) continue;
+      const dx = e.x - b.x;
+      const dy = e.y - b.y;
+      const rr = b.r + e.r + 4;
+      if (dx * dx + dy * dy <= rr * rr) crumble(e, w, 2);
+    }
     for (let i = gw.piles.length - 1; i >= 0; i--) {
       const e = gw.piles[i];
       if (e.dead || e.uid !== gw.uids[i] || e.state !== GOLEM_PILE) {
         gw.piles.splice(i, 1);
         gw.uids.splice(i, 1);
-        continue;
       }
-      const dx = e.x - b.x;
-      const dy = e.y - b.y;
-      const rr = b.r + e.r + 4;
-      if (dx * dx + dy * dy <= rr * rr) crumble(e, w, 2);
     }
   });
   return gw;
@@ -96,7 +104,7 @@ function rebuild(e: Enemy, w: World): void {
   e.hp = Math.max(1, Math.round(e.maxHp * 0.5));
   e.inv = 0.45;
   e.untargetable = false;
-  e.dmg = e.def.dmg * (e.elite ? CFG.elite.dmg : 1) * enemyDmgScale(w.t) * w.difficulty.enemyDmg;
+  e.dmg = e.def.dmg * (e.elite ? CFG.elite.dmg : 1) * w.enemyDmgMul() * w.difficulty.enemyDmg;
   e.sqV += 12;
   cue(w, BX_REBUILD, e.x, e.y, 0, 0, e.scale, e);
   quip(w, e, "Rebuild.", Q_REBUILD, 3);

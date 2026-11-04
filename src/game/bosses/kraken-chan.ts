@@ -282,7 +282,7 @@ export const krakenChan: EnemyDef = {
   name: "Kraken-chan",
   sprite: "boss_kraken",
   fps: 5,
-  hp: 160000,
+  hp: 270000,
   speed: 28,
   dmg: 18,
   radius: 22,

@@ -320,7 +320,7 @@ export const councilPresident: EnemyDef = {
   name: "Student Council President",
   sprite: "boss_president",
   fps: 4,
-  hp: 70000,
+  hp: 125000,
   speed: 40,
   dmg: 17,
   radius: 13,

@@ -793,135 +793,321 @@ carries trait behaviour, and the bot's per-hero distances live in `debug/bot.ts`
 
 ---
 
-## 6. Balance (full-run pacing pass)
+## 6. Balance (Season 2 combat difficulty curve)
 
-### The probe
+The combat curve is tuned against **account power**, not against a fresh hero:
+every stage has an *intended checkpoint* (a synthetic account built through the
+real meta layer, docs/META.md §9.1) at which the average-player bot clears it
+about half the time. A fresh save dies early in Dream Meadow; every run pays out,
+the account grows, and the next checkpoint's stage opens up. The economy pass
+then tunes income / costs so an account reaches each checkpoint at its hours
+(EXPANSION §2).
 
-`npm run balance` (`tools/balance.probe.ts`) plays full headless runs (default
-12:00, so a slow final-boss kill after the 10:30 enrage still resolves) for every
-hero x seed with two bot profiles and prints one line per run plus a summary per
-hero / profile (medians and [min-max]):
+### 6.1 Tools
 
-- **good** = the autoplay bot, the *average-player proxy*: steers away from
-  pressure (big hitters weigh more), reads telegraphs (jump circles, dash lanes,
-  claw sweeps) and dodges bullets with a 0.18 s reaction time, dashes out of
-  crowds, breaks lanterns for food, chases a boss into its weapon range while
-  above 45 % HP, picks weapons / damage passives / evolutions first.
-- **lazy** = the *weak-player proxy*: the same movement, but random level-up
-  picks and it never dashes (`Bot.randomPicks`, `Bot.noDash`).
+| Tool | What |
+| --- | --- |
+| `tools/checkpoints.ts` | `CHECKPOINTS` P0-P7 + `checkpointProfile(id, hero)` / `checkpointRun(id, { hero, stage, twists })` (RunConfig through `buildRunConfig`), `HEAT_SETS.mid` (heat 12) / `.max` (41). Shared board / talent policy: `tools/policy.ts` (also used by `npm run progression`). |
+| `node tools/matrix.mjs` | The power-vs-stage matrix: checkpoint x stage x hero x seed (x bot, x twists) in parallel vitest workers (`tools/matrix.sim.ts`, one per CPU), per cell: clear %, death times (p25-p75), boss fight lengths (killed / reached), first level-up, level-up gaps (0:20-3:00 median / max, longest outside boss fights), levels at 1/2/3/5/10 min, damage taken 0-1:30 / 1:30-3:00, kills/s and alive enemies per minute, killers. `--cells P2:dm,...`, `--cp`, `--stages`, `--heroes`, `--seeds 1-8`, `--bot lazy,mid,good`, `--twists mid|max`, `--tmax 240` (early-game experiments), `--by hero`, `--name x` (writes `tools/results/matrix-x.json` + `.md`). A run ends at its clear, its death (after revives) or duration + 5:00 (timeout). |
+| `--variants sweep.json` | Tuning sweeps without editing files: `{name: patch}` with dotted paths into the live content (`"cfg.playerHp": 80`, `"stage.final_arc.scaling": {...}`, `"stage.dream_meadow.phases": [...]`, `"boss.cancel_sama.hp": 1600000`, `"_only": ["final_arc"]`), applied before and undone after each job (`applyPatch`). |
+| `node tools/matrix-report.mjs before after` | The compact grids below from the saved results. |
+| `npm run balance` | The full-run probe (per-run lines, 30 s timelines with `VERBOSE=1`, per-weapon dps `GAUGE=1`); `CP=P2 STAGE=candy_kingdom BOT=mid` plays a checkpoint's RunConfig, `BOT=lazy,mid,good,strong`. |
+| `node tools/progression.mjs` | The economy's ground truth (6.6, META.md §9): bot accounts (weak / mid / strong x seeds, one process each, 4 in parallel) play real runs from a fresh save and bank / spend like a player; milestones in hours / runs, checkpoint snapshots, income per phase, the "something to buy" hook and dead zones, unlock timeline. `npm run progression` is one account with a line per run (`VERBOSE=1`). |
+| `tools/econ.sim.ts` | Offline economy checks: `ECON=fit` prices `matrix --stats` runs with the live payout / XP / mastery formulas (`FIT_PATCH` tries a change), `ECON=reprice` reprices the checkpoints' board ranks under other ring costs. |
+| `node tools/matrix.mjs --stats` | Keeps each run's RunStats in the result (input of `ECON=fit`). |
 
-Env: `HEROES=rin`, `SEEDS=1,2,3`, `T=600`, `BOT=good|lazy|both`, `META=mid|max`
-(Dream Shop ranks), `MAXE=150|250|350` (device enemy cap), `VIEW=phone|land|desktop`,
-`DT=0.0167` (the live game sub-steps at 1/60; the probe defaults to 1/30, which
-gives the same results within noise), `RUN="stage=...&twists=budget_cuts:3&relics=sakuga_cel:6&flags=..."`
-(any Season 2 RunConfig, the debug URL syntax of `debug/params.ts`), `VERBOSE=1` (30 s timeline, build, alive %
-of cap, damage taken by source per run). The summary reports: win rate + death
-times + final blows, first level-up, level at 1/3/6/9 min (runs still alive),
-XP earned and the share of gem XP actually collected, the level-up interval
-between 2:00 and 8:00, first evolution, boss kill times, damage taken (total,
-last 4 minutes, per minute, min HP after 6:00), kills/s and damage dealt/s per
-minute, adaptive toughness per minute, alive % of the cap, time at SSS / S+
-per minute, combo breaks, Overdrive count / interval, and damage taken by source.
+**Bots** (`src/debug/bot.ts makeBot`): `lazy` (random level-up picks, never
+dashes: the weak player), **`mid` (the average player the curve is tuned for:
+knows the build rules but takes a random card 35 % of the time, 0.24 s reactions,
+sloppier steering)**, `good` (`new Bot()`: the autoplay / attract / e2e bot, 0.18 s),
+`strong` (0.12 s, little slop). The upgrade valuation covers all 20 weapons
+(`WEAPON_VALUE`, from the gauge's dense-crowd dps) and 16 passives
+(`PASSIVE_VALUE`, build-aware: Friendship Bracelet grows with the weapon count,
+Training Montage early, armour passives when hurt) plus every evolution recipe
+(a passive that evolves a held weapon +26, a weapon whose passive is held +5 / +6).
 
-With 16 seeds a per-hero win rate still has a standard error of ~11 points:
-judge changes on all heroes together (48 runs) and re-run before trusting a
-small shift. Every change re-rolls the seeds' RNG streams.
+Sim cost: 1-5 s per Dream Meadow run, 10-40 s for a high-power Final Arc run (huge
+kill counts); the full 480-run matrix takes ~25 min on 4 CPUs at dt 1/30 (the probe's
+default: within noise of the live 1/60 sub-step).
 
-### Results (16 seeds x 3 heroes x 2 bots, 12:00, no Dream Shop)
+### 6.2 Targets (mid bot)
 
-| Target | Good bot (Hoshi / Rin / Mochi) | Lazy bot |
+| Target | |
+| --- | --- |
+| P0 (fresh save) in Dream Meadow | real pressure by 1:30, dies ~2:00-3:30 (rarely reaching King Puff), a level-up every ~6-12 s, screens full of dying enemies |
+| a stage's intended checkpoint | ~40-70 % clears; Dream Meadow P2, Candy Kingdom P3, Shoujo Academy P4, Beach Episode P5, The Final Arc P5-P6 |
+| one checkpoint lower | mostly dies before the final boss |
+| two checkpoints higher | clears comfortably |
+| boss fights at the intended checkpoint | mid bosses 45-60 s (King Puff, the 3:00 tutorial boss, 20-45 s), finals 75-100 s, Cancel-sama ~150 s |
+| P7 ("cute anime death machine") | melts the Final Arc at moderate heat (12), has to work at heat 41 |
+| never a slog | no HP-sponge trash, no 30 s without a level-up, the ramp bites from minute 1 |
+
+### 6.3 How the curve works
+
+**Player** (`config.ts`): base max HP **80** (was 100: the account's HP nodes and
+levels are felt from the first run). XP: `xpToNext(L) = min(2500, 5 + 10(L-1) +
+16(L-6)+ - 14(L-12)+ + 60(L-22)+ + 60(L-38)+)` (+26 per level Lv 6-12 instead of
++38: the tougher early horde still levels you every ~6-12 s; **capped at 2,500**
+from Lv 46 so the long stages never go 30+ s without a level-up). Gem XP x
+`(1 + 0.15 max(0, m - 3))`; level-ups heal 3 % max HP; `CFG.gemXpEarly` (an early
+gem-XP ramp) exists and is 0 (it flattened the P0-P2 spread too much).
+
+**Card pool** (`upgrades.ts`): the NEW weapons (passives) of an offer share the
+weight the slice's 7 (8) candidates had, however big the Season 2 pool is (20 + 16
+items no longer drown the upgrades of what the build holds); while the hero holds
+only its starter weapon every offer shows one NEW weapon (builds form even when
+the pool is wide). The slice's own pools are unaffected by the normalisation.
+
+**Stage toughness** (`StageDef.scaling`, `StageScaling` in `stage.ts`, defaults in
+`config.ts DEFAULT_SCALING`, read through `World.scaling`): regular-enemy HP x
+`hp x (1 + a m' + b m'^2 + c m'^3)` with `m' = minutes x pace`, contact / shot damage
+x `dmg x (1 + dmgPerMinute x max(0, m - dmgFrom))` (`World.enemyDmgMul()` for
+bullets that don't use `e.dmg`), spawn rate x `spawn`, phase caps x `cap`, enemy
+speed x `speed`, boss HP x `bossHp`, adaptive-toughness ceiling `adaptMax`. Every
+stage uses the curve `[0.65, 0.03, 0.032]` (Dream Meadow's) on its own roster's base
+stats; the tier and the stretch differ:
+
+| Stage (intended) | hp tier | pace | HP x at 1:00 / 3:00 / final boss | damage x at 1:00 -> final boss | spawn / speed |
+| --- | --- | --- | --- | --- | --- |
+| Dream Meadow (P2) | 1.45 (was 1) | 1.08 (1) | 2.6 / 6.5 / 57 (9:00) | 1.8 -> 2.4 (+4 %/min) | own timeline (x1.4 rates, caps 75-260) / 1 |
+| Candy Kingdom (P3) | 2.1 (1.3) | 1.05 (0.85) | 3.7 / 9.1 / 130 (11:00) | 1.8 -> 2.5 (+4 %/min) | x1.4 / x1.15 |
+| Shoujo Academy (P4) | 3.4 (2.5) | 0.68 (0.62) | 5.0 / 9.3 / 106 (13:00) | 1.8 -> 2.7 (+4 %/min) | x1.4 / x1.15 |
+| Beach Episode (P5) | 7.5 (5.5) | 0.6 (0.55) | 10.6 / 18 / 245 (15:00) | 1.8 -> 5.8 (+16 %/min) | x1.4 / x1.15 |
+| The Final Arc (P5-P6) | 2.5 (1.8) | 0.65 (0.6) | 3.6 / 6.5 / 185 (19:00) | 1.8 -> 6.0 (+13 %/min) | x1.4 / x1.15 |
+
+(The tiers and boss HP were raised again by the verification pass, 6.7: the combat-curve pass tuned against
+synthetic checkpoints, and the average player's real account - Hoshi, the starter, and the Merch Machine's
+relics - cleared every stage at about half the target hours; the "was" values in brackets are that pass's.)
+
+(The old single global curve gave x119 at 20:00 on every stage.) The long stages
+grow x19 (Beach, 1:00 -> 15:00) and x42 (Final Arc) across the run, like Dream Meadow's x19; their late
+game is carried by the **damage ramp** (armour, HP and dodging decide it, not
+sponge HP: a P5 Beach build kills as fast at 14:00 as at 2:00). The early tiers
+scale with the account the stage is meant for (a P5 account has ~3.5x a P2's early
+DPS); the Final Arc's opening is deliberately softer (x2.5) so P5 survives it and
+dies later.
+
+**Early threats** (mixes): a Lv 1-5 starter kit one-shots fodder, and fodder feeds
+XP (more puffs made a fresh save *stronger*); pressure comes from what reaches you.
+Dream Meadow's 1:00-3:00 mix leans on boos / eyepuffs / shroomies (rates x1.4, caps
+75 / 120 / 160 in the first three minutes); Candy adds lollipop mages and the first
+donut rollers in the first two minutes, the Academy council ninjas (shurikens) from
+0:30, the Beach watermelons (seed fans) from 0:30; enemies are 15 % faster from stage
+2 on (a strong account out-ran slow melee).
+
+**Bosses**: **fixed HP** (`CFG.bossHpPerLevel = 0`, deliberate: the old level
+scaling soaked up account power - a max account fought Cancel-sama at x1.8 HP and
+P7 cleared no more than P6), each set for its stage's intended checkpoint:
+
+| Boss | HP (combat pass; slice) | Boss | HP (combat pass; slice) |
+| --- | --- | --- | --- |
+| King Puff (3:00) | **12,000** (10,000; 2,600) | Council President (7:00) | **125,000** (100,000; 70,000) |
+| Nightmare Teddy (6:00) | **65,000** (45,000; 17,500) | Bishounen (13:00) | **230,000** (180,000; 200,000) |
+| Lady Lunatic (9:00) | **82,000** (58,000; 34,000) | Kraken-chan (8:00) | **270,000** (210,000; 160,000) |
+| Gingerbread Golem (6:00) | **90,000** (60,000; 30,000) | Firework Dragon (15:00) | **430,000** (330,000; 420,000) |
+| Sugar Plum Tyrant (11:00) | **200,000** (120,000; 90,000) | Truck-kun (8:00) | **520,000** (400,000; 300,000) |
+| | | Rival-chan (14:00) | **600,000** (460,000; 650,000) |
+| | | Cancel-sama (19:00) | **1,900,000** (1,500,000; 1,400,000) |
+
+(Bold: the verification pass (6.7). The slice values were scaled x0.5-1.8 by the player's level; the
+Season 2 ones are what the boss has.)
+
+Unchanged from the slice pass: combo windows / refills, Overdrive (+0.3 per kill
+capped at 1.25/s, +8 elite, +30 boss, +0.55/s), the director's pressure floor
+(below 80 % of the cap the rate is boosted up to x4) and adaptive toughness (from
+3:30, below 55 % of the cap new spawns gain up to +150 % HP; `adaptMax` per stage,
+all at the default), hurt i-frames 0.5 s, lanterns every ~16 s, the gem merge.
+
+### 6.4 Results: the power-vs-stage matrix
+
+`node tools/matrix.mjs --seeds 1-4 --name after` (8 checkpoints x 5 stages x Hoshi
+/ Rin / Kuro x 4 seeds = 480 runs, mid bot); raw runs and per-cell tables in
+`tools/results/matrix-{before,after}.{json,md}`, the "before" measured on the
+pre-pass sim (old curve, old card weights, level-scaled bosses) with the same
+checkpoints and the same mid bot. With 12 runs a cell's clear rate has a standard
+error of ~14 points: read the grid as a whole.
+
+Clear rate (median death time of the runs that died), mid bot, before -> after; **bold** = the stage's intended checkpoint.
+
+| | Dream Meadow | Candy Kingdom | Shoujo Academy | Beach Episode | The Final Arc |
+| --- | --- | --- | --- | --- | --- |
+| P0 | 67% (7:03) -> 0% (2:49) | 25% (4:53) -> 0% (1:42) | 0% (4:50) -> 0% (1:06) | 0% (3:01) -> 0% (0:28) | 0% (1:35) -> 0% (0:20) |
+| P1 | 92% (11:14) -> 17% (3:45) | 33% (7:56) -> 0% (2:06) | 0% (7:43) -> 0% (1:15) | 0% (6:38) -> 0% (1:11) | 0% (1:28) -> 0% (1:09) |
+| P2 | **100% -> 67% (5:58)** | 67% -> 0% (7:12) | 8% (9:26) -> 0% (2:08) | 0% (7:10) -> 0% (2:06) | 0% (1:55) -> 0% (1:10) |
+| P3 | 100% -> 92% (4:37) | **67% (13:55) -> 50% (9:38)** | 17% (10:51) -> 0% (7:40) | 0% (12:01) -> 0% (2:47) | 0% (4:57) -> 0% (1:13) |
+| P4 | 100% -> 100% | 92% -> 92% (9:58) | **58% (11:46) -> 50% (10:50)** | 17% (17:34) -> 17% (7:14) | 0% (10:46) -> 0% (3:51) |
+| P5 | 100% -> 100% | 100% -> 100% | 100% -> 100% | **67% -> 75% (16:08)** | **17% (14:27) -> 33% (5:40)** |
+| P6 | 100% -> 100% | 100% -> 100% | 100% -> 100% | 92% -> 100% | **42% -> 75% (16:58)** |
+| P7 | 100% -> 100% | 100% -> 100% | 100% -> 100% | 92% -> 100% | 42% -> 92% (18:17) |
+
+Boss fight length (s, median of kills, killed / reached) at the intended checkpoint(s), after:
+
+| Stage | Checkpoint | Bosses |
 | --- | --- | --- |
-| first level-up 3-8 s | 3.0 / 4.3 / 3.4 s | same |
-| level ~12-16 at 3:00 | 18 / 16 / 16 | 16 / 16 / 15 |
-| level ~28-36 at 6:00 | 38 / 31 / 35 | 28 / 30 / 31 |
-| level ~45-55 at 9:00 | 48 / 48 / 52 | 46 / 43 / 49 |
-| level-up every ~8-14 s (2:00-8:00, median gap) | 11.9 / 9.3 / 9.9 s | 13.7 / 10.9 / 12.4 s |
-| an evolution by ~5:00 | first at 2:39 / 2:26 / 3:15 (median), 4-5 per run | first at 3:27-4:09, 0-2 per run |
-| King Puff 20-45 s | 13 / 27 / 38 s | 43 / 36 / 52 s |
-| Nightmare Teddy 40-80 s | 35 / 49 / 58 s | 29 / 73 / 107 s |
-| Lady Lunatic 70-140 s | 89 / 49 / 109 s | 58 / 100 / 131 s |
-| good bot wins 60-90 % | **81 / 81 / 75 % (79 %)** | 25 / 44 / 25 % (31 %) |
-| lazy bot usually dies 5:00-9:30 | - | 33 of 48 die, median 6:03, 85 % of the deaths between 4:30 and 9:00 |
-| meaningful damage in the last 4 min | 76 / 47 / 49 HP median (up to 310-420), min HP after 6:00 ~75-85 % | 148 / 204 / 177 HP |
-| SSS not permanent from minute 1 | SSS 0 % in min 1-2, 0-29 % in min 3, 3-67 % in min 4, 70-100 % late | SSS rare before 7:00 |
-| Overdrive every 45-70 s | every 53-55 s (10-11 per run, the first ~1:00) | every 53-56 s |
-| enemy count at the cap after ~5:00 | 50-63 % of the cap at 6:30-9:00 (90 % reached in waves) | 55-73 % |
+| Dream Meadow | P2 | king puff 23 (10/12); nightmare teddy 33 (9/10); lady lunatic 90 (8/8) |
+| Candy Kingdom | P3 | gingerbread golem 58 (11/11); sugar plum tyrant 96 (6/6) |
+| Shoujo Academy | P4 | council president 77 (11/12); bishounen 115 (6/7) |
+| Beach Episode | P5 | kraken chan 50 (12/12); firework dragon 99 (9/12) |
+| The Final Arc | P5 | truck kun boss 113 (8/8); rival chan 118 (6/6); cancel sama 238 (4/5) |
+| The Final Arc | P6 | truck kun boss 58 (12/12); rival chan 66 (12/12); cancel sama 153 (9/9) |
 
-Variants (8 seeds, good / lazy win rate): **mid Dream Shop** (every rank at
-half) 79 % / 42 %; **maxed shop** 96 % / 58 % (the good bot then takes only
-5-25 damage in the last 4 minutes): the shop is a real crutch for a weaker
-player without making a run free. **Low-tier device** (cap 150; those fewer
-enemies get x1.3 HP late) 88 % good, 62-79 % of the cap late. **Desktop view**
-(533x300) 75 % good. **1/60 steps** (the live sub-step) 78 % good (6 seeds), same
-levels and boss times as 1/30. Sim cost: 0.7-3.8 s per 12-minute run.
+Early-game feel (medians), after:
 
-The deliberate deviations: Hoshi (ranged, homing stars focus bosses) kills King
-Puff / Nightmare Teddy faster than the window and levels a little faster; Rin
-melts Lady faster than the others; the median build keeps the screen at
-50-60 % of the cap rather than at it (the adaptive toughness converts a too-fast
-clear into tougher, not more, enemies - more spawns made the median build lose).
+| Stage @ checkpoint | 1st level-up | level-up gap 0:20-3:00 | longest gap (no boss) | level 1/2/3 min | damage taken 0-1:30 / 1:30-3:00 | kills/s min 1-3 | alive min 1-3 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Dream Meadow @ P0 | 2.2 s | 9.3 s | 39 s | 9 / 12 / 14 | 65 / 60 | 8.1 / 10.5 / 7.2 | 42 / 81 / 136 |
+| Dream Meadow @ P2 | 1.3 s | 9.0 s | 26 s | 10 / 17 / 25 | 4 / 0 | 11.4 / 17.2 / 31.0 | 35 / 65 / 87 |
+| Candy Kingdom @ P3 | 1.2 s | 5.5 s | 30 s | 12 / 22 / 29 | 0 / 0 | 8.2 / 15.8 / 22.3 | 30 / 49 / 60 |
+| Shoujo Academy @ P4 | 1.3 s | 7.0 s | 38 s | 10 / 15 / 26 | 18 / 15 | 10.6 / 13.7 / 22.6 | 29 / 70 / 64 |
+| Beach Episode @ P5 | 5.2 s | 8.0 s | 48 s | 12 / 18 / 23 | 32 / 19 | 8.9 / 15.1 / 19.8 | 42 / 82 / 86 |
+| The Final Arc @ P5 | 3.6 s | 5.3 s | 28 s | 20 / 27 / 34 | 31 / 72 | 15.8 / 32.6 / 44.1 | 42 / 61 / 63 |
+| The Final Arc @ P6 | 4.9 s | 5.5 s | 16 s | 25 / 31 / 36 | 0 / 0 | 24.9 / 48.4 / 61.5 | 28 / 38 / 42 |
 
-### How the pacing works (numbers in `config.ts`, `director/*`, content files)
+**Bots** at the intended checkpoints (`--bot lazy,good`, `tools/results/matrix-bots`;
+the mid bot is the average player between them):
 
-- **XP**: `xpToNext(L) = 5 + 10(L-1) + 28(L-6)+ - 26(L-12)+ + 60(L-22)+ + 60(L-38)+`
-  (cost per level +10 to Lv 6, +38 to Lv 12, +12 to Lv 22, +72, then +132 from Lv 38).
-  Gem XP x `(1 + 0.15 max(0, m - 3))` (m = minutes). Above 160 gems the farthest
-  merge into a rainbow gem_4 that drifts to the player (28 px/s): uncollected XP
-  is recovered, which mostly helps struggling builds (the bot collects 70-80 % of
-  the gem XP, a lazy bot 40-75 %). Every level-up heals 3 % max HP.
-- **Combo**: per-rank window `[2.5, 2.5, 2.3, 2.0, 1.7, 1.45, 1.2]` s and refill
-  per kill `[2.5, 2.5, 2.3, 0.3, 0.15, 0.08, 0.04]` s (none, C ... SSS): holding
-  A / S / SS / SSS needs ~3 / 7 / 13 / 25 kills/s. Running dry at B+ drops one
-  rank (`comboDrop`), below B it breaks; a hit drops one rank.
-- **Overdrive**: starts at 25; +0.3 per kill but at most 1.25/s from ordinary
-  kills (a budget refilled per second), +8 elite, +30 boss, +0.55/s passive.
-  Before: +1 per kill made it every 9-15 s (a near-permanent invulnerable
-  screen clear that hid every other balance problem).
-- **Enemies**: HP x `(1 + 0.1m + 0.01m² + 0.014m³)` (x1.7 at 3:00, x4.6 at
-  6:00, x12 at 9:00), contact / shot damage x `(1 + 0.06 max(0, m - 4))`.
-  Lowered contact damage: Puff 5, Boo 6, Shroomie 8, Teddy 11, Pumpkin 10. Hurt
-  i-frames 0.5 s, lanterns every ~16 s.
-- **Director**: spawn rates / caps per phase in `timeline.ts` (1.3 -> 2.7/s cap
-  55 in minute 1, up to 20 -> 30/s cap 260 from 6:30). Below 80 % of the cap
-  (`MIN_ALIVE`) the rate is boosted up to x4. **Adaptive toughness**
-  (`Director.adapt`, from 3:30): while fewer than 55 % of the cap are alive, new
-  spawns gain HP (+3 %/s at an empty screen, max +150 %), relaxing at 2 %/s once
-  the screen is busy; `Director.hpMul` also gives a device capped below the phase
-  max x sqrt(max / cap) HP (<= x1.4). Boss spawn multipliers: King Puff x0.55,
-  Nightmare Teddy x0.4, Lady Lunatic x0.4.
-- **Bosses**: HP x `clamp(1 + 0.035 (level - ref), 0.5, 1.8)` at spawn
-  (`BossInfo.level`): King Puff 2600 @ Lv 17, Nightmare Teddy 17500 @ Lv 33, Lady
-  Lunatic 34000 @ Lv 52. Lady's bullets deal 15, Teddy's stars 13.
-- **Weapons** (`GAUGE=1 npm run balance`: dps alone vs a dense crowd of 120
-  respawning 60-HP puffs, a ring of 300-HP enemies and a pinned boss): Star Shot fires 2+ stars
-  that pierce 2-4 (L5 ~600 dps; it is the single-target / boss weapon), Thunder
-  Bell L1-4 got a spark blast and more chains (L1 61 -> 356 dps), Galaxy Barrage
-  553 -> 1.4k dense (3 arms, pierce 3), Yarn Orbit bonks faster from Lv3 (0.34 / 0.28 s)
-  and Cosmic Yarn hits for 19 every 0.26 s (Mochi's boss fights were 2x longer
-  than anyone's), Sakura Tempest's petal blades fan toward the nearest enemy (a
-  boss first) and curve in. Other base weapons sit at L1 ~370-980, L5 ~2-4k,
-  evolutions ~3.1-5.8k dense (Galaxy Barrage 1.4k dense but ~450 on a boss,
-  3-10x anyone else).
-- **Heroes**: Mochi gained 1 armor (melee, 100 HP: the lazy Mochi used to die
-  before 4:00). **Dream Shop**: Might +4 %/rank, Vitality +8 HP/rank.
+| Stage @ checkpoint | lazy | mid | good |
+| --- | --- | --- | --- |
+| Dream Meadow @ P2 | 33% (4:38) | 67% (5:58) | 67% (5:42) |
+| Candy Kingdom @ P3 | 8% (8:38) | 50% (9:38) | 75% (10:49) |
+| Shoujo Academy @ P4 | 0% (9:05) | 50% (10:50) | 75% (12:46) |
+| Beach Episode @ P5 | 25% (9:02) | 75% (16:08) | 92% (16:42) |
+| The Final Arc @ P6 | 75% (16:51) | 75% (16:58) | 75% (18:08) |
 
-### Before / after (bot, same probe)
+**P7 at heat** (`--twists mid|max`, `HEAT_SETS`): heat 0: 92% (fights truck kun boss 38 s, rival chan 41 s, cancel sama 84 s); heat 12: 75% clears (12 runs, deaths at 16:14; fights truck kun boss 36 s, rival chan 34 s, cancel sama 58 s); heat 41: 58% clears (12 runs, deaths at 15:13; fights truck kun boss 53 s, rival chan 74 s, cancel sama 145 s).
 
-| | Before (content merged, no tuning) | After |
-| --- | --- | --- |
-| good bot wins | 50-88 % per hero, damage taken over a whole run 4-250 (median 60-90) | 75-81 %, 76 / 47 / 49 in the last 4 min alone |
-| lazy bot | wins 50-63 %, deaths 2:33-6:52 rare | wins 31 %, dies ~6:00 (4:30-9:00) |
-| Overdrive | every 9-15 s (37-62 per run) | every 53-55 s (10-11) |
-| SSS | 100 % of the time from 2:00 on, one combo per run | earned: 0 % before 2:00, flickers mid-game, drops on hits |
-| levels at 3:00 / 6:00 / 9:00 | 16-19 / 29-33 / 43-47 | 16-18 / 31-38 / 48-52 |
-| King Puff / Teddy / Lady | 10-16 s / 26-50 s / 47-91 s | 13-38 s / 35-58 s / 49-109 s |
-| alive % of cap after 5:00 | 7-21 % | 50-63 % |
+### 6.5 Notes and deliberate deviations
 
-Verification-pass re-check (after the content wave's integration fixes: coin merge, Nightmare Teddy
-standing off from the hero by body centre, Lady Lunatic favouring the left in landscape, candy bombs
-avoiding the hero's feet), 8 seeds x 3 heroes: good bot 83 % (Hoshi 100 / Rin 88 / Mochi 63), lazy
-bot 38 %, levels 18 / 36 / 50 at 3:00 / 6:00 / 9:00, King Puff 23 s, Nightmare Teddy 29 s (34 s
-with the old walk on the same 10 seeds), Lady Lunatic 72 s: inside the noise of the table above.
+- **Heroes differ a lot at low power.** Hoshi (homing Star Shot + Supernova on the
+  boss) is the strongest Dream Meadow hero: King Puff in ~5-10 s where Rin / Kuro need
+  30-60 s; the grid's 3-hero medians sit between. Akane (knockback fan), Senpai and
+  Truck-kun (ram / honk) level slowly and die early at P0-P2 (Akane Lv 5-8 and
+  200-600 kills by 2:30 where Aoi has ~2,500). They unlock at P4+ / from the Merch
+  Machine, so the curve is unaffected, but a hero-balance pass should look at them.
+- **A frontier stage's opening is a power fantasy for the upper checkpoint.** P6 in
+  the Final Arc takes no damage in the first minutes (Lv 22 at 1:00 from start Lv 8 and
+  +66 % XP, 1.6x move speed, 31 % damage reduction): an opening that touches it walls
+  P5 (tested: x5 opening HP killed P5 at ~2:00). The stage bites from ~5:00; every
+  intended checkpoint whose stage is its frontier (P0-P5) takes damage in the first 3:00.
+- **P7 is only ~1.3x faster on bosses than P6** (Cancel-sama ~95 s vs ~130-180 s): the
+  checkpoint gap is modest (ring 5 is mostly small stats). P7's keystones / relics are
+  set explicitly (META.md §9.1) - the value policy's Glass Cannon made P7 *weaker* than P6
+  against the damage ramps.
+- **Long stages end above x100 HP** (Beach x145 at 15:00 on a x5.5 tier, Final Arc x107):
+  the growth across a stage stays x19-42 (Dream Meadow x19), so late enemies die about as
+  fast relative to the build as early ones; the danger is the damage ramp.
+- **Boss fight lengths are noisy** (+-40 % between matrix runs with the same HP, the
+  hero mix dominates); the HP above sit in the middle of several runs.
+- **A sim crash fixed on the way**: the Sandcastle Golem's blast hook re-entered itself
+  (crumble -> kill -> a talent / relic explosion -> blast) and spliced the pile list
+  mid-loop (`TypeError` in `sandcastle-golem.ts`); it now walks a snapshot.
+
+
+### 6.6 Economy pass: account progression against the curve
+
+The combat curve (6.1-6.5) says *how strong* an account must be for each stage; the
+economy decides *when* the account gets there. Tuned with the progression simulator
+(`node tools/progression.mjs`, docs/META.md §9: a bot plays real runs with the account's
+RunConfig, banks them with `applyRunToProfile` and spends like a player), mid bot =
+the average player, weak = the lazy bot, strong = faster and tidier than the autoplay bot.
+
+**Method.**
+
+1. `node tools/matrix.mjs --stats` cells (P0-P7 x every stage, Hoshi / Kuro) keep each
+   run's RunStats, so a payout / hero XP / mastery formula can be priced offline at known
+   power before a progression run (`tools/results/matrix-econ-data.json`).
+2. Short progression runs (mid x 4 seeds, 3-30 h) after each change; `--save-at 22` dumps
+   the accounts so the late game can be replayed with `RESUME=` without the first day.
+3. The final before / after: weak / mid / strong x seeds 1-2 (the "before" is the economy
+   as the combat-curve pass left it, same tool and player model).
+
+**What the first measurements showed** (before): the mid bot cleared every stage in 8 h
+and bought the whole board by 30 h. Three things carried it:
+
+- *Payouts grew with raw power, not the stage*: once a build is maxed every level-up is
+  a 50-coin Star Pouch, so a strong Dream Meadow clear paid ~5k coins (a fresh death 66).
+- *The early Plot Point flood*: ~8k gems in the first 5 runs (a 10-pull every ~2 runs)
+  and 1,000-5,000-coin rewards (Plushie Purge at run 3 bought half of ring 1); gacha relics
+  (an SSR / UR set by hour 2-8) were worth more than a whole checkpoint of board.
+- *Hero XP / mastery*: Lv 30 at 14 h, a mastery-10 weapon at 4 h.
+
+**What changed** (numbers: META.md §4):
+
+- **Payout** = coins picked up (kept small: 0.2 % drop chance, Star Pouch 3) + episode
+  bonuses (time with the first 2:00 counting double, bosses, clear, kills) x greed x rank x
+  the stage's **Ratings** (1 / 1.5 / 2 / 5 / 8), then heat / curse. A run's coins now track
+  the stage it was played in: a 90 s death still buys a ring-1 node, a Dream Meadow clear
+  pays ~730, an Academy clear ~1.4k, a Beach clear ~3.3k, a Final Arc clear ~10k (heat 0).
+- **Gems**: every Plot Point gem reward halved (joke numbers and the first-pull pair kept),
+  first clears / first boss kills / codex halved, the per-run stipend scaled by Ratings^0.5.
+- **Plot Point coins** cut so none buys a ring (Pilot Episode +40 so run 1 buys 3-4 nodes).
+- **Hero XP**: `120 L^1.3 1.06^(L-1)` per level (Lv 30 = 418k XP), kill XP / 5, XP x
+  Ratings^0.3, x3 catch-up for heroes more than 2 levels behind the best one.
+- **Mastery**: thresholds 500 ... 10M XP (rank 10 = 10B damage with the weapon).
+- **Board**: ring 1 25 -> 15 a rank (so a fresh 2:30 death buys two nodes); the
+  checkpoints keep their ranks (META.md §9.1 coin values repriced).
+- **Unlocks**: Paper Crane Flock at 600 lifetime evolutions (was 10): the 40-60 h unlock.
+- **Player model**: a try-out run for every newly unlocked hero; after a short frontier
+  death (under 40 % of the stage) one farming run on the last cleared stage; hero levels
+  with coins when nothing is open on the board; the endgame heat ladder + hero rotation.
+
+**Results** (`tools/results/progression-{before,after}.md`; weak / mid / strong x seeds 1-2,
+median hours; "after" = 160 h per account with stride 6 after the first Final Arc clear,
+"before" = 60 h, n/r = not reached in that time):
+
+| Milestone | Target (mid) | weak before | weak after | mid before | mid after | strong before | strong after |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| First King Puff kill | runs 3-6 | run 2 | run 5.5 | run 2 | run 4.5 | run 2 | run 1.5 |
+| Dream Meadow clear | 1.5-3 h | 0.65 h | 1.26 h | 0.43 h | 0.70 h | 0.38 h | 0.72 h |
+| Candy Kingdom clear | 4-7 h | 2.68 h | 2.89 h | 1.07 h | 2.28 h | 0.67 h | 1.66 h |
+| Shoujo Academy clear | 8-14 h | 6.36 h | 10.0 h | 1.87 h | 5.19 h | 1.11 h | 4.82 h |
+| Beach Episode clear | 15-25 h | 9.04 h | 26.4 h | 3.55 h | 9.68 h | 2.46 h | 8.89 h |
+| Final Arc clear | 30-45 h | 13.9 h | 38.6 h | 8.17 h | 20.1 h | 4.56 h | 12.6 h |
+| All gameplay heroes + weapons | 40-60 h | 6.36 h | 80.4 h | 1.87 h | 47.7 h | 1.11 h | 40.6 h |
+| Board fully bought | 100-150 h | 46.4 h | n/r (3.5M of 4.85M at 150 h) | 30.5 h | 145.1 h | 31.1 h | 144.9 h |
+| Main hero Lv 30 | ~80 h (P6) | 17.8 h | 81.9 h | 14.1 h | 71.7 h | 13.7 h | 80.1 h |
+| A weapon mastery 10 | ~80 h (P6) | 8.95 h | 132.9 h | 4.15 h | 116.6 h | 3.11 h | 101.0 h |
+| Heat 16 clear | - | 42.9 h (1 of 2) | 106.8 h (1 of 2) | 36.1 h | 85.4 h | 40.4 h | 98.1 h |
+| Max heat (41) clear, every hero Lv 30, mastery 10 on all 20 | 200 h+ | n/r | n/r | n/r | n/r | n/r | n/r |
+
+- **On target** (mid): King Puff at run 4-5; all heroes + weapons 48 h; the board 145 h;
+  main hero Lv 30 72 h; the 200 h+ goals still open at 160 h (heat 32 cleared once at
+  130 h). Weak is ~1.6x slower (median ratio over the clears and rings), as asked. Late:
+  the first mastery-10 weapon (~117 h; the P6 contract has it at 80 h, the account is at
+  rank 9 there - a 3 % damage step).
+- **The account against the §9.1 contract** (mid, 3 / 8 / 15 / 30 / 80 / 150 h): board coins
+  8.4k / 39k / 106k / 302k / 1.57M / 4.85M against 1.9k / 20k / 84k / 399k / 2.30M / 4.85M
+  (a third of a ring ahead in hours 3-15, ~25-30 % behind at 30-80 h), hero Lv 9 / 14 / 18.5
+  / 23 / 30 / 30 against 10 / 15 / 20 / 25 / 30 / 30, signature mastery 3 / 5 / 7 / 8 / 9 /
+  10 against 3 / 5 / 7 / 8 / 10 / 10. Relics run ahead: a UR + SSR set by 5-8 h (the
+  contract has SR + R at 8 h and its first UR at 30 h).
+- **The stage clears still land at ~0.45-0.67x of their hour targets** (before: ~0.25-0.3x).
+  The account is on the contract's board power when they happen; the mid bot clears each
+  stage about one checkpoint below its intended one (matrix §6: Dream Meadow 17 % at P1,
+  Beach 8-17 % at P4, the Final Arc 33 % at P5) and, with its ahead-of-contract gacha
+  relics and ~6-8 runs an hour, gets those clears early. Slowing the economy
+  further would push the board past 150 h and empty the Results screen; this needs the
+  combat side (a steeper clear-rate drop below each intended checkpoint, or relic stat
+  values / checkpoint relic sets that match the gacha's real output).
+- **Strong is ~0.95x mid, not ~0.6x**: coins, hero XP and gems pay for time played, so a
+  stronger player earns about the same per hour (longer runs, fewer of them), and the
+  stage clears are dominated by the retry tail above (strong is 0.63x on the Final Arc).
+- **The hook** (first 10 h): every account's first-hour runs all buy a board node; mid
+  buys after ~90 % of its runs in hours 0-5 and ~55 % in hours 6-10 (ring 2 is done by
+  ~7 h and ring-3 ranks cost 1,500+ against 400-1,600-coin runs) - 79 % over the 10 h
+  (weak 61 %, strong 84 %; before 95 / 76 / 86 % with the board ~6x underpriced). Longest
+  gap without a board buy in the first 10 h: 0.31 h / 1 run (weak 0.33 h / 3 runs); over the
+  whole run 2.8-2.9 h / 7-9 runs in ring 5 (~135-150 h, 50-130k-coin ranks) while hero levels,
+  pulls and heat badges keep coming (longest gap without any progress event 1.1-1.3 h / 3-4 runs).
+- **First-hour wins / starter pulls**: no starter gems; run 1 (a ~2:00 death: ~40 coins + the
+  Pilot Episode Plot Point's 160 ♦ / 40 ★) buys 5 ring-1 ranks and the first single pull, "Just One Pull" pays
+  it back, the first 10-pull comes at ~run 7 (0.5 h; the King Puff / first-clear gems).
+  The Merch Machine then gives a 10-pull every ~5.5 runs in hour 1, every 9-20 runs from 1 h
+  to 80 h (kept there: the relics already run ahead of the contract) and every ~4.6 runs late.
+- **Player-model sensitivity** (`progression-after-push`: the same economy with a player
+  that never farms, Paper Crane Flock still at 1,000 evolutions): Dream Meadow 0.70 h,
+  Candy 1.38, Academy 4.35, Beach 8.38, the Final Arc 15.1 h, the board 143 h; mid buys a
+  node after 63 % of its first-10 h runs.
 
 ### Readability at peak chaos (view)
 
@@ -967,7 +1153,9 @@ node scripts/e2e.mjs           # desktop + mobile portrait + mobile landscape: s
 node scripts/shot.mjs --path "/?autoplay=1&hero=rin&skip=150" --mobile --wait 5000 --out shots/x.png
 node scripts/flows.mjs         # Season 2 account flows on portrait / landscape / iPhone SE / desktop (section 11):
                                # --only portrait,se --flow fresh,v1,endless,nav,keys --out shots/flows --keep-going
-npm run balance                # headless full-run balance probe: 3 heroes x 10 seeds x good + lazy bot (section 6)
+npm run balance                # headless full-run balance probe: 3 heroes x 10 seeds x good + lazy bot (section 6);
+                               # CP=P2 STAGE=candy_kingdom BOT=mid plays an account checkpoint's RunConfig
+node tools/matrix.mjs          # power-vs-stage matrix: checkpoints P0-P7 x 5 stages x heroes x seeds (section 6)
 npm run progression            # account progression simulator (docs/META.md §9; BOT=weak|mid|strong RUNS=...)
 npm run build && npm run build:single   # dist/ (Pages) and dist-single/index.html (standalone, works from file://)
 ```
@@ -1195,7 +1383,8 @@ a horizontal page overflow or a button cut off at the screen edge):
 
 **Gates for a foundation hand-off**: `npm run typecheck`, `npm test`,
 `npm run build`, `npm run build:single`, `node scripts/e2e.mjs`,
-`node scripts/flows.mjs`, `npm run balance`, `npm run progression`.
+`node scripts/flows.mjs`, `npm run balance`, `npm run progression`,
+`node tools/matrix.mjs` (after a balance change).
 
 ---
 

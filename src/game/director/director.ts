@@ -23,7 +23,8 @@ export const MIN_ALIVE = 0.8;
  * build kills faster than the director can refill), newly spawned enemies get
  * tougher (HP x (1 + adapt)), up to ADAPT_MAX; it relaxes once the screen is
  * busy again. Strong builds keep a busy, dangerous screen; weak builds (who
- * already fight a full screen) never see it. Off before ADAPT_FROM s.
+ * already fight a full screen) never see it. Off before ADAPT_FROM s. The
+ * ceiling is per stage (StageScaling.adaptMax; ADAPT_MAX is the default).
  */
 export const ADAPT_FROM = 210;
 export const ADAPT_FLOOR = 0.55;
@@ -140,7 +141,7 @@ export class Director {
     const ph = this.phase();
     const k = ph.to > ph.from && ph.to < 1e8 ? (w.t - ph.from) / (ph.to - ph.from) : 1;
     // (Filler Overload raises the phase cap; the device cap still applies)
-    const phMax = ph.max * w.difficulty.cap;
+    const phMax = ph.max * w.difficulty.cap * w.scaling.cap;
     const cap = Math.min(phMax, w.maxEnemies);
     let rate = lerp(ph.rate[0], ph.rate[1], Math.min(1, Math.max(0, k))) * this.spawnMul * intro * this.rateMul();
     // pressure floor: a strong build shouldn't empty the screen - refill faster when sparse
@@ -149,7 +150,7 @@ export class Director {
     if (deficit > 0) rate *= 1 + 3 * deficit;
     if (w.t >= ADAPT_FROM && intro) {
       const af = cap * ADAPT_FLOOR * this.spawnMul;
-      if (w.enemyCount < af) this.adapt = Math.min(ADAPT_MAX, this.adapt + ADAPT_UP * (1 - w.enemyCount / af) * dt);
+      if (w.enemyCount < af) this.adapt = Math.min(w.scaling.adaptMax, this.adapt + ADAPT_UP * (1 - w.enemyCount / af) * dt);
       else this.adapt = Math.max(0, this.adapt - ADAPT_DOWN * dt);
     }
     this.hpMul = (1 + this.adapt) * (cap < phMax ? Math.min(1.4, Math.sqrt(phMax / cap)) : 1);
@@ -189,10 +190,10 @@ export class Director {
     }
   }
 
-  /** Spawn-rate multiplier from the difficulty (twists), the curse stat and the Filler Arc. 1 in a plain run. */
+  /** Spawn-rate multiplier from the stage's toughness, the difficulty (twists), the curse stat and the Filler Arc. */
   private rateMul(): number {
     const w = this.w;
-    let m = w.difficulty.spawn;
+    let m = w.difficulty.spawn * w.scaling.spawn;
     const c = w.stats.curse;
     if (c > 0) m *= 1 + c;
     if (w.endlessOn) m *= 1 + w.stage.endless.spawnPerMinute * ((w.t - w.endlessFrom) / 60);

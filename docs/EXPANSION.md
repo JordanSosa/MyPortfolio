@@ -87,6 +87,28 @@ time, about 6 runs per hour early on.
 - Base player power goes down, and early enemy toughness and density go up.
 - The board's first ring makes the first 3 minutes winnable within an hour.
 
+**Account-power checkpoints** (the contract between the combat curve and the
+economy; built and measured by `tools/checkpoints.ts` / `node tools/matrix.mjs`,
+contents in META.md §9.1, results in ARCHITECTURE.md §6):
+
+| Checkpoint | Hours | Intended clear (~40-70 % for the mid bot) |
+| --- | --- | --- |
+| P0 fresh save | 0 | - (dies ~2:30-4:00 in Dream Meadow) |
+| P1 a few ring-1 nodes | ~1 | - (reaches King Puff) |
+| P2 ring 1 done, Lv 10 | ~3 | Dream Meadow |
+| P3 ring 2, Lv 15, 2 relics | ~8 | Candy Kingdom |
+| P4 ring 3 started, Lv 20 | ~15 | Shoujo Academy |
+| P5 ring 4 started, Lv 25, 4 relics | ~30 | Beach Episode (and the Final Arc's lower end) |
+| P6 ring 5 half, Lv 30 | ~80 | The Final Arc |
+| P7 near max | ~150 | Plot Twist heat: melts the Final Arc at heat 12, works at heat 41 |
+
+A stage's first clear lands a little before its intended checkpoint (a player
+retries at 10-30 % clear chances), which is how the milestone hours above line
+up with the checkpoint hours. Measured against these targets (economy pass, progression
+simulator): ARCHITECTURE.md §6.6. Boss fights at the intended checkpoint: King Puff
+(the 3:00 tutorial boss) 20-45 s, other mid bosses 45-60 s, finals 75-100 s,
+Cancel-sama ~150 s.
+
 **Late power:** a max-progression account is a death machine, with an evolved
 build by 3:00 and screens melting constantly. Plot Twists are what keep it
 challenging.
@@ -111,7 +133,9 @@ The results screen becomes a show:
 1. The "Episode N" title card and "TO BE CONTINUED →" banner on death,
    or "SERIES FINALE?!" on a clear.
 2. The payout ticks up line by line: coins picked up, the time bonus, the kill
-   bonus, each boss, the rank grade multiplier and the heat multiplier.
+   bonus, each boss, then greed, the rank grade and the stage's **Ratings**
+   (x1 Dream Meadow ... x8 the Final Arc) on those episode bonuses, and the heat
+   multiplier on everything (formulas: META.md §4).
 3. Hero XP and weapon mastery bars fill, with level-up pops.
 4. Achievement unlock cards and new unlocks get a full-screen celebration
    ("NEW WEAPON UNLOCKED!").
@@ -142,7 +166,7 @@ nodes in 5 rings around a centre "Episode 1" node.
     - "Glass Cannon Arc": +60% damage, −40% HP
     - "Power of Friendship": +4% damage for each different weapon you hold
     - "Plot Armor": once per run, survive a lethal hit
-- Costs grow with the ring and the node, from about 25 coins on ring 1 to
+- Costs grow with the ring and the node, from about 15 coins on ring 1 to
   tens of thousands on ring 5.
 - Respec costs coins (cheap) so players can experiment.
 - Mobile: pinch zoom, drag to pan, tap a node for a detail card with a BUY

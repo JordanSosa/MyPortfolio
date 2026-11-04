@@ -9,6 +9,7 @@
  *   - talents (capstones read by weapon / ult code) and constellations apply
  *   - a 3-minute bot run per hero (and a maxed talents + C6 run) survives without exceptions
  */
+import { earlyAccountRun } from "./fixtures/account";
 import { describe, expect, test } from "vitest";
 import { Bot, simulate } from "../src/debug/bot";
 import { CFG } from "../src/game/config";
@@ -161,7 +162,7 @@ describe.each(GROUP)("$hero", ({ hero, weapon, evo, passive, ult }) => {
   });
 
   test("a 3-minute bot run survives without exceptions", () => {
-    const w = new World({ hero, seed: 11, maxEnemies: 250 });
+    const w = new World({ hero, seed: 11, maxEnemies: 250, run: earlyAccountRun() });
     expect(() => simulate(w, 180, 1 / 30, new Bot(3))).not.toThrow();
     expect(w.t).toBeGreaterThan(60);
     expect(w.kills).toBeGreaterThan(100);
@@ -403,9 +404,9 @@ describe("Isekai-kun", () => {
 
 // ---------------------------------------------------------------- Truck-kun
 describe("Truck-kun", () => {
-  test("trait: 180 HP, 3 armor, radius 9, no recoil; drives like a vehicle", () => {
+  test("trait: +80 HP, 3 armor, radius 9, no recoil; drives like a vehicle", () => {
     const w = sandbox("truck_kun");
-    expect(w.stats.maxHp).toBe(180);
+    expect(w.stats.maxHp).toBe(CFG.playerHp + 80);
     expect(w.stats.armor).toBe(3);
     expect(CFG.playerRadius * w.stats.hitbox).toBeCloseTo(9, 6);
     expect(w.heavy).toBe(true);

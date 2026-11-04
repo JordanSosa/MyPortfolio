@@ -571,7 +571,7 @@ is granted by the matching achievement listed there.
 | Cheat Fireball | own Isekai-kun | (gacha) | "Pulled with Isekai-kun. Probably overpowered." |
 | Horn of Reincarnation | own Truck-kun | (gacha) | "HONK." |
 | Bubble Tea Cannon | 1,000 lifetime Puff kills | `boba_origins` | "Puffs are chewy. Squish a thousand of them." |
-| Paper Crane Flock | evolve 10 weapons (lifetime) | `evolve_10` | "Fold ten evolutions. Origami is just paper evolving." |
+| Paper Crane Flock | evolve 600 weapons (lifetime; the economy pass made it the late-game unlock, ~40-60 h for the mid bot) | `evolve_10` | "Fold 600 evolutions. Legend says a thousand folds grant a wish; the other 400 are sold separately." |
 | Idol Lightstick Wave | reach SSS rank | `rank_sss` | "The crowd only cheers for SSS." |
 | Kotatsu of Sloth | survive 3:00 without dashing | `no_dash` | "Have you tried... not dashing? For three whole minutes?" |
 | Plot Armor | take 5,000 damage (lifetime) | `damage_5000` | "Take five thousand damage. Walk it off. Character building." |

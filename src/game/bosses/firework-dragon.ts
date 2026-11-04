@@ -356,7 +356,7 @@ export const fireworkDragon: EnemyDef = {
   name: "Summer Festival Firework Dragon",
   sprite: "boss_firework_dragon",
   fps: 6,
-  hp: 420000,
+  hp: 430000,
   speed: 60,
   dmg: 18,
   radius: 18,

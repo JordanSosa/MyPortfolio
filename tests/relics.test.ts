@@ -28,6 +28,8 @@ const steps = (w: World, sec: number) => {
 const near = (w: World, id: string, dx = 16, dy = 0, elite = false) => w.spawnEnemy(id, w.player.x + dx, w.player.y + dy, elite)!;
 /** Take the hero's weapons away (effects under test stay the only damage source). */
 const disarm = (w: World) => void w.weapons.splice(0);
+/** Keep the hero out of reach of the test dummies (Season 2 contact damage kills an 80 HP hero in seconds, freezing the clock). */
+const untouchable = (w: World) => void (w.player.iframes = 1e6);
 /** Land a hit on the hero whatever the i-frames say. */
 const hurt = (w: World, dmg: number) => {
   w.player.iframes = 0;
@@ -215,6 +217,7 @@ describe("event relics", () => {
   test("Rival Plushie: crits mark the enemy for 3 s, marked enemies take +X% from everything", () => {
     const w = mk([["rival_plushie", 6]]);
     disarm(w);
+    untouchable(w);
     w.critRules.push(() => true);
     const e = near(w, "teddy", 40);
     w.hitEnemy(e, 1, null, 0, 0, 0, "test", 0);
@@ -228,6 +231,7 @@ describe("event relics", () => {
   test("Oversized Sword Keychain: every X s the next hit deals x3 and pops NANI?!", () => {
     const w = mk([["oversized_sword_keychain", 6]]);
     disarm(w);
+    untouchable(w);
     const e = near(w, "teddy", 60);
     e.hp = e.maxHp = 1e6;
     steps(w, 5.05);
@@ -508,6 +512,7 @@ describe("UR, LR and MYTHIC relics", () => {
 describe("NANI?! pops", () => {
   test("qualifying crits pop at most once per 6 s and count into RunStats.nanis", () => {
     const w = mk();
+    untouchable(w);
     w.critRules.push(() => true);
     const st = naniState(w);
     st.chance = 1;

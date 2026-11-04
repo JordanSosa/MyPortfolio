@@ -239,7 +239,7 @@ export const gingerbreadGolem: EnemyDef = {
   name: "Gingerbread Golem",
   sprite: "boss_gingerbread",
   fps: 5,
-  hp: 30000,
+  hp: 90000,
   speed: 30,
   dmg: 18,
   radius: 18,

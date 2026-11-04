@@ -287,7 +287,7 @@ function stageArticle(p: Profile, id: string, ctx: MetaContent): Article {
   const rows = [
     row("Episode", `#${s?.order ?? "?"}`),
     row("Length", fmtTime(s?.duration ?? 0)),
-    row("Ratings", `×${ratingMul(s?.rewardMul ?? 1)} rewards`),
+    row("Ratings", `×${ratingMul(s?.rewardMul ?? 1)} coin bonuses`),
     row("Filler Arc", s?.endless === false ? "no" : "yes (after a clear)"),
     rec && rec.runs > 0 ? row("Aired", `${fmtInt(rec.runs)} time${rec.runs === 1 ? "" : "s"}`) : "",
   ].join("");

@@ -5,8 +5,10 @@
  *   evolution (eligible: base weapon at max level + required passive owned)  - always shown first
  *   upgrade of an owned weapon (w 10) / owned passive (w 8)
  *   NEW weapon while a weapon slot is free (w 6) / NEW passive while a passive slot is free (w 5)
+ * Season 2: the NEW weapons (passives) share the slice's 7 (8) candidates' weight however big the pool is,
+ * and while the hero holds only its starter weapon every offer shows one NEW weapon (builds still form).
  * Rarity: evolution > epic (lucky double level, chance 4% x luck) > rare (NEW weapon or MAX level) > common.
- * Empty / short pool -> "Heal 30 HP" and "+50 coins" fallbacks.
+ * Empty / short pool -> "Heal 30 HP" and "Star Pouch" (+CFG.starPouchCoins coins) fallbacks.
  *
  * Season 2 gates (World): NEW items only from RunConfig.weaponPool / passivePool
  * (World.inPool), banished items never come back, slot limits come from the
@@ -59,7 +61,7 @@ export const COINS_CARD: Readonly<UpgradeCard> = {
   id: "coins",
   name: "Star Pouch",
   icon: "icon_gold_up",
-  desc: "+50 coins",
+  desc: `+${CFG.starPouchCoins} coins`,
   from: 0,
   to: 0,
   rarity: "common",
@@ -137,24 +139,45 @@ function candidates(w: World, ownedOnly: boolean): Cand[] {
     out.push({ w: 8, card: { kind: "passive", id: def.id, name: title(w, def.id, def.name), icon: def.icon, desc: def.levels[to - 1], from: pi.level, to, rarity } });
   }
   if (ownedOnly) return out;
+  // Pool normalisation: the NEW weapons (passives) share the weight the shipped slice's 7 (8) had, so a
+  // bigger Season 2 pool doesn't drown the upgrades of what the build already holds (builds still form).
   if (w.weapons.length < w.weaponSlots) {
+    const start = out.length;
     for (const def of baseWeapons()) {
       if (w.hasWeapon(def.id) || !w.inPool("weapon", def.id)) continue;
       // already own its evolved form?
       if (def.evolution && w.hasWeapon(def.evolution.into)) continue;
-      out.push({ w: 6, card: { kind: "weapon", id: def.id, name: title(w, def.id, def.name), icon: def.icon, desc: def.desc, from: 0, to: 1, rarity: "rare" } });
+      out.push({ w: NEW_WEAPON_W, card: { kind: "weapon", id: def.id, name: title(w, def.id, def.name), icon: def.icon, desc: def.desc, from: 0, to: 1, rarity: "rare" } });
     }
+    normalise(out, start, NEW_WEAPON_REF);
   }
   if (w.passives.length < w.passiveSlots) {
+    const start = out.length;
     for (const def of PASSIVES) {
       if (w.passiveLevel(def.id) > 0 || !w.inPool("passive", def.id)) continue;
-      // nudge passives that would evolve an owned weapon
-      let wt = 5;
-      for (const inst of w.weapons) if (inst.def.evolution?.with === def.id) wt += 3;
-      out.push({ w: wt, card: { kind: "passive", id: def.id, name: title(w, def.id, def.name), icon: def.icon, desc: def.levels[0], from: 0, to: 1, rarity: "common" } });
+      out.push({ w: NEW_PASSIVE_W, card: { kind: "passive", id: def.id, name: title(w, def.id, def.name), icon: def.icon, desc: def.levels[0], from: 0, to: 1, rarity: "common" } });
     }
+    normalise(out, start, NEW_PASSIVE_REF);
+    // nudge passives that would evolve an owned weapon (on top: a recipe stands out even in a big pool)
+    for (let i = start; i < out.length; i++) for (const inst of w.weapons) if (inst.def.evolution?.with === out[i].card.id) out[i].w += 3;
   }
   return out;
+}
+
+/** Offers guarantee a NEW weapon card while the build holds fewer weapons than this (the starter only). */
+const EARLY_WEAPONS = 2;
+/** Base weight of a NEW weapon / passive card, and how many of each the shipped slice could offer at once (7 / 8). */
+const NEW_WEAPON_W = 6;
+const NEW_WEAPON_REF = 7;
+const NEW_PASSIVE_W = 5;
+const NEW_PASSIVE_REF = 8;
+
+/** Scale the weights of out[start..] so that more than `ref` candidates share `ref` candidates' total weight. */
+function normalise(out: Cand[], start: number, ref: number): void {
+  const n = out.length - start;
+  if (n <= ref) return;
+  const k = ref / n;
+  for (let i = start; i < out.length; i++) out[i].w *= k;
 }
 
 function pickWeighted(w: World, list: Cand[]): Cand | null {
@@ -174,6 +197,15 @@ export function makeOffer(w: World, count: number = w.stats.cards): UpgradeCard[
   const out: UpgradeCard[] = [];
   for (const evo of evolutionCards(w)) if (out.length < count) out.push(evo);
   const pool = candidates(w, false);
+  // the build forms: while the hero holds only its starter weapon, every offer shows one NEW weapon
+  if (out.length < count && count >= 2 && w.weapons.length < Math.min(EARLY_WEAPONS, w.weaponSlots)) {
+    const news = pool.filter((c) => c.card.kind === "weapon" && c.card.from === 0);
+    const c = pickWeighted(w, news);
+    if (c) {
+      out.push(c.card);
+      pool.splice(pool.indexOf(c), 1);
+    }
+  }
   while (out.length < count && pool.length) {
     const c = pickWeighted(w, pool);
     if (!c) break;
@@ -255,7 +287,7 @@ export function applyCard(w: World, card: UpgradeCard): void {
       w.heal(30);
       break;
     case "coins":
-      w.coins += 50;
+      w.coins += CFG.starPouchCoins;
       break;
   }
   w.emit("upgradeApplied", { card });
@@ -273,7 +305,7 @@ export function rollChest(w: World, golden: boolean): ChestResult {
   // chest luck: a plain chest may roll like a golden one (no extra RNG draw without it)
   const n = jackpot ? 5 : golden || (cl > 0 && w.rng.next() < cl) ? 3 : 1;
   const rewards: UpgradeCard[] = [];
-  const bonus = Math.round((golden ? 60 : 15 + w.rng.int(0, 15)) * (jackpot ? 3 : 1) * w.stats.greed);
+  const bonus = Math.round((golden ? CFG.chestCoinsGolden : CFG.chestCoins + w.rng.int(0, CFG.chestCoins)) * (jackpot ? 3 : 1) * w.stats.greed);
   const before = w.coins;
   for (let i = 0; i < n; i++) {
     let card: UpgradeCard | null = evolutionCards(w, w.chestEvoEarly)[0] ?? null;

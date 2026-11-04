@@ -14,22 +14,30 @@
 import type { SpawnPhase, StageDef, TimelineEvent } from "../stage";
 
 const EARLY = { puff: 3, batbun: 2 };
-const MID = { puff: 3, batbun: 2, boo: 2 };
-const LATE1 = { puff: 2, batbun: 2, boo: 2, shroomie: 2, eyepuff: 1 };
-const LATE2 = { ...LATE1, pumpkin: 0.8, teddy: 0.45 };
+// (Season 2: from 1:00 the mix leans on enemies a Lv1-5 starter kit can't one-shot - boos, eyepuffs,
+// shroomies - instead of more puffs: fodder feeds XP and makes a fresh save STRONGER, toughness bites)
+const MID = { puff: 2, batbun: 2, boo: 3, eyepuff: 1 };
+const LATE1 = { puff: 1.5, batbun: 2, boo: 2.5, shroomie: 2, eyepuff: 1.5 };
+const LATE1B = { puff: 2, batbun: 2, boo: 2, shroomie: 2, eyepuff: 1 };
+const LATE2 = { ...LATE1B, pumpkin: 0.8, teddy: 0.45 };
 const LATE3 = { ...LATE2, wisp: 1.2 };
 const ALL = { puff: 2, batbun: 2, boo: 2, shroomie: 1.6, eyepuff: 1.2, pumpkin: 1.2, teddy: 1, wisp: 1.4 };
 
+/**
+ * Season 2 retune (the matrix, ARCHITECTURE section 6): a fresh save (P0) is under real pressure by
+ * 1:30 and dies around 2:30-4:00, ring 1 (P1) gets to King Puff, the intended clear power (P2, ~3 h)
+ * clears about half the time. Rates x1.4 over the slice; caps up.
+ */
 export const PHASES: SpawnPhase[] = [
-  { from: 0, to: 60, mix: EARLY, rate: [1.3, 2.7], max: 55 },
-  { from: 60, to: 120, mix: MID, rate: [3, 4], max: 100 },
-  { from: 120, to: 180, mix: LATE1, rate: [4, 5.5], max: 140 },
-  { from: 180, to: 210, mix: LATE1, rate: [4.5, 4.5], max: 140 },
-  { from: 210, to: 300, mix: LATE2, rate: [6, 9.5], max: 175 },
-  { from: 300, to: 360, mix: LATE3, rate: [12, 16], max: 220 },
-  { from: 360, to: 390, mix: LATE3, rate: [16, 17], max: 240 },
-  { from: 390, to: 540, mix: ALL, rate: [20, 30], max: 260 },
-  { from: 540, to: 1e9, mix: ALL, rate: [30, 30], max: 260 },
+  { from: 0, to: 60, mix: EARLY, rate: [3.1, 5.9], max: 75 },
+  { from: 60, to: 120, mix: MID, rate: [6.3, 9.1], max: 120 },
+  { from: 120, to: 180, mix: LATE1, rate: [9.1, 11.2], max: 160 },
+  { from: 180, to: 210, mix: LATE1, rate: [8.4, 8.4], max: 160 },
+  { from: 210, to: 300, mix: LATE2, rate: [11.2, 15.4], max: 190 },
+  { from: 300, to: 360, mix: LATE3, rate: [18.2, 22.4], max: 220 },
+  { from: 360, to: 390, mix: LATE3, rate: [22.4, 23.8], max: 240 },
+  { from: 390, to: 540, mix: ALL, rate: [28, 42], max: 260 },
+  { from: 540, to: 1e9, mix: ALL, rate: [42, 42], max: 260 },
 ];
 
 export const EVENTS: TimelineEvent[] = [
@@ -64,6 +72,12 @@ export const dreamMeadow: StageDef = {
 
   phases: PHASES,
   events: EVENTS,
+  // the first stage's horde: tougher early (x2.6 at 1:00, x4.2 at 2:00, x6.5 at 3:00, x22 at 6:00, x57 at 9:00)
+  // and hard-hitting from the start (contact damage x1.8, +4 % per minute from 1:00). Verification pass: tier
+  // 1 -> 1.45, pace 1 -> 1.08 (+ King Puff 12k, Nightmare Teddy 65k, Lady Lunatic 82k): Hoshi - the starter, ~85 %
+  // of the runs in the progression simulator - cleared it at 0.4 h on run 2-5; now the first clear lands at
+  // ~1.3-1.5 h (EXPANSION section 2: 1.5-3 h) and the first King Puff kill on run ~4 (target runs 3-6)
+  scaling: { hp: 1.45, curve: [0.65, 0.03, 0.032], pace: 1.08, dmg: 1.8, dmgPerMinute: 0.04, dmgFrom: 1 },
   opening: { enemy: "puff", count: 10 },
   finalBoss: "lady_lunatic",
   enrageAt: 630,
