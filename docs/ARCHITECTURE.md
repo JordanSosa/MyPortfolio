@@ -873,7 +873,7 @@ stats; the tier and the stretch differ:
 | Candy Kingdom (P3) | 2.1 (1.3) | 1.05 (0.85) | 3.7 / 9.1 / 130 (11:00) | 1.8 -> 2.5 (+4 %/min) | x1.4 / x1.15 |
 | Shoujo Academy (P4) | 3.4 (2.5) | 0.68 (0.62) | 5.0 / 9.3 / 106 (13:00) | 1.8 -> 2.7 (+4 %/min) | x1.4 / x1.15 |
 | Beach Episode (P5) | 7.5 (5.5) | 0.6 (0.55) | 10.6 / 18 / 245 (15:00) | 1.8 -> 5.8 (+16 %/min) | x1.4 / x1.15 |
-| The Final Arc (P5-P6) | 2.5 (1.8) | 0.65 (0.6) | 3.6 / 6.5 / 185 (19:00) | 1.8 -> 6.0 (+13 %/min) | x1.4 / x1.15 |
+| The Final Arc (P5-P6) | 3.2 (1.8) | 0.68 (0.6) | 4.7 / 8.7 / 267 (19:00) | 1.8 -> 6.7 (+15 %/min, was +13) | x1.4 / x1.15 |
 
 (The tiers and boss HP were raised again by the verification pass, 6.7: the combat-curve pass tuned against
 synthetic checkpoints, and the average player's real account - Hoshi, the starter, and the Merch Machine's
@@ -907,7 +907,7 @@ P7 cleared no more than P6), each set for its stage's intended checkpoint:
 | Gingerbread Golem (6:00) | **90,000** (60,000; 30,000) | Firework Dragon (15:00) | **430,000** (330,000; 420,000) |
 | Sugar Plum Tyrant (11:00) | **200,000** (120,000; 90,000) | Truck-kun (8:00) | **520,000** (400,000; 300,000) |
 | | | Rival-chan (14:00) | **600,000** (460,000; 650,000) |
-| | | Cancel-sama (19:00) | **1,900,000** (1,500,000; 1,400,000) |
+| | | Cancel-sama (19:00) | **1,650,000** (1,500,000; 1,400,000) |
 
 (Bold: the verification pass (6.7). The slice values were scaled x0.5-1.8 by the player's level; the
 Season 2 ones are what the boss has.)

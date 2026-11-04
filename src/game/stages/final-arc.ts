@@ -79,11 +79,13 @@ export const finalArc: StageDef = {
 
   phases: FINALE_PHASES,
   events: FINALE_EVENTS,
-  // intended clear power P5-P6 (~30-80 h, ARCHITECTURE section 6): x3.6 HP at 1:00, x6.5 at 3:00, x24 at 8:00, x85 at 14:00,
-  // x185 at 19:00 (the opening is survivable for P5; the network's patience runs out later), x1.4 spawns, +15 % enemy speed,
-  // contact x1.8 ramping +13 %/min (x6.0 at 19:00). Verification pass: tier 1.8 -> 2.5, pace 0.6 -> 0.65, Truck-kun 520k,
-  // Rival-chan 600k, CANCEL-SAMA 1.9M: the average player's first "Series Finale" ~18 h -> ~35 h (target 30-45 h)
-  scaling: { hp: 2.5, curve: [0.65, 0.03, 0.032], pace: 0.65, dmg: 1.8, dmgPerMinute: 0.13, dmgFrom: 1, spawn: 1.4, speed: 1.15 },
+  // intended clear power P5-P6 (~30-80 h, ARCHITECTURE section 6): x4.7 HP at 1:00, x8.7 at 3:00, x34 at 8:00, x120 at 14:00,
+  // x267 at 19:00 (the opening is survivable for P5; the network's patience runs out later), x1.4 spawns, +15 % enemy speed,
+  // contact x1.8 ramping +15 %/min (x6.7 at 19:00). Verification pass: tier 1.8 -> 3.2, pace 0.6 -> 0.68, ramp 0.13 -> 0.15,
+  // Truck-kun 520k, Rival-chan 600k, CANCEL-SAMA 1.65M: the average player's first "Series Finale" ~18 h -> ~30-35 h
+  // (target 30-45 h). The gate is survival, not the finale's HP pool: a 1.9M Cancel-sama made 35-40 % of Final Arc
+  // runs a 6-minute stalemate at the boss (ARCHITECTURE section 6.7)
+  scaling: { hp: 3.2, curve: [0.65, 0.03, 0.032], pace: 0.68, dmg: 1.8, dmgPerMinute: 0.15, dmgFrom: 1, spawn: 1.4, speed: 1.15 },
   opening: { enemy: "filler_goon", count: 12 },
   finalBoss: "cancel_sama",
   enrageAt: 1230,

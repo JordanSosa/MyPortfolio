@@ -728,7 +728,7 @@ beam cast (both palms forward), f4 frustrated (gritted teeth), f5 power-up
 ### 5.9 CANCEL-SAMA, the Network Executive — `cancel_sama` (The Final Arc FINAL 19:00)
 | sprite | hp | ref Lv | speed | dmg | radius | height | shadow | knockResist |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `boss_cancel` 64×72×8 | 1,900,000 | 90 | 30 | 22 | 18 | 52 | 44 | 1.0 |
+| `boss_cancel` 64×72×8 | 1,650,000 | 90 | 30 | 22 | 18 | 52 | 44 | 1.0 |
 
 Name card: **CANCEL-SAMA** — *The Network Executive. Your Ratings Are Concerning.* · `final: true`, music `cancel`
 

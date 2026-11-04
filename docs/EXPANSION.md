@@ -64,6 +64,14 @@ Decisions made with the owner:
 
 ## 2. Progression arc targets
 
+> **Owner guidance (balance philosophy):** the targets below are rough
+> ranges, not exact goals. The game does not need perfect balance. Gaps are
+> fine where a stage is a bit too hard or a run a bit too long: players solve
+> them with builds, relics, Plot Twists, endless farming or grinding. Fix
+> balance only when something is broken: a dead end with nothing to buy or
+> unlock, an unwinnable wall at the intended power, or a degenerate trivial
+> strategy that removes all challenge.
+
 The "average player" is the balance probe's mid-skill bot. Hours are play
 time, about 6 runs per hour early on.
 
@@ -105,7 +113,9 @@ contents in META.md §9.1, results in ARCHITECTURE.md §6):
 A stage's first clear lands a little before its intended checkpoint (a player
 retries at 10-30 % clear chances), which is how the milestone hours above line
 up with the checkpoint hours. Measured against these targets (economy pass, progression
-simulator): ARCHITECTURE.md §6.6. Boss fights at the intended checkpoint: King Puff
+simulator): ARCHITECTURE.md §6.6; the verification pass retuned the five stages against the progression
+simulator itself (the average player's real account: Hoshi, the starter, and the Merch Machine's relics) -
+ARCHITECTURE.md §6.7, the final measured curve in META.md §9.2. (Targets unchanged.) Boss fights at the intended checkpoint: King Puff
 (the 3:00 tutorial boss) 20-45 s, other mid bosses 45-60 s, finals 75-100 s,
 Cancel-sama ~150 s.
 
