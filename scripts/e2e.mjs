@@ -14,7 +14,8 @@
 //   D) (mobile) the joystick across modals, with real multi-touch (CDP, several fingers, step mode): a finger
 //      held through a level-up / chest / pause, a thumb put back down during the level-up close delay (on the
 //      fading backdrop or a card), a second offer, a finger held on DASH, pointercancel, a tap on the closing
-//      modal. After each: the held finger steers (knob under it, the hero walks); no finger down = no move and
+//      modal, a resting second thumb while the stick thumb repositions (it must never take the stick).
+//      After each: the held finger steers (knob under it, the hero walks); no finger down = no move and
 //      no knob. (Season 3 owner bug: "the stick gets stuck after picking an upgrade".)
 // Screenshots go to shots/e2e/<device>-<step>.png. Fails (exit 1) on any page error or
 // console.error, or when a step's expected state is not reached.
@@ -363,6 +364,27 @@ async function joystickSteps(browser, dev, step, rec) {
       const picks = await page.evaluate(() => window.__kk.world.__picks);
       check(picks === 1, `one level-up, ${picks} cards applied (a tap on the fading modal picked again)`);
       await idle("after");
+    });
+    await jstep("(i) a second thumb resting beside the stick never takes it while the stick thumb repositions", async () => {
+      const d = await page.evaluate(() => {
+        const r = window.__kk.app.input.touch.dashBtn.getBoundingClientRect();
+        return { x: Math.round(r.x - r.width * 0.5), y: Math.round(r.y + r.height * 0.4) };
+      });
+      const f = await down(P1.x, P1.y);
+      await steers("the stick thumb", f);
+      // (the other thumb rests on the play area just left of DASH: a near miss)
+      const g = await down(d.x, d.y);
+      await up(f);
+      // its contact patch drifts while the stick thumb is up
+      await drag(g, -10, -10);
+      await frames(6);
+      const s = await state();
+      check(!s.stick && !s.knob && s.mx === 0 && s.my === 0, `the resting thumb took the stick (${fmt(s)})`);
+      const h = await down(P1.x + 10, P1.y - 10);
+      await steers("the stick thumb pressed again", h, 0, -40);
+      await up(h);
+      await up(g);
+      await idle("lifted");
     });
   } finally {
     rec.errors.push(...page.__logs.filter((l) => l.startsWith("[pageerror]") || l.startsWith("[error]")));

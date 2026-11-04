@@ -100,6 +100,11 @@ around it. `docs/DEVTOOLS.md` §8 shows how each check was proven against the Se
   - A window blur with no focus event back (a notification, the host app's UI) left the game silent for good.
   - `npm run check:audio` replays the blur, a lost 'visible' event and a system suspend on an Android phone:
     the sound must come back within 1.5 s each time.
+- **The joystick across modals.**
+  - A thumb held through the level-up, or put back down in its 430 ms close delay, was ignored until lifted. A
+    fading modal stayed hit-testable (`#ui > *` outranks `.modal.out`), so a tap there picked a second card.
+  - The first fix let a resting second thumb take the stick when the steering thumb lifted. One stick per touch.
+  - `tests/input-touch.test.ts` (`npm test`); `node scripts/e2e.mjs --joystick` (real CDP multi-touch, ~35 s).
 - **Blackouts, murk, illegible text and placeholders.**
   - Kuro's first ETERNAL ABYSS read as "just black" on the owner's phone while headless shots looked merely
     moody (mean luminance 62-98). `npm run scenes` flags `murk`: in-run frames where more than 10 % of the

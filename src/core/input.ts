@@ -18,7 +18,10 @@
  * The joystick follows the FINGER, not the moment it went down: every stick-capable pointer is tracked
  * (position, and whether it went down on a control) from pointerdown to pointerup / pointercancel. When
  * the joystick comes back (a modal closes, READY? -> GO!, controls shown again) a finger still held on
- * the play area becomes the stick at once, and with no stick any such finger that moves takes it. A
+ * the play area becomes the stick at once, and with no stick any such finger that moves takes it. One
+ * stick per touch: a finger that went down beside the stick, or was passed over when another took it,
+ * never does until it lifts (a resting second thumb must not steal the stick while the steering thumb
+ * repositions). A press that brings the controls back (keyboard -> touch) is the one that steers. A
  * stick can never outlive its finger: it is dropped when its pointer is gone (checked on every pointer
  * event and every frame), a first ("primary") touch proves every older finger lifted, and a hidden page
  * forgets every finger. (Season 3 owner bug: a thumb put down during the level-up close delay, or held
@@ -64,8 +67,13 @@ interface Finger {
   x: number;
   y: number;
   type: string;
-  /** Went down on a control / UI element while the joystick was live: never becomes the stick. */
-  ui: boolean;
+  /**
+   * Never becomes the stick until it lifts: it went down on a control while the joystick was live, or beside the
+   * stick (a second thumb resting on the play area), or was passed over when another finger took the stick.
+   * (Without the last two, a resting thumb's drift took the stick the moment the steering thumb lifted to
+   * reposition, and that thumb's next press was ignored.)
+   */
+  never: boolean;
   /** Press order (the latest held finger is adopted first). */
   seq: number;
 }
@@ -144,6 +152,8 @@ export class Input {
   private fingers = new Map<number, Finger>();
   /** The last pointer that held the stick (preferred when the joystick comes back). */
   private lastStickId = -1;
+  /** Inside a pointerdown's bookkeeping: the controls it brings back are its own (no adoption). */
+  private pressing = false;
 
   // fresh-touch tracking
   private seq = 0;
@@ -369,12 +379,19 @@ export class Input {
 
   /** A held finger may become the stick: not a control finger, and over the play area NOW (the modal it went down on has closed). */
   private canSteer(id: number, f: Finger): boolean {
-    if (f.ui || this.btnPointers.has(id)) return false;
+    if (f.never || this.btnPointers.has(id)) return false;
     const el = typeof document !== "undefined" && typeof document.elementFromPoint === "function" ? document.elementFromPoint(f.x, f.y) : null;
     return !el?.closest?.(NO_STICK);
   }
 
+  /** A stick held by a finger that is still down. */
+  private get stickHeld(): boolean {
+    return this.stickId >= 0 && this.fingers.has(this.stickId);
+  }
+
   private startStick(id: number, x: number, y: number): void {
+    // one stick per touch: every other finger down now is passed over until it lifts
+    for (const [k, f] of this.fingers) if (k !== id) f.never = true;
     this.stickId = id;
     this.lastStickId = id;
     this.stickOx = x;
@@ -388,7 +405,7 @@ export class Input {
    * under the finger (zero vector until it moves). The finger that held the stick last wins, else the latest.
    */
   private adopt(): void {
-    if (this.stickId >= 0 || !this.joystickLive) return;
+    if (this.pressing || this.stickId >= 0 || !this.joystickLive) return;
     let best = -1;
     let rank = -1;
     for (const [id, f] of this.fingers) {
@@ -510,16 +527,29 @@ export class Input {
         this.seq++;
         this.lastDownSeq = this.seq;
         this.downSeq.set(e.pointerId, this.seq);
-        if (this.stickCapable(e)) {
+        const stick = this.stickCapable(e);
+        if (stick) {
           // a primary touch goes down only when no other finger is on the screen: any finger still listed lost its pointerup
           if (e.isPrimary && e.pointerType === "touch") for (const [id, f] of this.fingers) if (f.type === "touch") this.dropFinger(id);
           // (a pointer id seen again without its pointerup: the old press is over)
           if (this.fingers.has(e.pointerId)) this.dropFinger(e.pointerId);
-          const t = e.target as Element | null;
-          this.fingers.set(e.pointerId, { x: e.clientX, y: e.clientY, type: e.pointerType, ui: this.joystickLive && !!t?.closest?.(NO_STICK), seq: this.seq });
         }
         this.activePointers.add(e.pointerId);
-        if (e.pointerType === "touch" || e.pointerType === "pen") this.setDevice("touch");
+        if (e.pointerType === "touch" || e.pointerType === "pen") {
+          // a press that brings the touch controls back (keyboard / gamepad -> touch) is the one that steers: no finger
+          // resting since before is adopted ahead of it (one takes the stick on its next move only if this press does not)
+          this.pressing = true;
+          try {
+            this.setDevice("touch");
+          } finally {
+            this.pressing = false;
+          }
+        }
+        if (stick) {
+          const t = e.target as Element | null;
+          const never = this.joystickLive && (this.stickHeld || !!t?.closest?.(NO_STICK));
+          this.fingers.set(e.pointerId, { x: e.clientX, y: e.clientY, type: e.pointerType, never, seq: this.seq });
+        }
       },
       { capture: true },
     );
@@ -532,7 +562,7 @@ export class Input {
           f.y = e.clientY;
         } else if (this.stickCapable(e) && (e.buttons & 1) === 1) {
           // a finger still down that the page forgot (it was hidden): known again, judged by what is under it
-          this.fingers.set(e.pointerId, { x: e.clientX, y: e.clientY, type: e.pointerType, ui: false, seq: ++this.seq });
+          this.fingers.set(e.pointerId, { x: e.clientX, y: e.clientY, type: e.pointerType, never: this.joystickLive && this.stickHeld, seq: ++this.seq });
         }
       },
       { capture: true, passive: true },
@@ -601,7 +631,8 @@ export class Input {
   private onPointerMove(e: PointerEvent): void {
     if (e.pointerId !== this.stickId) {
       if (this.stickId >= 0 && !this.fingers.has(this.stickId)) this.releaseStick();
-      // no stick: a held finger on the play area that moves takes it (it went down while a modal was up, or after the old stick finger lifted)
+      // no stick: a held finger on the play area that moves takes it (it went down while a modal was up, or it held the
+      // stick before a blur; a finger that was down beside the stick never does: Finger.never)
       if (this.stickId >= 0 || !this.joystickLive) return;
       const f = this.fingers.get(e.pointerId);
       if (f && this.canSteer(e.pointerId, f)) this.startStick(e.pointerId, e.clientX, e.clientY);

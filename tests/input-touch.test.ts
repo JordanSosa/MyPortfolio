@@ -476,4 +476,70 @@ describe("other ways to steer still work", () => {
     dom.fire("keyup", dom.win, { code: "KeyD" });
     expect(frame().x).toBe(0);
   });
+
+  test("keyboard mid-hold: the press that brings the touch controls back steers, not the finger resting since before", () => {
+    make();
+    const f = down(100, 500);
+    expectSteers(f, 100, 500, 30, 0);
+    dom.fire("keydown", dom.win, { code: "KeyD", repeat: false });
+    expect(frame().x).toBe(1);
+    expect(touch.stickOn).toBe(false);
+    dom.fire("keyup", dom.win, { code: "KeyD" });
+    move(f, 130, 520);
+    expect(frame()).toEqual({ x: 0, y: 0 }); // (keyboard mode: no touch controls, no stick)
+    const g = down(250, 400);
+    expect(inp.touchControlsVisible).toBe(true);
+    expectSteers(g, 250, 400, 0, 40);
+    up(g);
+    // (the resting finger was passed over: its moves never steer until it lifts)
+    move(f, 150, 540);
+    move(f, 180, 560);
+    expect(frame()).toEqual({ x: 0, y: 0 });
+    expect(inp.stickActive).toBe(false);
+    up(f);
+    expectIdle();
+  });
+});
+
+describe("one stick per touch: a finger that was down beside the stick never takes it", () => {
+  test("the stick thumb lifts to reposition: a second thumb resting on the play area does not take the stick, the next press steers", () => {
+    make();
+    const a = down(100, 500);
+    expectSteers(a, 100, 500, 30, 0);
+    const b = down(300, 700); // the other thumb rests on the play area (a near miss of DASH)
+    move(b, 301, 699);
+    expect(frame().x).toBeGreaterThan(0); // (a still steers)
+    up(a);
+    move(b, 295, 695); // its contact patch drifts while a is up
+    move(b, 286, 686);
+    expect(frame()).toEqual({ x: 0, y: 0 });
+    expect(inp.stickActive).toBe(false);
+    expect(touch.stickOn).toBe(false);
+    const c = down(110, 490); // the steering thumb comes back
+    expectSteers(c, 110, 490, 0, -40);
+    up(c);
+    up(b);
+    expectIdle();
+  });
+
+  test("a thumb passed over when the stick comes back after a modal never takes it later", () => {
+    make();
+    const a = down(100, 500);
+    expectSteers(a, 100, 500, 30, 0);
+    openModal();
+    const b = down(300, 700); // rests while the cards are up
+    closeModal(); // a (held the stick last) is adopted, b is passed over
+    expect(inp.stickActive).toBe(true);
+    expectSteers(a, 130, 500, 0, 30);
+    up(a);
+    move(b, 295, 695);
+    move(b, 286, 686);
+    expect(frame()).toEqual({ x: 0, y: 0 });
+    expect(inp.stickActive).toBe(false);
+    const c = down(110, 490);
+    expectSteers(c, 110, 490, 0, -40);
+    up(c);
+    up(b);
+    expectIdle();
+  });
 });
