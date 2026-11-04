@@ -6,7 +6,10 @@
  * for evolutions) and the coins count up inside the modal. A single reward
  * gets a big reel. Rewards are applied by world.openChest() when the lid
  * bursts. Tap / confirm skips ahead; continue needs a fresh touch.
+ * The revealed cards carry the level-up cards' evolution hints (known recipes only; read
+ * against the build after the chest; a 5-reward JACKPOT shows none: five cards fill a phone).
  */
+import { cardEvoHints } from "../../game/evo-hints";
 import { PASSIVES } from "../../game/passives";
 import { WEAPONS } from "../../game/registry";
 import type { ChestResult } from "../../game/types";
@@ -14,6 +17,7 @@ import type { World } from "../../game/world";
 import type { App, UiScreen } from "../app";
 import { esc, h, img, sprite } from "../dom";
 import { layer } from "./common";
+import { injectEvoCss, runKnown } from "./evo-hints";
 import { cardHtml } from "./levelup";
 
 /** Seconds between the last reel landing and the card reveal. */
@@ -116,7 +120,14 @@ export function openChestModal(app: App, w: World): UiScreen {
   const reveal = () => {
     phase = 3;
     const rewards = res?.rewards ?? [];
-    cardsEl.innerHTML = rewards.map((r, i) => cardHtml(r, i, false)).join("");
+    injectEvoCss();
+    const known = runKnown(app, w);
+    cardsEl.innerHTML = rewards
+      .map((r, i) => {
+        // (five cards fill a phone already: a JACKPOT reveal stays as it was)
+        return cardHtml(r, i, false, rewards.length > 3 ? [] : cardEvoHints(w, r, known));
+      })
+      .join("");
     el.classList.add("revealed");
     if (res && res.coins > 0) {
       coinsEl.classList.add("on");

@@ -29,7 +29,9 @@ const last = (re) => (out) => {
 };
 /**
  * The checks. They start longest first (`est`, seconds under doctor's own load); `summary(out)` pulls the one-line
- * result from the log; `opt` = only with that flag, `unless` = not with that flag.
+ * result from the log; `opt` = only with that flag, `unless` = not with that flag; `alone(out)` = this failure may
+ * be doctor's own load (a real-time cost budget): the check runs again by itself once the others are done, and
+ * that run decides.
  */
 export const CHECKS = [
   {
@@ -58,6 +60,8 @@ export const CHECKS = [
     est: 20,
     label: "audio cost + devices",
     cmd: ["node", "scripts/check-audio.mjs"],
+    // (render speed vs real time: at doctor's load average 9-16 on 4 cores a cost budget can fail that passes alone)
+    alone: (out) => /^problems:[\s\S]*load average [\d.]+: other work was running/m.test(out) && !/^FAIL\s+(device\.|lite\.shape)/m.test(out),
     summary: (out) => {
       const cost = [...out.matchAll(/^(ok|FAIL)\s+(lite|full)\.(\S+)\s+([\d.]+x)/gm)].map((m) => `${m[2]}.${m[3]} ${m[4]}`).join(", ");
       const shape = /^(ok|FAIL)\s+lite\.shape/m.exec(out)?.[1];
@@ -100,7 +104,7 @@ function run(check) {
       }
       const ok = code === 0;
       if (!ok && !summary) summary = out.trim().split("\n").slice(-1)[0] ?? "";
-      resolve({ id: check.id, label: check.label, ok, code, signal, ms: Date.now() - t0, summary: summary.slice(0, 150), tail: ok ? undefined : out.trim().split("\n").slice(-12).join("\n") });
+      resolve({ id: check.id, label: check.label, ok, code, signal, ms: Date.now() - t0, summary: summary.slice(0, 150), tail: ok ? undefined : out.trim().split("\n").slice(-12).join("\n"), out: ok ? undefined : out });
     });
   });
 }
@@ -136,6 +140,19 @@ export async function doctor(args = {}) {
     }),
   );
   clearInterval(ticker);
+  // a load-sensitive check that failed under doctor's own load runs again alone, on a quiet machine
+  for (let i = 0; i < results.length; i++) {
+    const c = want.find((x) => x.id === results[i].id);
+    if (results[i].ok || !c?.alone || !c.alone(results[i].out)) continue;
+    running.add(c);
+    tick();
+    const r = await run(c);
+    running.delete(c);
+    r.summary = `rerun alone (failed under load first): ${r.summary}`.slice(0, 150);
+    r.ms += results[i].ms;
+    results[i] = r;
+  }
+  for (const r of results) delete r.out;
   if (!args.json && process.stdout.isTTY) process.stdout.write("\r".padEnd(110) + "\r");
   results.sort((a, b) => want.findIndex((c) => c.id === a.id) - want.findIndex((c) => c.id === b.id));
   const summary = { ok: results.every((r) => r.ok), ms: Date.now() - T0, jobs, checks: results, logs: "shots/doctor/" };

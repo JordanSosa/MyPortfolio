@@ -57,6 +57,7 @@ export function runSlice(j: SliceJob): SliceRec {
   let revives = 0;
   w.bus.on("playerRevived", () => revives++);
   const kills0 = w.kills;
+  const blocks0 = w.runStats().orbitalBlocks ?? 0;
   const lv0 = w.level;
   const xp0 = xpTotal(w);
   let dealt0 = 0;
@@ -96,6 +97,7 @@ export function runSlice(j: SliceJob): SliceRec {
     xp: Math.round(xpTotal(w) - xp0),
     maxHp: w.player.maxHp,
     bossAlive: !!(w.boss && !w.boss.dead),
+    blocks: (w.runStats().orbitalBlocks ?? 0) - blocks0,
   };
 }
 
@@ -109,11 +111,13 @@ export function runBoss(j: BossJob): BossRec {
   let t0 = 0;
   let e0: { hp: number; maxHp: number; dead: boolean } | null = null;
   let killed = -1;
+  let blocks0 = 0;
   w.bus.on("bossSpawn", (e) => {
     if (e.enemy.def.id !== j.boss || spawned) return;
     spawned = true;
     t0 = w.t;
     e0 = e.enemy;
+    blocks0 = w.runStats().orbitalBlocks ?? 0;
     setGod(w, false);
     w.player.hp = w.player.maxHp;
     // a real run reaches its bosses with a charged Overdrive (the meter fills every ~1-2 min; the bot fires it on bosses)
@@ -154,6 +158,7 @@ export function runBoss(j: BossJob): BossRec {
     maxHp: w.player.maxHp,
     levelEnd: w.level,
     spawned,
+    blocks: spawned ? (w.runStats().orbitalBlocks ?? 0) - blocks0 : 0,
   };
 }
 

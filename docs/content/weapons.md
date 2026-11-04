@@ -88,30 +88,49 @@ at 0.5 scale flickering on their head.
 ### 2.2 Teapot Tempest — `teapot_tempest` (Pudding signature)
 `icon_teapot_tempest` · `C.gold` · sfx `teacup` (per spill)
 
-**desc:** "Teacups orbit you and spill tea. Puddles heal you and scald enemies."
+**desc:** "Teacups orbit you, block enemy shots and spill tea on your path. Brush a puddle: Warm Tea heals you on the move."
 
 **Behaviour.** `amount` cups orbit at r 30 × area, `speed` rad/s; contact
-damage `dmg`, per-enemy re-hit `every` s. Every `cd` s the cup at the front of
-the orbit tips (f1) and leaves a **tea puddle** where it is: r `puddleR` × area,
-lives `life` × duration s, max 6 alive (oldest dries first). Enemies in a puddle
-take `puddleDmg` every 0.5 s and are slowed 15%. The player standing in any
-puddle heals `heal` HP/s × `healMul` (puddles do not stack).
+damage `dmg`, per-enemy re-hit `every` s. Every `cd` s a cup tips (f1) and leaves
+a **tea puddle**: r `puddleR` × area, lives `life` × duration s, max 6 alive
+(oldest dries first). While Pudding moves, the cup nearest her heading tips and
+the tea lands **on her path** (80 % of the way from the cup to a point 30 px
+ahead of her feet); standing still, the cup nearest the nearest enemy tips where
+it is. Enemies in a puddle take `puddleDmg` every 0.5 s and are slowed 15%.
 
-**Twist.** The only signature weapon that heals: Pudding builds can play
-"stand in the tea".
+**Warm Tea** (replaces "stand in the puddle"): her feet brushing any puddle
+(within its rim + 4 px) warm her up for **3 s** (+0.5 s per Free Refills rank),
+refreshed by any puddle, never stacking: `heal` HP/s × `healMul` for as long as
+it lasts, in 1 s sips (one number per second). One brush = `heal` × 3 s; walking
+keeps it up because the spills land where she is going (measured: > 90 % uptime
+walking straight, > 75 % kiting in circles; `tests/orbitals.test.ts`).
 
-| Lv | dmg | cd (spill) | amount | speed | every | puddleR | puddleDmg | life | heal | upgrade text |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | 8 | 2.5 | 2 | 3.0 | 0.5 | 14 | 4 | 4 | 1 | — |
-| 2 | 8 | 2.5 | 3 | 3.0 | 0.5 | 14 | 4 | 4 | 1 | "+1 teacup" |
-| 3 | 11 | 2.5 | 3 | 3.0 | 0.5 | 16 | 6 | 4 | 1 | "Damage +3, hotter, wider puddles" |
-| 4 | 11 | 2.0 | 4 | 3.2 | 0.5 | 16 | 6 | 4 | 1 | "+1 teacup, spills more often" |
-| 5 | 14 | 2.0 | 4 | 3.2 | 0.45 | 20 | 8 | 5 | 1.5 | "Damage +3, bigger, longer, more healing puddles" |
+**Orbital Guard** (§7): each cup eats the first enemy bullet it touches, breaks,
+and reforms its mend time later (`mend` s, scaled by cooldown and extra cups, §7). A broken cup does not tip; with every cup
+broken the tea still spills from the best slot, so a volley never cuts off the
+healing.
 
-**Visuals.** `w_teacup` (10×10×2: f0 upright with saucer, f1 tipping), puddles
-`w_tea_puddle` (24×14×3: f0 splash, f1 resting, f2 drying — last 0.5 s) on the
-ground-decal layer, 2 steam wisps (`fx_puff` tinted white, alpha 0.4) rising per
-puddle per second.
+**Twist.** The only signature weapon that heals, and it heals on the move.
+
+| Lv | dmg | cd (spill) | amount | speed | every | puddleR | puddleDmg | life | heal (HP/s) | block / mend | upgrade text |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | 8 | 2.5 | 2 | 3.0 | 0.5 | 14 | 6 | 4 | 1.5 | 1 / 2.5 s | — |
+| 2 | 8 | 2.5 | 3 | 3.0 | 0.5 | 14 | 6 | 4 | 1.5 | 1 / 2.5 s | "+1 teacup" |
+| 3 | 11 | 2.5 | 3 | 3.0 | 0.5 | 16 | 8 | 4 | 2 | 1 / 2.5 s | "Damage +3, hotter, wider puddles, warmer tea" |
+| 4 | 11 | 2.0 | 4 | 3.2 | 0.5 | 16 | 8 | 4 | 2 | 1 / 2.5 s | "+1 teacup, spills more often" |
+| 5 | 14 | 2.0 | 4 | 3.2 | 0.45 | 20 | 12 | 5 | 3 | 1 / 2.2 s | "Damage +3, bigger, longer puddles, much warmer tea" |
+
+(Season 3 balance pass: heal was 1 / 1 / 1 / 1 / 1.5 HP/s standing in a puddle; puddleDmg was 4 / 4 / 6 / 6 / 8 -
+raised so the path spills, which land where she walks instead of on the nearest enemy, keep the crowd damage: gauge
+L5 1207 -> 1208.) A Lv5 Teapot on Pudding (healMul 1.15) heals 3.45 HP/s while warm, about 3.1 HP/s on the move
+(90 % uptime): most of a mid-game bullet storm's chip damage (Shoujo Academy P4, minute 9.5: 3.9 HP/s taken).
+
+**Visuals.** `w_teacup` (10×10×2: f0 upright with saucer, f1 tipping; scale 0 while broken, popping back in),
+puddles `w_tea_puddle` (24×14×3: f0 splash, f1 resting, f2 drying — last 0.5 s) on the ground-decal layer, 2
+steam wisps (`fx_puff` tinted white, alpha 0.4) rising per puddle per second. A spill splashes drops at the cup
+and where the tea lands. Warm Tea: an amber ring at her feet whose 8 dots count the seconds left (it blinks in
+its last 0.6 s), a soft warm glow, amber steam off her shoulders; warming up from cold pops an amber ring and
+"warm tea~♡" (at most every 6 s).
 
 ### 2.3 Micro Missile Swarm — `micro_missile_swarm` (Aoi signature)
 `icon_micro_missile_swarm` · `C.blue` · sfx `missile` (once per salvo)
@@ -413,7 +432,7 @@ evolution goes to its base weapon.
 | id | Name | Card desc | levels[0] |
 | --- | --- | --- | --- |
 | `unsealed_abyss_dragon` | Unsealed Abyss Dragon | "EVOLUTION! The seal breaks: an abyss dragon circles you breathing actually-black flames and passes judgement on the strongest enemy." | `{ dmg: 10, cd: 3, amount: 1, len: 64, angle: 26, orbit: 36, burnDps: 10, burn: 4, jetDmg: 30, jetLen: 160, burstDmg: 25 }` |
-| `eternal_tea_party` | Eternal Tea Party | "EVOLUTION! A flying teapot pours a scalding tea moat around you while six cups fling hot droplets." | `{ dmg: 16, cd: 1.2, amount: 6, speed: 3.4, every: 0.4, moatR: 44, moatW: 10, moatDmg: 10, slow: 0.7, dropDmg: 12, killHeal: 8, petit: 0.02 }` |
+| `eternal_tea_party` | Eternal Tea Party | "EVOLUTION! A flying teapot pours a scalding tea moat around you and warm tea on your path; six sturdy cups fling hot droplets and block shots." | `{ dmg: 16, cd: 1.2, amount: 6, speed: 3.4, every: 0.4, moatR: 44, moatW: 10, moatDmg: 10, slow: 0.7, dropDmg: 12, killHeal: 8, petit: 0.02, pour: 2, puddleR: 20, puddleDmg: 8, life: 4, heal: 3.5, block: 2, mend: 1.5 }` |
 | `al_dente_armageddon` | Al Dente Armageddon | "EVOLUTION! 24-missile salvos. The trails are now actual spaghetti. The spaghetti is on fire." | `{ dmg: 14, cd: 1.8, amount: 24, speed: 190, turn: 6, blast: 18, knock: 40, sauceDmg: 6, sauceLife: 1.2 }` |
 | `dere_dere_harisen` | Dere Dere Harisen | "EVOLUTION! A heart-shaped fan smacks all around you. Smacked enemies become projectiles. '...b-baka ♡'" | `{ dmg: 60, cd: 1.1, amount: 1, radius: 54, knock: 320, stun: 0.5, missile: 0.6, healPer: 1, healMax: 3 }` |
 | `shoujo_filter` | Shoujo Filter | "EVOLUTION! Everything near you is drawn in shoujo style. Charmed enemies hit 3× harder; every 6 s, a Kira Kira Moment charms them all." | `{ dmg: 10, cd: 0.4, amount: 1, radius: 64, charm: 0.2, duration: 4, max: 20, charmDmgMul: 3, critBonus: 0.5, kiraEvery: 6, kiraTime: 2 }` |
@@ -440,7 +459,11 @@ Behaviour details:
   (contact `dmg`); every `cd` s each cup flings a `w_tea_drop` (6×6×2) at the
   nearest enemy outside the moat (`dropDmg`). The hero heals 1 HP per `killHeal`
   kills inside the moat (× healMul); kills inside have a `petit` chance to drop
-  a petit four (`w_petit_four`, food, heal 5).
+  a petit four (`w_petit_four`, food, heal 5). Every `pour` s × cooldown the
+  teapot pours a puddle (r `puddleR` × area, `puddleDmg`, `life` s) on her path
+  (at her feet while she stands still): Warm Tea at `heal` HP/s, so evolving never
+  costs Pudding her healing. The cups are Orbital Guards that soak `block` 2
+  bullets each and mend in `mend` s (scaled, §7); a broken cup does not fling.
 - **Al Dente Armageddon** (sfx `missile`): as the base weapon with the evo
   numbers; each missile drops 3 sauce splats (`w_sauce`, 12×8×2 decal, r 8) at
   25/50/75% of its flight; enemies on a splat take `sauceDmg` every 0.3 s for
@@ -588,3 +611,56 @@ The canonical rule list (with the 3 rows that differ from the current
 
 Signature weapons enter the general pool once their hero is owned (any hero can
 then find them on level-up cards).
+
+---
+
+## 7. Orbital Guard (Season 3 balance pass)
+
+Owner feedback: orbitals felt weak against shooters, and late game is a bullet hell. Every weapon whose bodies
+**orbit the hero** now also guards her (`src/game/weapons/_orbital.ts`, shared):
+
+- A body that is up destroys every **enemy bullet** (`world.bullets`) it touches - a pop at the contact point.
+  Boss beams, slams, dash lanes and telegraphed blasts are not bullets and are never blocked.
+- After `block` bullets it **breaks**: no hits, hidden, a dotted ghost ring marks where it will be, for its
+  **mend time**; then it **reforms** with a pop. A chipped body (block > 1) is whole again after its mend time
+  without a hit.
+- Mend time = `mend` s × (0.5 + 0.5 × **cooldown**) × (bodies / own bodies)^0.5 × (1 + 0.5 per extra guarding
+  weapon) - the knobs are `CFG.guard` (`cd`, `amount`, `share`; lab what-if `--set "cfg.guard.amount=1"`):
+  - Wish Charm / Polite Bow builds recover faster, at half the stat's rate (the 0.35 floor mends in 0.68×).
+  - Bodies from the **Amount** stat (Twin Charm, relics, board) widen the ring but share its guard: a Cosmic
+    Yarn with +5 amount has 11 planets that each mend (11/6)^0.5 = 1.35× slower. A weapon's own bodies (level,
+    Limit Break, Infinite Yarn's +2, Extra Cups) don't dilute.
+  - Pudding holding a Yarn Orbit too: two rings, one recovery (each mends 1.5× slower).
+- Only the hero's own weapons guard: **A Real Friend**'s copy of the start weapon orbits the Friend and never
+  blocks (the relic "never blocks anything"), and its puddles never heal (one Warm Tea).
+- Blocks count in `RunStats.orbitalBlocks` (for a future Plot Point; the balance lab's slice / boss samples
+  record them as `blocks`).
+
+**Reviewer pass (why the limits).** With `mend` × cooldown alone, a strong late build multiplied the guard
+three ways (P7 bot build: cooldown 0.685, area ×2.09, +5 amount): a P7 Cosmic Yarn ate 95 % of a 15 bullet/s
+aimed storm (5 % reached the hero vs 49 % bare), Cosmic Yarn + Eternal Tea Party ate all of it.
+With the limits: 15 % (Cosmic Yarn) and 7 % (both) reach her, 31 % / 29 % at 40 bullet/s
+(`tests/orbitals.test.ts` keeps both above a floor). Mid-game is untouched within noise: Shoujo Academy P4
+(Mochi + Pudding, seeds 1-4) clears 52 % vs 54 % with the uncapped rule (a full n / own dilution: 46 %).
+
+| Weapon | body (radius) | block | mend (s, before the factors above) |
+| --- | --- | --- | --- |
+| Yarn Orbit | yarn ball (5 × area) | 1 | 2.5 (Lv5: 2.2) |
+| Cosmic Yarn | planet (7 × area) | 3 | 1.5 |
+| Teapot Tempest | teacup (5) | 1 | 2.5 (Lv5: 2.2) |
+| Eternal Tea Party | teacup (5) | 2 | 1.5 |
+
+Yarn Orbit keeps its 3 s on / 1.3 s off cycle: a ball broken at the end of the on phase is still down (mending)
+when the next balls come out. With the guard in, Yarn Orbit / Cosmic Yarn got a small offence bump toward the
+weapon median (balance lab gauge, crowd DPS): Yarn Orbit Lv3 dmg 13 -> 14, Lv4 dmg 13 -> 14 and area 1.15 -> 1.2,
+Lv5 dmg 16 -> 20 and area 1.2 -> 1.3 (L5 1150 -> 1528, 0.67x -> 0.88x the median); Cosmic Yarn dmg 19 -> 27, area
+1 -> 1.15 (2113 -> 3382, 0.51x -> 0.81x the evolution median). Near the median, not the top: they defend too.
+
+Weapons checked and left out (no orbiting contact bodies):
+
+- **Dark Flame Dragon** - the familiars sit on fixed shoulder offsets (no orbit, no contact hit: r 0) and the
+  weapon is already 2.4x the median; **Unsealed Abyss Dragon**'s single dragon circles to aim its breath, its job
+  is the burn and the judgement jet.
+- **Paper Crane Flock** - cranes leave the flock to dart at anything in range (most of a bullet-hell fight), so a
+  guard would flicker on and off; their identity is Folded Tighter / crumpling when the hero is hurt.
+- **Micro Missile Swarm** - missiles fly outward and home; nothing orbits (Aoi's C6 drone is a shooter).

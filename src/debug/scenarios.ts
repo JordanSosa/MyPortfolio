@@ -25,7 +25,11 @@ import { CFG } from "../game/config";
 import { HEROES } from "../game/heroes";
 import { BOSSES, STAGES } from "../game/registry";
 import type { TimelineEvent } from "../game/stage";
+import type { UpgradeCard } from "../game/types";
+import { makeOffer } from "../game/upgrades";
+import { guardOf } from "../game/weapons/_orbital";
 import type { World } from "../game/world";
+import { discover } from "../meta/codex";
 import type { App } from "../ui/app";
 import type { PageId } from "../ui/hub/hub";
 import { save } from "../ui/save";
@@ -439,6 +443,56 @@ async function gachaPull(c: Ctx, mythic: boolean, at: number): Promise<void> {
   }
 }
 
+/** Evolutions the evo-hints account has discovered (its Wiki shows their recipes). */
+const EVO_KNOWN = ["galaxy_barrage", "cosmic_yarn", "love_tornado", "thousand_crane_wish"];
+
+/**
+ * The evolution-hints build (levelup:evo-hints / pause:evo-hints / chest:evo-hints): a mid account that
+ * discovered EVO_KNOWN (profile codex, as banking a run does), Hoshi holding Star Shot Lv4 + Wish Charm (its
+ * next level makes Galaxy Barrage READY), Yarn Orbit Lv2 (a NEW Magnet Star completes the pair), Heart
+ * Boomerang Lv3 (Twin Charm missing), Paper Crane Flock Lv2 (Wish Charm held, levels to go) and Candy Bomb
+ * Lv1 (Sugar Nuke not discovered: no hint). Built through the World's own add / level calls.
+ */
+async function evoBuild(c: Ctx): Promise<World> {
+  useProfile(c, "mid");
+  for (const id of EVO_KNOWN) discover(save.profile, "weapons", id, false);
+  c.mark("profile");
+  const w = startRun(c, "dream_meadow");
+  w.muted = true;
+  const star = w.hasWeapon("star_shot") ?? w.addWeapon("star_shot", 4);
+  if (star) w.setWeaponLevel(star, 4);
+  for (const [id, lv] of [["yarn_orbit", 2], ["heart_boomerang", 3], ["paper_crane_flock", 2], ["candy_bomb", 1]] as const) w.addWeapon(id, lv);
+  w.addPassive("wish_charm", 1);
+  w.addPassive("power_bow", 2);
+  w.muted = false;
+  c.mark("build");
+  // (a few live frames only: a bot-picked level-up would change the build)
+  await c.frames(20);
+  if (w.hasWeapon("star_shot")?.level !== 4 || w.passiveLevel("magnet_star") > 0) throw new Error("the evo-hints build changed during its live frames");
+  return w;
+}
+
+/** Hand-pick a level-up offer from every card the real generator can make right now (makeOffer over the whole pool). */
+function pickOffer(w: World, want: [UpgradeCard["kind"], string][]): void {
+  const all = makeOffer(w, 99);
+  const cards = want.map(([k, id]) => {
+    const card = all.find((x) => x.kind === k && x.id === id);
+    if (!card) throw new Error(`the build cannot be offered ${k} '${id}'`);
+    return card;
+  });
+  const o = w as unknown as { currentOffer?: UpgradeCard[] | null };
+  if (!("currentOffer" in o)) throw new Error("World internals changed: update pickOffer() in src/debug/scenarios.ts");
+  o.currentOffer = cards;
+}
+
+/** Orbital Guard scenarios: the hero and weapon (evolved with `evo`) per orbital:<id>. */
+const ORBITALS: Record<string, { hero: string; base: string; evo?: string }> = {
+  yarn_orbit: { hero: "mochi", base: "yarn_orbit" },
+  cosmic_yarn: { hero: "mochi", base: "yarn_orbit", evo: "cosmic_yarn" },
+  teapot_tempest: { hero: "pudding", base: "teapot_tempest" },
+  eternal_tea_party: { hero: "pudding", base: "teapot_tempest", evo: "eternal_tea_party" },
+};
+
 // ================================================================ registry
 type Run = (c: Ctx, arg: string) => Promise<void>;
 interface Kind {
@@ -556,6 +610,51 @@ const KINDS: Record<string, Kind> = {
       else await c.until(() => !!w.ult && w.ult.phase === "cutin" && w.ult.t >= 0.55, "the cut-in", 120);
     },
   },
+  orbital: {
+    group: "run",
+    desc: "Orbital Guard mid-Shoujo Academy (Mochi / Pudding, the weapon at Lv5 or evolved): orbital:<weapon> = a 16-bullet ring fired at the hero, shown once a body breaks (film it for the reform: orbital:yarn_orbit~150/10); orbital:<tea weapon>:tea = Warm Tea on the move",
+    list: () => [...Object.keys(ORBITALS), "teapot_tempest:tea", "eternal_tea_party:tea"],
+    run: async (c, a) => {
+      const [id, moment] = a.split(":");
+      const o = ORBITALS[id];
+      if (!o) throw new Error(`orbital:<${Object.keys(ORBITALS).join("|")}>[:tea], got '${a}'`);
+      useProfile(c, "mid", o.hero);
+      const w = startRun(c, "shoujo_academy", o.hero);
+      // (level 10: one warp chest, so the base weapon is not evolved behind our back; the tea moment earlier,
+      // in a calmer crowd, so the Warm Tea ring at her feet can be judged)
+      if (moment === "tea") warp(c, w, 90, 8);
+      else warp(c, w, 200, 10);
+      w.muted = true;
+      let inst = (o.evo && w.hasWeapon(o.evo)) || w.hasWeapon(o.base) || w.addWeapon(o.base, 5);
+      if (!inst) throw new Error(`${o.hero} cannot hold ${o.base}`);
+      if (inst.def.id === o.base) {
+        w.setWeaponLevel(inst, 5);
+        if (o.evo) inst = w.evolveWeapon(inst) ?? inst;
+      }
+      w.muted = false;
+      if (inst.def.id !== (o.evo ?? o.base)) throw new Error(`orbital:${id}: got ${inst.def.id}`);
+      const held = inst;
+      c.mark("orbital ready");
+      await c.frames(30);
+      if (moment === "tea") {
+        // the bot walks her; spills land on her path: wait for Warm Tea, a little way into it
+        await c.until(() => (held.data.warm ?? 0) > 0 && (held.data.warm ?? 0) < (held.data.warmMax ?? 0) - 0.5, "Warm Tea", 900);
+        return;
+      }
+      // a ring volley at her body (the real bullet pool), close in so it meets the orbit
+      const g = guardOf(held);
+      const b0 = g.breaks;
+      const pl = w.player;
+      for (let i = 0; i < 16; i++) {
+        const ang = (i / 16) * Math.PI * 2;
+        const cx = pl.x;
+        const cy = pl.y - CFG.playerCy;
+        w.spawnBullet(cx + Math.cos(ang) * 56, cy + Math.sin(ang) * 56, -Math.cos(ang) * 90, -Math.sin(ang) * 90, 5, "eb_orb", 3, 2);
+      }
+      await c.until(() => g.breaks > b0, "an orbital to break", 120, 6);
+      c.mark(`${g.blocks} blocked, ${g.breaks} broke`);
+    },
+  },
   speech: {
     group: "run",
     desc: "enemy speech bubbles on screen (the 4 enemies nearest the hero speak from their stage's pools + one free bubble); speech:<stage>, default Candy Kingdom",
@@ -577,9 +676,25 @@ const KINDS: Record<string, Kind> = {
   },
   levelup: {
     group: "modal",
-    desc: "the level-up card picker (1:00 into Dream Meadow, level 6)",
-    list: () => [""],
-    run: async (c) => {
+    desc: "the level-up card picker (1:00 into Dream Meadow, level 6); levelup:evo-hints = evolution hints (READY star, a pair-completing passive, a missing passive), levelup:evo-four = + a card with an undiscovered recipe (4 cards), levelup:evo-many = the 6-card grid with hints",
+    list: () => ["", "evo-hints", "evo-four", "evo-many"],
+    run: async (c, a) => {
+      if (a === "evo-hints" || a === "evo-four" || a === "evo-many") {
+        const w = await evoBuild(c);
+        c.autoResolve = false;
+        w.addXp(w.xpNext - w.xp + 0.01);
+        const cards: [UpgradeCard["kind"], string][] = [
+          ["weapon", "star_shot"],
+          ["passive", "magnet_star"],
+          ["weapon", "heart_boomerang"],
+        ];
+        if (a === "evo-four") cards.push(["weapon", "candy_bomb"]);
+        if (a === "evo-many") cards.push(["weapon", "paper_crane_flock"], ["passive", "twin_charm"], ["weapon", "candy_bomb"]);
+        pickOffer(w, cards);
+        // (the last card's fly-in ends 0.11 s x its index + 0.72 s after the modal opens)
+        await c.until(() => c.app.modalKind === "levelup", "the level-up modal", 120, 30 + cards.length * 10);
+        return;
+      }
       const w = await runAt(c, "dream_meadow", 60, 20);
       c.autoResolve = false;
       w.addXp(w.xpNext - w.xp + 0.01);
@@ -588,9 +703,20 @@ const KINDS: Record<string, Kind> = {
   },
   chest: {
     group: "modal",
-    desc: "a chest opening (chest:golden for the golden one)",
-    list: () => ["", "golden"],
+    desc: "a chest opening (chest:golden for the golden one; chest:evo-hints = a golden chest's revealed cards on the evo-hints build)",
+    list: () => ["", "golden", "evo-hints"],
     run: async (c, a) => {
+      if (a === "evo-hints") {
+        const w = await evoBuild(c);
+        c.autoResolve = false;
+        const k = w.dropPickup("chest", w.player.x, w.player.y + 2, 1, true);
+        k.vx = k.vy = 0;
+        k.t = 0.35;
+        await c.until(() => c.app.modalKind === "chest", "the chest modal", 120);
+        // (the reels spin and land on frame time, then flip into the cards)
+        await c.until(() => !!c.app.ui.querySelector(".chest-modal.revealed"), "the revealed cards", 400, 40);
+        return;
+      }
       const w = await runAt(c, "dream_meadow", 200, 20);
       c.autoResolve = false;
       const k = w.dropPickup("chest", w.player.x, w.player.y + 2, 1, a === "golden");
@@ -601,10 +727,11 @@ const KINDS: Record<string, Kind> = {
   },
   pause: {
     group: "modal",
-    desc: "the pause menu mid-run",
-    list: () => [""],
-    run: async (c) => {
-      await runAt(c, "dream_meadow", 150, 30);
+    desc: "the pause menu mid-run (pause:evo-hints = the EVOLUTIONS list of the evo-hints build)",
+    list: () => ["", "evo-hints"],
+    run: async (c, a) => {
+      if (a === "evo-hints") await evoBuild(c);
+      else await runAt(c, "dream_meadow", 150, 30);
       c.app.pause();
       await c.until(() => c.app.modalKind === "pause", "the pause menu", 30, 20);
     },

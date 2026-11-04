@@ -4,12 +4,17 @@
  * / settings / quit. Quitting asks twice: "Drop the series?" -> "Yes, drop it"
  * (and RESUME becomes "No, I'm invested"). Pause (P / START / BACK) toggles it
  * closed; Esc / B / Android Back resume through the nav back path.
+ * EVOLUTIONS: the known recipes of the held weapons, one line each with their state (the
+ * level-up cards' hints, ./evo-hints.ts), and a small badge with the evolved icon on the weapon's
+ * slot (gold = READY; the only cue in short landscape, where the list would push the buttons off).
  */
+import { buildEvoHints } from "../../game/evo-hints";
 import { describeStats } from "../../game/stats";
 import type { World } from "../../game/world";
 import type { App, UiScreen } from "../app";
 import { esc, fmtTime, h, img } from "../dom";
 import { layer, onTap } from "./common";
+import { evoBadgeHtml, evoListHtml, injectEvoCss, runKnown } from "./evo-hints";
 
 export function openPause(app: App, w: World): UiScreen {
   const el = h("div", "modal pause");
@@ -20,8 +25,13 @@ export function openPause(app: App, w: World): UiScreen {
   };
   // names are printed under the icons (touch has no hover tooltips)
   const item = (name: string, slot: string) => `<div class="bitem">${slot}<span class="bname">${esc(name)}</span></div>`;
+  injectEvoCss();
+  const evoHints = buildEvoHints(w, runKnown(app, w));
   const weapons = w.weapons.map((wi) =>
-    item(wi.def.name, `<div class="bslot${wi.def.evolved ? " evo" : ""}">${img(wi.def.icon, "px", 0, 2)}<span class="lv">${wi.def.evolved ? "EVO" : `Lv${wi.level}`}</span></div>`),
+    item(
+      wi.def.name,
+      `<div class="bslot${wi.def.evolved ? " evo" : ""}">${img(wi.def.icon, "px", 0, 2)}<span class="lv">${wi.def.evolved ? "EVO" : `Lv${wi.level}`}</span>${evoBadgeHtml(evoHints.filter((x) => x.base === wi.def))}</div>`,
+    ),
   );
   const passives = w.passives.map((p) => item(p.def.name, `<div class="bslot">${img(p.def.icon, "px", 0, 2)}<span class="lv">Lv${p.level}</span></div>`));
   el.innerHTML = `
@@ -31,6 +41,7 @@ export function openPause(app: App, w: World): UiScreen {
       <div class="build">
         <div class="h2">WEAPONS</div><div class="row">${slots(w.weaponSlots, weapons)}</div>
         <div class="h2">PASSIVES</div><div class="row">${slots(w.passiveSlots, passives)}</div>
+        ${evoListHtml(evoHints)}
       </div>
       <div class="stat-grid">${describeStats(w.stats)
         .map(([k, v]) => `<div><span>${esc(k)}</span><b>${esc(v)}</b></div>`)

@@ -82,7 +82,7 @@ Measured on this container (headless Chromium + SwiftShader, 4 cores shared): `r
 `await __kk.scenario(name, { seed, hero, profile })` -> `{ ok, ms, marks, error, screen, modal, t }`.
 At boot `<html data-kk-scenario="pending|ready|error">` and `__kk.scenarioState` report progress, so a
 script waits with `page.waitForFunction(() => document.documentElement.dataset.kkScenario !== "pending")`.
-`__kk.scenarios()` lists every concrete name (70 today: parametric kinds expand over the registries).
+`__kk.scenarios()` lists every concrete name (81 today: parametric kinds expand over the registries).
 
 | Name | State |
 | --- | --- |
@@ -93,7 +93,9 @@ script waits with `page.waitForFunction(() => document.documentElement.dataset.k
 | `boss:<id>` `boss:<id>:p2` `:p3` `boss:<id>@0.3` | the boss after its entrance, at its stage and time; p2 / p3 = HP 50 % / 20 % (the phase change plays) |
 | `ult:<hero>` `ult:<hero>:mid` | the anime cut-in / 1 s into the active ultimate |
 | `speech` `speech:<stage>` | the 4 enemies nearest the hero speak from their stage's pools, plus one free bubble (default Candy Kingdom) |
+| `orbital:<weapon>` `orbital:<tea weapon>:tea` | Orbital Guard mid-Shoujo Academy (Mochi's Yarn Orbit Lv5 / Cosmic Yarn, Pudding's Teapot Tempest Lv5 / Eternal Tea Party): a 16-bullet ring fired at the hero, shown once a body breaks (film it for the reform: `orbital:yarn_orbit~150/10`); `:tea` = Warm Tea on the move (1:30, a calmer crowd) |
 | `levelup` `chest` `chest:golden` `pause` `over:death` `over:victory` | in-run modals |
+| `levelup:evo-hints` `levelup:evo-four` `levelup:evo-many` `chest:evo-hints` `pause:evo-hints` | evolution hints: a mid account that discovered 4 evolutions, a hand-picked build + offer (READY, pair-completing passive, missing passive, an undiscovered recipe; 3 / 4 / 6 cards) |
 | `results:death` `results:victory` `results:first-clear` | Episode Results of a real (sandboxed) account run, finished; first-clear = a P1 account clears Dream Meadow (unlock cards) |
 | `gacha:pull-x10` `gacha:mythic` | a Merch Machine x10 pull 3.6 s in; a forced MYTHIC (needs the dev server's `__kkGacha`) |
 
@@ -228,6 +230,8 @@ npm run balance:lab -- --validate | --calibrate | --trace P6:final:hoshi | --ref
   - Boss fights from snapshots: the build grown to the level real runs have at that time, the
     timeline skipped to the boss, a charged Overdrive.
   - 60 s slices mid-stage.
+  - Slices and boss fights also record `blocks` (enemy bullets eaten by orbiting weapons, Orbital Guard) in their
+    cached results and `--job` output.
   - A 2 h progression sample: two mid accounts through the real `tools/progression.sim.ts`.
 - **Disk cache.** `node_modules/.cache/balance-lab` keys every job by what it depends on:
   - the src files of the loaded module graph and the lab's own sim code;
@@ -562,6 +566,9 @@ above scores 100 % on both, on any machine and under any load.
 
 Every gate runs as its own process, longest first, on `min(cores, 4)` lanes. The full logs go to
 `shots/doctor/<check>.log` and the table gives one line per check. Exit code 1 when any check fails.
+A real-time cost budget is load-sensitive: when `check:audio` fails only on cost while doctor's own lanes had the
+machine at load 9-16 (its "load average ...: other work was running" note), doctor runs it again alone once the
+other checks are done and that run decides (the row reads "rerun alone"). A device / shape failure never reruns.
 
 ```
 npm run doctor              # typecheck, fast tests, sprites --validate, lint:css, check:audio (cost + devices), check:bundle, check:artifact

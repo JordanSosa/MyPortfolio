@@ -333,13 +333,14 @@ describe("Kuro", () => {
 });
 
 describe("Pudding", () => {
-  test("trait: +0.3 regen, +15% healing, +10% luck; puddles heal her and scald enemies; C6 heals twice as fast", () => {
+  test("trait: +0.3 regen, +15% healing, +10% luck; Warm Tea heals her and puddles scald enemies; C6 heals twice as fast", () => {
     const s = baseStats();
     heroDef("pudding").apply(s);
     expect(s.regen).toBeCloseTo(0.3);
     expect(s.healMul).toBeCloseTo(1.15);
     expect(s.luck).toBeCloseTo(1.1);
-    // a puddle right under her feet: 1 HP/s x healMul (C6 x2), one sip per second
+    // a puddle right under her feet keeps Warm Tea topped up: Lv1-2 1.5 HP/s x healMul (C6 x2), one sip per second
+    // (tests/orbitals.test.ts covers the tea on the move, refreshes and stacking)
     const healed = (cons: number): number => {
       const w = new World({ hero: "pudding", seed: 4, director: false, run: defaultRunConfig({ constellation: cons }) });
       const inst = w.hasWeapon("teapot_tempest")!;
@@ -351,8 +352,8 @@ describe("Pudding", () => {
       return h;
     };
     const base = healed(0);
-    expect(base).toBeCloseTo(6 * 1.15, 0);
-    expect(healed(6)).toBeCloseTo(6 * 2 * 1.25, 0);
+    expect(base).toBeCloseTo(6 * 1.5 * 1.15, 0);
+    expect(healed(6)).toBeCloseTo(6 * 1.5 * 2 * 1.25, 0);
     // and the tea scalds: an enemy standing in it takes damage and is slowed
     const w = sandbox("pudding");
     const inst = w.hasWeapon("teapot_tempest")!;

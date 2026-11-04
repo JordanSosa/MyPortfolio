@@ -124,7 +124,9 @@ your hero's sprites (idle/run/cast), a 1-px pink outline tint and a small
 `fx_heart` floating above it. It follows you on a lagged path 24-40 px behind,
 never blocks anything, takes no damage. It owns a second instance of your start
 weapon at your start weapon's current level (it evolves when yours does), firing
-from its own position with damage × (X / 100). When you cast Overdrive it does
+from its own position with damage × (X / 100) (its copy of an orbiting weapon never
+blocks bullets and Pudding's copy never heals: one Orbital Guard, one Warm Tea,
+docs/content/weapons.md §7). When you cast Overdrive it does
 the cast pose and cheers (`FRIEND!` pop); it does not cast an ult. Kills credit
 your start weapon (mastery included).
 

@@ -12,6 +12,9 @@
  */
 import { clamp, damp, fbm1 } from "./../core/math";
 
+/** Largest step (s) of the zoom-punch spring's integration (stable well below its ~0.09 s limit). */
+const PUNCH_STEP = 1 / 60;
+
 export interface Rect {
   x: number;
   y: number;
@@ -105,10 +108,16 @@ export class Camera {
     this.t += dt;
     this.trauma = Math.max(0, this.trauma - this.traumaDecay * dt);
     this.zoom = damp(this.zoom, this.zoomTarget, this.zoomLambda, dt);
-    // punch spring
-    const a = -260 * this.punch - 22 * this.punchV;
-    this.punchV += a * dt;
-    this.punch += this.punchV * dt;
+    // punch spring, sub-stepped: one long frame (a step-mode film frame draws 10+ accumulated frames at once)
+    // in a single explicit step goes unstable past ~0.09 s and rings the zoom between its +-50 % clamps
+    if (dt > 0.5) this.punch = this.punchV = 0;
+    else
+      for (let left = dt; left > 1e-6; left -= PUNCH_STEP) {
+        const h = Math.min(left, PUNCH_STEP);
+        const a = -260 * this.punch - 22 * this.punchV;
+        this.punchV += a * h;
+        this.punch += this.punchV * h;
+      }
     this.recompute();
   }
 

@@ -7,7 +7,9 @@
  *     Kuro     breath flame streams (orange w/ violet outline, or actually-black), flames on burning heads,
  *              the Abyssal Gaze eye, Crimson Eye Beam / ABYSSAL LORD'S JUDGEMENT beams, the ult's
  *              colossal shadow sweep + dim grade + vignette, the flashlight / stadium-floodlight reveal
- *     Pudding  teacups (tipping), tea puddles (splash / rest / dry + steam), the tea moat, the flying
+ *     Pudding  teacups (tipping; hidden while broken by the Orbital Guard, popping back in), tea puddles
+ *              (splash / rest / dry + steam), Warm Tea (an amber ring at her feet whose 8 dots count the
+ *              seconds left, steam off her shoulders, a blink as it cools), the tea moat, the flying
  *              teapot pouring, the omurice (plop, ketchup heart)
  *     Aoi      tangled 1-px spaghetti trails (white -> blue; the evolution's 2-px noodles on fire), sauce
  *              decals, Jet Dash flames, the C6 drone, the falling fists' speed lines, the ROCKET PUNCH
@@ -55,6 +57,7 @@ import {
   HFX_PUD_SHATTER,
   HFX_PUD_SIP,
   HFX_PUD_SPILL,
+  HFX_PUD_WARM,
   HFX_TEXT,
   heroesAIf,
 } from "../game/weapons/_heroes-a";
@@ -139,6 +142,14 @@ const teaDrop: EmitterDef = {
   layer: Layer.Fx,
 };
 const pourDrop: EmitterDef = { ...teaDrop, speed: [2, 8], angle: PI / 2, spread: 0.3, gravity: 260, life: [0.18, 0.26], bounce: undefined };
+/** Warm Tea: amber steam curling off her shoulders while it lasts. */
+const warmSteam: EmitterDef = { ...steam, colors: [0xffe2a8, C.white], alpha: 0.5, speed: [6, 14], life: [0.6, 0.9] };
+/** Warm Tea dots around her feet (seconds left) and its ring. */
+const WARM_DOTS = 8;
+/** Warm Tea aura around her body (centre 9 px above her feet: the feet are under her sprite and HP bar). */
+const WARM_RX = 13;
+const WARM_RY = 14;
+const WARM_CY = 9;
 const shard: EmitterDef = { ...P.debris, colors: [C.white, 0xf3e6ff, C.pinkLight] };
 const heartOut: EmitterDef = {
   sprite: "fx_heart",
@@ -221,6 +232,7 @@ export class HeroesAFx {
   private readonly hHeart: number;
   private readonly hStreak: number;
   private readonly hFlashlight: number;
+  private readonly hRing: number;
   // Kuro
   private readonly breathAcc = new Float32Array(32);
   private shadowT = -1;
@@ -243,6 +255,7 @@ export class HeroesAFx {
   private omuKetchup = false;
   private pourT = 0;
   private lastPartyTimer = 0;
+  private warmSaidAt = -10;
   // Aoi
   private combinedT = 0;
   private rocketSaid = -1;
@@ -275,6 +288,7 @@ export class HeroesAFx {
     this.hHeart = r.atlas.handle("fx_heart");
     this.hStreak = r.atlas.handle("fx_streak");
     this.hFlashlight = r.atlas.handle("ult_flashlight");
+    this.hRing = r.atlas.handle("fx_ring");
     for (let i = 0; i < MAX_POPS; i++) this.pops.push({ on: false, kind: 0, text: "", heart: false, frame: 0, x: 0, y: 0, t: 0, life: POP_LIFE, scale: 1, color: C.white });
   }
 
@@ -286,6 +300,7 @@ export class HeroesAFx {
   private reset(): void {
     this.shadowT = this.revealT = this.omuT = this.hmphT = this.drillT = -1;
     this.combinedT = this.pourT = 0;
+    this.warmSaidAt = -10;
     this.dimK = 0;
     this.releaseVignette();
     for (const p of this.pops) p.on = false;
@@ -324,6 +339,7 @@ export class HeroesAFx {
     this.drawBurns(time);
     this.drawMark(time);
     this.drawTeapot(time, dt);
+    this.drawWarmTea(time);
     this.drawDrone(time);
     this.drawShadow(time, realDt);
     this.drawReveal(time, realDt);
@@ -570,12 +586,15 @@ export class HeroesAFx {
   private drawTea(p: Projectile, time: number): void {
     const r = this.r;
     if (p.a === 0) {
+      // (Orbital Guard: scale 0 = broken - weapon-fx draws its ghost ring; it pops back in on reform)
+      const sc = p.scale;
+      if (sc <= 0) return;
       const a = this.anims.get("w_teacup");
       const tip = p.b > 0;
       const h = a.first + (tip ? Math.min(1, a.count - 1) : 0);
       const out = Math.cos(p.ang) >= 0 ? 1 : -1;
-      r.shadow(p.x, p.y + 9, 5, 0.35);
-      r.spr(Layer.Entity, h, p.x, p.y, out, 1, tip ? out * 0.7 : Math.sin(time * 5 + p.uid) * 0.08, 0xffffff, 1, 0, 0);
+      r.shadow(p.x, p.y + 9, 5 * sc, 0.35);
+      r.spr(Layer.Entity, h, p.x, p.y, out * sc, sc, tip ? out * 0.7 : Math.sin(time * 5 + p.uid) * 0.08, 0xffffff, 1, 0, 0);
       if ((this.frameN + p.uid) % 40 === 0) this.fx.ps.emit(steam, p.x, p.y - 4, 1, NaN, -1, 0.7);
       return;
     }
@@ -610,6 +629,38 @@ export class HeroesAFx {
     r.spr(Layer.Decal, h, p.x, p.y, s, s, 0, 0xffffff, 0.92 * alpha, 0, 0);
     r.glow(p.x, p.y, p.r * 0.7, C.gold, 0.08 * alpha);
     if ((this.frameN + p.uid) % 30 === 0 && left > 0.5) this.fx.ps.emit(steam, p.x + (Math.random() - 0.5) * p.r, p.y - 2, 1);
+  }
+
+  /**
+   * Warm Tea (teapot-tempest.ts warmTea): a thin two-tone aura ring around her body with WARM_DOTS dots counting
+   * the seconds left (lit = left / full), a warm glow, steam off her shoulders; it blinks in its last 0.6 s.
+   */
+  private drawWarmTea(time: number): void {
+    const w = this.w as World;
+    const inst = w.hasWeapon(TEA) ?? w.hasWeapon(PARTY);
+    if (!inst) return;
+    const left = inst.data.warm ?? 0;
+    const full = inst.data.warmMax ?? 0;
+    if (left <= 0 || full <= 0 || w.player.dead) return;
+    const r = this.r;
+    const p = w.player;
+    const k = Math.min(1, left / 0.25);
+    const blink = left < 0.6 ? 0.55 + 0.45 * Math.sin(time * 26) : 1;
+    const a = k * blink;
+    const pulse = 1 + 0.06 * Math.sin(time * 5);
+    // a warm halo on her and a thin aura ring around her body with its seconds-left dots
+    const cy = p.y - WARM_CY;
+    r.glow(p.x, cy, 18, C.paleYellow, 0.16 * a);
+    // (two tones from her band colours: a cream ring inside a warm-brown rim reads on white floors and orange carpets)
+    r.batch.drawP(Layer.Fx, this.hRing, p.x, cy, (WARM_RX * pulse) / 16, (WARM_RY * pulse) / 16, 0, 0xffd27a, 0.85 * a, 0, Flag.NoSnap, 16, 16);
+    r.batch.drawP(Layer.Fx, this.hRing, p.x, cy, (WARM_RX * pulse + 1) / 16, (WARM_RY * pulse + 1) / 16, 0, 0xa6683f, 0.8 * a, 0, Flag.NoSnap, 16, 16);
+    const lit = Math.ceil((left / full) * WARM_DOTS);
+    for (let i = 0; i < lit; i++) {
+      // (clockwise from the top: the last seconds sit at the top)
+      const ang = -PI / 2 + (i / WARM_DOTS) * TAU;
+      r.spr(Layer.Fx, this.hPx, p.x + Math.cos(ang) * WARM_RX * pulse, cy + Math.sin(ang) * WARM_RY * pulse, 2.2, 2.2, 0, 0xffb84a, a, 0, Flag.NoSnap);
+    }
+    if ((this.frameN & 15) === 0) this.fx.ps.emit(warmSteam, p.x + (this.frameN & 16 ? 5 : -5), p.y - 15, 1);
   }
 
   /** Eternal Tea Party: the flying teapot hovering above Pudding, pouring after every fling. */
@@ -1011,9 +1062,23 @@ export class HeroesAFx {
       }
       // ---------------------------------------------------------- Pudding
       case HFX_PUD_SPILL:
+        // (x, y) where the tea lands - on her path while she moves - and (x2, y2) the cup / teapot it came from
         fx.ps.emit(teaDrop, e.x, e.y + 4, 6);
+        fx.ps.emit(teaDrop, e.x2, e.y2, 2);
         fx.ps.emit(steam, e.x, e.y, 1);
         break;
+      case HFX_PUD_WARM: {
+        // warmed up from cold: an amber ring out of her feet, a couple of hearts; the line at most every 6 s
+        fx.ps.emit(P.ringThin, e.x, e.y - 2, 1, NaN, 0xffd27a, 1.1);
+        fx.ps.emit(warmSteam, e.x, e.y - 12, 2);
+        fx.ps.emit(P.hearts, e.x, e.y - 14, 1, NaN, -1, 0.7);
+        if (this.now - this.warmSaidAt > 6) {
+          this.warmSaidAt = this.now;
+          this.pop(0, "warm tea~♡", 0, e.x, e.y - 40, 1, 0xffd27a);
+        }
+        this.sfx("teacup", 0.3, 6);
+        break;
+      }
       case HFX_PUD_SIP:
         if (e.n > 0) fx.dmg.spawn(e.x, e.y - 24, e.n, "heal");
         fx.ps.emit(P.hearts, e.x, e.y - 12, 2, NaN, -1, 0.7);

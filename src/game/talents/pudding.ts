@@ -27,10 +27,10 @@ export const puddingTree: TalentTree = {
   nodes: [
     // ---- Tea Service
     node("pudding_perfect_temp", "Perfect Temperature", 0, 1, 5, (r) => `+${3 * r}% might`, { mods: (s, r) => void (s.might += 0.03 * r) }),
-    node("pudding_refill", "Free Refills", 0, 2, 3, (r) => `Tea puddles last +${(0.5 * r).toFixed(1)} s`),
+    node("pudding_refill", "Free Refills", 0, 2, 3, (r) => `Tea puddles and Warm Tea last +${(0.5 * r).toFixed(1)} s`),
     node("pudding_bow", "Polite Bow", 0, 3, 3, (r) => `-${3 * r}% cooldown`, { mods: (s, r) => void (s.cooldown -= 0.03 * r) }),
     node("pudding_extra_cups", "Extra Cups", 0, 4, 3, (r) => `Teapot Tempest +${r} teacup${r > 1 ? "s" : ""}`),
-    node("pudding_tea_ceremony", "Tea Ceremony", 0, 5, 1, () => "Puddles are twice as big and slow enemies 40%"),
+    node("pudding_tea_ceremony", "Tea Ceremony", 0, 5, 1, () => "Puddles are twice as big (easier to brush) and slow enemies 40%"),
     // ---- Customer Service
     node("pudding_smile", "Service Smile", 1, 1, 5, (r) => `+${5 * r} max HP`, { mods: (s, r) => void (s.maxHp += 5 * r) }),
     node("pudding_water", "Complimentary Water", 1, 2, 3, (r) => `+${5 * r}% healing`, { mods: (s, r) => void (s.healMul += 0.05 * r) }),

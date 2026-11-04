@@ -193,7 +193,7 @@ export const HEROES: HeroDef[] = [
       ["Trait becomes +0.5 HP/s, +25% healing, +10% luck", (s) => void ((s.regen += 0.2), (s.healMul += 0.1))],
       ["Omurice of Love +1 pulse"],
       ["+8% luck, +8% coins", (s) => void ((s.luck += 0.08), (s.greed += 0.08))],
-      ["Puddles heal twice as fast; every 100 kills drops a pudding (heal 8)", undefined, puddingC6],
+      ["Warm Tea heals twice as fast; every 100 kills drops a pudding (heal 8)", undefined, puddingC6],
     ]),
   },
   {

@@ -37,8 +37,10 @@ export const HFX_KURO_SHADOW = "kuro_shadow";
 export const HFX_KURO_REVEAL = "kuro_reveal";
 /** Pudding: a teacup tips and spills (x, y). */
 export const HFX_PUD_SPILL = "pud_spill";
-/** Pudding: the hero is healed by a puddle / the moat (x, y, n = HP). */
+/** Pudding: a Warm Tea sip heals the hero (x, y, n = HP). */
 export const HFX_PUD_SIP = "pud_sip";
+/** Pudding: brushing a puddle warmed the hero up from cold (x, y; the Warm Tea buff starts). */
+export const HFX_PUD_WARM = "pud_warm";
 /** Pudding: a thrown teacup shatters (x, y, r). */
 export const HFX_PUD_SHATTER = "pud_shatter";
 /** Pudding ult: the omurice plops (x, y). */

@@ -401,6 +401,9 @@ Weapon-specific effects read `w.talentRank(id)` inside the weapon/ult code
 | 4 | `mochi_tangled` **Tangled Up** ×3: yarn hits slow enemies 10 / 20 / 30% for 1 s | `mochi_ninth_life` **Ninth Life** ×3: once per run survive a lethal hit at 1 HP (`plotArmor +1` at rank 1); invulnerable for 1 / 1.5 / 2 s after | `mochi_hunter` **Hunter Instinct** ×3: dashing through enemies deals 20 / 35 / 50 damage to each |
 | 5 | `mochi_infinite_yarn` **Infinite Yarn** (WPN): Yarn Orbit never turns off and gains +2 balls | `mochi_cat_army` **Cat Army** (ULT): Nyan Stampede has 90 cats (from 60) and every trampled enemy has a 10% chance to drop a coin | `mochi_catnip` **Catnip Overdrive** (ULT): stampede walls also run top→bottom and bottom→top (2 extra walls) and the stampede magnets every gem in view |
 
+Season 3 balance pass: yarn balls (and Cosmic Yarn's planets) block enemy bullets, break and reform (Orbital Guard,
+docs/content/weapons.md §7); Infinite Yarn / C6 keep every ball guarding all the time.
+
 ### Kuro — Sealed Right Arm / Chuuni Monologue / Eye of the Abyss
 
 | T | Sealed Right Arm | Chuuni Monologue | Eye of the Abyss |
@@ -416,10 +419,14 @@ Weapon-specific effects read `w.talentRank(id)` inside the weapon/ult code
 | T | Tea Service | Customer Service | Head Maid |
 | --- | --- | --- | --- |
 | 1 | `pudding_perfect_temp` **Perfect Temperature** ×5: +3% might per rank | `pudding_smile` **Service Smile** ×5: +5 max HP per rank | `pudding_tips` **Tips Jar** ×5: +4% coins per rank |
-| 2 | `pudding_refill` **Free Refills** ×3: tea puddles last +0.5 s per rank | `pudding_water` **Complimentary Water** ×3: +5% healing per rank | `pudding_bell` **Lucky Service Bell** ×3: +4% luck per rank |
+| 2 | `pudding_refill` **Free Refills** ×3: tea puddles and Warm Tea last +0.5 s per rank | `pudding_water` **Complimentary Water** ×3: +5% healing per rank | `pudding_bell` **Lucky Service Bell** ×3: +4% luck per rank |
 | 3 | `pudding_bow` **Polite Bow** ×3: −3% cooldown per rank | `pudding_warm_welcome` **Warm Welcome** ×3: +0.1 HP/s regen per rank | `pudding_efficiency` **Rush Hour Efficiency** ×3: +4% move speed per rank |
 | 4 | `pudding_extra_cups` **Extra Cups** ×3: Teapot Tempest +1 teacup per rank | `pudding_regulars` **Regulars' Discount** ×3: food heals +10% per rank and has a 10 / 20 / 30% chance to also add 5 Overdrive | `pudding_service` **Service With a Smile** ×3: every 50 / 40 / 30 kills a pudding drops (food, heals 8) |
-| 5 | `pudding_tea_ceremony` **Tea Ceremony** (WPN): puddles are twice as big and slow enemies 40% | `pudding_moe_max` **Moe Moe Kyun MAX** (ULT): Omurice of Love gets a 4th pulse (`KYUN KYUN♡`) and each pulse grants +1 shield charge (max 3, they last until hit) | `pudding_cup_toss` **Flying Teacup Service** (WPN): every 3 s a teacup is thrown at the farthest enemy in view and shatters (r 24, 40 dmg) leaving a puddle |
+| 5 | `pudding_tea_ceremony` **Tea Ceremony** (WPN): puddles are twice as big (easier to brush for Warm Tea) and slow enemies 40% | `pudding_moe_max` **Moe Moe Kyun MAX** (ULT): Omurice of Love gets a 4th pulse (`KYUN KYUN♡`) and each pulse grants +1 shield charge (max 3, they last until hit) | `pudding_cup_toss` **Flying Teacup Service** (WPN): every 3 s a teacup is thrown at the farthest enemy in view and shatters (r 24, 40 dmg) leaving a puddle |
+
+Season 3 balance pass: the tea heals **on the move** - brushing any puddle gives Warm Tea (heal over 3 s, refreshed by any
+puddle, never stacking; spills land on her path) and the teacups block enemy bullets (Orbital Guard). Free Refills, Tea
+Ceremony, Flying Teacup Service and C6 all feed Warm Tea (docs/content/weapons.md §2.2, §7).
 
 ### Aoi — Payload / Armor Plating / Thrusters
 
@@ -505,7 +512,7 @@ it is then one level-up closer to evolving).
 | Rin | +15 max HP | Petal Slash starts at Lv2 | Trait becomes +35 max HP, +15% damage | Thousand Blossom Cut +4 slash lines and +20% damage | +5% crit | Petal Slash always crits enemies above 80% HP ("first cut") |
 | Mochi | +6% move speed | Yarn Orbit starts at Lv2 | Trait becomes +20% move, +30% pickup, 2 armor | Nyan Stampede +20 cats | +1 dash charge | Yarn balls never turn off and pull gems like Cosmic Yarn |
 | Kuro | +6% area | Dark Flame Dragon starts at Lv2 | Trait loses its −10 HP ("the seal holds") and gives +20% area | Eternal Abyss +3 ticks | +10% crit damage | A second salamander (Ragnarok II, "the sequel") joins with its own breath |
-| Pudding | +10 max HP | Teapot Tempest starts at Lv2 | Trait becomes +0.5 HP/s, +25% healing, +10% luck | Omurice of Love +1 pulse | +8% luck, +8% coins | Puddles heal twice as fast; every 100 kills drops a pudding (heal 8) |
+| Pudding | +10 max HP | Teapot Tempest starts at Lv2 | Trait becomes +0.5 HP/s, +25% healing, +10% luck | Omurice of Love +1 pulse | +8% luck, +8% coins | Warm Tea heals twice as fast; every 100 kills drops a pudding (heal 8) |
 | Aoi | +1 armor | Micro Missile Swarm starts at Lv2 | Trait move penalty becomes −5% | GET IN THE ROBOT +1 fist | +10% projectile speed | A support drone orbits Aoi and fires 3 micro missiles every 2 s (Aoi's missile stats, 60% damage) |
 | Akane | +5% might | Baka Harisen starts at Lv2 | Trait becomes +15% damage, +50% knockback, +8% crit | Barrage +12 smacks | +10% crit damage | Every BAKA! pop stuns enemies within 40 px for 1 s (the shout itself hurts) |
 | Senpai | +8% luck | Notice-Me Sparkles starts at Lv2 | Trait slow aura becomes 20% within 56 px | Swoon lasts +2 s | +6% XP, +6% coins | Charmed enemies drop double XP when they die |

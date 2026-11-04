@@ -29,6 +29,12 @@ export const WFX_CATCH = 8;
 export const WFX_CLUSTER = 9;
 /** Rainbow Cannon / Prism Beam opening flash at (x, y), angle in r. */
 export const WFX_BEAM_START = 10;
+/** Orbital Guard (weapons/_orbital.ts): a body ate a bullet at (x, y) on its rim; body (x2, y2) radius r; n = weapon colour. */
+export const WFX_ORB_BLOCK = 11;
+/** Orbital Guard: a body broke at (x, y) (radius r, n = weapon colour); it reforms there after its mend time. */
+export const WFX_ORB_BREAK = 12;
+/** Orbital Guard: a broken body reformed at (x, y) (radius r, n = weapon colour). */
+export const WFX_ORB_REFORM = 13;
 
 const ev: WeaponFxEvent = { kind: 0, x: 0, y: 0, x2: 0, y2: 0, r: 0, n: 0 };
 

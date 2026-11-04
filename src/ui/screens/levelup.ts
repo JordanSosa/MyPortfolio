@@ -11,8 +11,14 @@
  * mastery levels past Lv 5; a compact grid when 5-6 cards are offered (the
  * Infinite Gacha Credit Card); free rerolls read "REROLL FREE". The few rules
  * for those live in LU_CSS below (injected once) so styles.css stays untouched.
+ *
+ * Evolution hints (owner request): once the player has discovered a recipe, a weapon card shows
+ * "→ EVO · needs PASSIVE" with its state (READY / levels to go / passive greyed) and a NEW passive
+ * card "Evolves WEAPON → EVO" for a held weapon; a card whose pick completes the pair or makes the
+ * evolution ready glows (src/game/evo-hints.ts decides, ./evo-hints.ts draws).
  */
 import { Bot } from "../../debug/bot";
+import { cardEvoHints, type EvoHint } from "../../game/evo-hints";
 import { PASSIVE_BY_ID } from "../../game/passives";
 import { WEAPONS } from "../../game/registry";
 import type { UpgradeCard } from "../../game/types";
@@ -21,6 +27,7 @@ import { time } from "../../core/time";
 import type { App, UiScreen } from "../app";
 import { esc, h, img, letters } from "../dom";
 import { layer } from "./common";
+import { evoCardClass, evoGlowHtml, evoLinesHtml, injectEvoCss, runKnown } from "./evo-hints";
 
 const RARITY_LABEL: Record<string, string> = { common: "COMMON", rare: "RARE", epic: "EPIC · LUCKY!", evolution: "EVOLUTION" };
 const GUARD = 0.35;
@@ -75,8 +82,9 @@ function maxLevel(c: UpgradeCard): number {
  * Upgrade card markup (rarity frame, icon, name, Lv a -> b, description, pips;
  * rainbow frame for evolutions). Level-up cards are focusable buttons; the
  * chest reuses the same card as a static reveal (`interactive` false).
+ * `hints`: the card's evolution hints (cardEvoHints) - lines under it + the synergy glow.
  */
-export function cardHtml(c: UpgradeCard, i: number, interactive = true): string {
+export function cardHtml(c: UpgradeCard, i: number, interactive = true, hints: readonly EvoHint[] = []): string {
   const max = maxLevel(c);
   let tag = "";
   let line = "";
@@ -105,20 +113,22 @@ export function cardHtml(c: UpgradeCard, i: number, interactive = true): string 
     pips += "</div>";
   }
   const plus = c.kind === "evolution" && c.with ? `<span class="plus">${img(PASSIVE_BY_ID.get(c.with)?.icon ?? "")}</span>` : "";
-  const open = interactive ? `<button class="card ${c.rarity}" data-nav${i === 0 ? " data-nav-default" : ""} style="--i:${i}" data-i="${i}">` : `<div class="card ${c.rarity} reveal" style="--i:${i}">`;
+  const evo = evoCardClass(hints);
+  const open = interactive ? `<button class="card ${c.rarity}${evo}" data-nav${i === 0 ? " data-nav-default" : ""} style="--i:${i}" data-i="${i}">` : `<div class="card ${c.rarity}${evo} reveal" style="--i:${i}">`;
   return `${open}
-    <div class="shimmer"></div>
+    ${evoGlowHtml(hints)}<div class="shimmer"></div>
     <span class="rar">${RARITY_LABEL[c.rarity] ?? ""}</span>${tag}
     <div class="ic">${img(c.icon, "px", 0, 4)}${plus}</div>
     <div class="nm">${esc(c.name)}</div>
     <div class="lvl-ch">${line}</div>
     <div class="ds">${esc(c.desc)}</div>
-    ${pips}
+    ${pips}${evoLinesHtml(hints)}
   </${interactive ? "button" : "div"}>`;
 }
 
 export function openLevelUp(app: App, w: World): UiScreen {
   injectCss();
+  injectEvoCss();
   const el = h("div", "modal levelup");
   // BANISH / SKIP only exist when the run grants them (RunConfig.flags.banish / skip)
   const hasBanish = w.banishes > 0;
@@ -175,7 +185,12 @@ export function openLevelUp(app: App, w: World): UiScreen {
     const prevAct = L.focus?.dataset.act ?? null;
     cards = list;
     el.classList.toggle("many", list.length > 4);
-    cardsEl.innerHTML = list.map((c, i) => cardHtml(c, i)).join("");
+    // (the known recipes: the Wiki's discoveries + this run's evolutions; a practice run knows all)
+    const known = runKnown(app, w);
+    const hints = list.map((c) => cardEvoHints(w, c, known));
+    // (any hint line: the landscape card grid trims its icons to make room)
+    el.classList.toggle("kk-evo-any", hints.some((x) => x.length > 0));
+    cardsEl.innerHTML = list.map((c, i) => cardHtml(c, i, true, hints[i])).join("");
     banishing = false;
     el.classList.remove("banishing");
     banishBtn?.classList.remove("on");

@@ -192,10 +192,12 @@ export interface RunStats {
   gemsCollected?: number;
   /** Most weapons held at once. */
   maxWeaponsHeld?: number;
+  /** Enemy bullets blocked by orbiting weapon bodies (Orbital Guard: weapons/_orbital.ts). */
+  orbitalBlocks?: number;
 }
 
 /** Numeric RunStats extras that content code counts with World.bumpStat(). */
-export type RunStatCounter = "crits" | "nanis" | "bakas" | "charmed" | "henshins" | "overdos" | "isekaid" | "jackpots" | "comfyBest";
+export type RunStatCounter = "crits" | "nanis" | "bakas" | "charmed" | "henshins" | "overdos" | "isekaid" | "jackpots" | "comfyBest" | "orbitalBlocks";
 
 export function defaultRunConfig(over: Partial<RunConfig> = {}): RunConfig {
   return {

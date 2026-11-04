@@ -10,13 +10,17 @@
  *     bolts + chains, Raijin blasts and drum beats, Sugar Nuke shockwave,
  *     dome bursts / heals, boomerang catches, beam flashes
  *   - extra flourishes on `explosion` (candy confetti) and `enemyHit` (bubble pops)
+ *   - ORBITAL GUARD (game/weapons/_orbital.ts) for every orbiting weapon (yarn, planets, teacups):
+ *     per frame a dim ghost ring where a broken body will reform (fills up, blinks just before), a
+ *     faint rim on chipped evolution bodies; cues: bullet-pop sparkle on the rim, shatter puff on a
+ *     break, a ring collapsing in + sparkle on the reform (budgeted per frame, sfx rate-limited)
  *   - trail looks for the arsenal projectiles (merged into view/trails.ts TRAILS)
  *
  * Reads the world, never mutates it. No allocations per frame.
  */
 import { C } from "../art/palette";
 import type { SfxId } from "../audio";
-import { rainbow } from "../core/color";
+import { lerpColor, rainbow } from "../core/color";
 import { TAU } from "../core/math";
 import { P, emitScorch, type BoltOpts, type EmitterDef, type Fx } from "../fx";
 import { Flag, Layer } from "../render/layers";
@@ -34,7 +38,11 @@ import {
   WFX_DOME_HEAL,
   WFX_DRUM,
   WFX_NUKE,
+  WFX_ORB_BLOCK,
+  WFX_ORB_BREAK,
+  WFX_ORB_REFORM,
 } from "../game/weapons/_fx";
+import { guardIf } from "../game/weapons/_orbital";
 import type { World } from "../game/world";
 import type { Anims } from "./anims";
 import type { WorldTexts } from "./texts";
@@ -188,6 +196,39 @@ const nukeRing: EmitterDef = {
 /** Ocean Dome burst: a soft ring sweeping out past the dome (sizeMul = radius / 32). */
 const tideRing: EmitterDef = { ...nukeRing, life: [0.5, 0.5], size: [0.55, 1], alpha: 0.4, colors: C.cyan };
 const beamSpark: EmitterDef = { ...P.sparkle, speed: [18, 60], life: [0.16, 0.32], size: [0.75, 0.75] };
+/** Orbital Guard: a bullet popping on a body's rim (white-gold sparks + a tiny ring in the weapon colour). */
+const guardSpark: EmitterDef = { ...P.sparkle, speed: [16, 50], life: [0.16, 0.3], size: [0.7, 0.7], colors: [C.white, C.paleYellow, C.white] };
+const guardPop: EmitterDef = { ...popRing, life: [0.18, 0.18], size: [0.1, 0.42], colors: C.white };
+/** A body breaking: chunky bits in its colour (and white) that bounce off the floor. */
+const guardShard: EmitterDef = {
+  sprite: "fx_px",
+  frames: "fixed",
+  speed: [30, 85],
+  life: [0.35, 0.6],
+  size: [1.2, 0.6],
+  colors: C.white,
+  rot: "random",
+  spin: [6, 14],
+  drag: 2,
+  bounce: { vz: [30, 70], gravity: 360, restitution: 0.3, friction: 6 },
+  alphaCurve: "late",
+  layer: Layer.Fx,
+};
+const guardPuff: EmitterDef = { ...P.smoke, speed: [4, 14], life: [0.3, 0.45], size: [0.45, 0.8], alpha: 0.6 };
+/** Reform: a ring collapsing onto the body (sizeMul ~ body radius / 16 x 2.4). */
+const guardIn: EmitterDef = {
+  sprite: "fx_ring",
+  frames: "fixed",
+  speed: [0, 0],
+  life: [0.22, 0.22],
+  size: [1, 0.15],
+  sizeCurve: "out",
+  colors: C.white,
+  alphaCurve: "linear",
+  additive: true,
+  glow: true,
+  layer: Layer.FxAdd,
+};
 const floatHeart: EmitterDef = { ...P.hearts, speed: [10, 26], life: [0.7, 1.1], size: [1, 0.7] };
 
 /** Trail looks keyed by Projectile.trail (merged into TRAILS below). */
@@ -215,6 +256,14 @@ const BEAM_CLEAR = 14;
 const BEAM_FADE = 20;
 const POP_BUDGET = 8;
 const BOLT_FX_BUDGET = 10;
+/** Orbital Guard cues drawn per frame (a volley into the ring can pop a dozen at once). */
+const GUARD_FX_BUDGET = 8;
+/** Seconds between Orbital Guard sounds of a kind (block / break / reform). */
+const GUARD_SFX_GAP = [0.07, 0.12, 0.15];
+/** Weapons whose bodies orbit the hero and guard her (game/weapons/_orbital.ts). */
+const GUARDED = new Set(["yarn_orbit", "cosmic_yarn", "teapot_tempest", "eternal_tea_party"]);
+/** Dots of a broken body's ghost ring. */
+const GHOST_DOTS = 6;
 const ID_BUBBLE = "bubble_aura";
 const ID_DOME = "ocean_dome";
 
@@ -229,6 +278,7 @@ export class WeaponFx {
   private hFlare: number;
   private hStreak: number;
   private hGlowS: number;
+  private hPx: number;
   private pops = 0;
   private bolts = 0;
   private candy = 0;
@@ -237,6 +287,10 @@ export class WeaponFx {
   private heartAcc = 0;
   private calm = false;
   private nukes = 0;
+  private guardFx = 0;
+  /** View clock (draw's `time`) and when each Orbital Guard sound last played. */
+  private clock = 0;
+  private readonly guardSfxAt = [-1, -1, -1];
 
   constructor(
     private readonly r: Renderer,
@@ -257,11 +311,13 @@ export class WeaponFx {
     this.hFlare = r.atlas.handle("fx_flare");
     this.hStreak = r.atlas.handle("fx_streak");
     this.hGlowS = r.atlas.handle("fx_glow_s");
+    this.hPx = r.atlas.handle("fx_px");
   }
 
   setWorld(w: World): void {
     this.w = w;
     this.riseAcc = this.sparkAcc = this.heartAcc = 0;
+    this.guardSfxAt.fill(-1);
   }
 
   /** Subscribe to the world's weapon events. Returns the unsubscribe functions. */
@@ -393,6 +449,11 @@ export class WeaponFx {
         ps.emit(floatHeart, e.x, e.y, 2);
         ps.emit(P.sparkle, e.x, e.y, 2, NaN, C.pinkLight, 0.8);
         break;
+      case WFX_ORB_BLOCK:
+      case WFX_ORB_BREAK:
+      case WFX_ORB_REFORM:
+        this.guardCue(e, sfx);
+        break;
       case WFX_BEAM_START: {
         const big = e.n === 1;
         ps.emit(P.flare, e.x, e.y, 1, NaN, big ? C.white : C.aqua, big ? 2.2 : 1.1);
@@ -410,6 +471,41 @@ export class WeaponFx {
     }
   }
 
+  /** Orbital Guard cues (n = the weapon colour, r = the body radius). */
+  private guardCue(e: WeaponFxEvent, sfx: SfxFn): void {
+    if (this.guardFx >= GUARD_FX_BUDGET) return;
+    this.guardFx++;
+    const ps = this.fx.ps;
+    const col = e.n;
+    const s = Math.max(0.5, e.r / 6);
+    let kind = 0;
+    if (e.kind === WFX_ORB_BLOCK) {
+      // the bullet pops on the rim: a white flash, a tiny ring, a few sparks thrown outward
+      ps.emit(P.flare, e.x, e.y, 1, NaN, C.white, 0.45);
+      ps.emit(guardPop, e.x, e.y, 1, NaN, col, s);
+      ps.emit(guardSpark, e.x, e.y, 3, Math.atan2(e.y - e.y2, e.x - e.x2));
+    } else if (e.kind === WFX_ORB_BREAK) {
+      // crack -> shatter: bits in its colour + white, a soft puff, a thin ring
+      kind = 1;
+      ps.emit(guardShard, e.x, e.y, 4, NaN, col, s);
+      ps.emit(guardShard, e.x, e.y, 3, NaN, -1, s * 0.8);
+      ps.emit(guardPuff, e.x, e.y, 2, NaN, -1, s);
+      ps.emit(P.ringThin, e.x, e.y, 1, NaN, col, s * 0.9);
+    } else {
+      // reform: a ring collapses onto it, a pop of sparkle
+      kind = 2;
+      ps.emit(guardIn, e.x, e.y, 1, NaN, col, s * 1.4);
+      ps.emit(guardSpark, e.x, e.y, 3, NaN, -1, 0.8);
+      ps.emit(P.flare, e.x, e.y, 1, NaN, col, 0.5);
+    }
+    const t = this.clock;
+    if (t - this.guardSfxAt[kind] < GUARD_SFX_GAP[kind]) return;
+    this.guardSfxAt[kind] = t;
+    if (kind === 0) sfx("bubblePop", 0.22, 9, e.x);
+    else if (kind === 1) sfx("crunch", 0.3, 9, e.x);
+    else sfx("sparkleCharm", 0.18, 10, e.x);
+  }
+
   /** Is (x, y) within `r` of the hero's body centre? */
   private nearHero(x: number, y: number, r: number): boolean {
     const p = this.w?.player;
@@ -423,9 +519,11 @@ export class WeaponFx {
   draw(time: number, dt: number): void {
     const w = this.w;
     if (!w) return;
-    this.pops = this.bolts = this.candy = 0;
+    this.pops = this.bolts = this.candy = this.guardFx = 0;
+    this.clock = time;
     for (let i = 0; i < w.weapons.length; i++) {
       const inst = w.weapons[i];
+      if (GUARDED.has(inst.def.id)) this.drawGuard(inst, time);
       switch (inst.def.id) {
         case "bubble_aura":
           this.drawField(inst, time, dt, false);
@@ -446,6 +544,45 @@ export class WeaponFx {
         case "love_tornado":
           this.drawVortex(time, dt);
           break;
+      }
+    }
+  }
+
+  // ---------------------------------------------------------------- Orbital Guard
+  /**
+   * Where a broken body will reform: a dim ring in the weapon colour that fills up with a soft dot as it
+   * recovers and blinks in the last quarter; a chipped evolution body gets a faint white rim.
+   */
+  private drawGuard(inst: WeaponInstance, time: number): void {
+    const g = guardIf(inst);
+    if (!g || g.n <= 0) return;
+    const r = this.r;
+    const col = inst.def.color;
+    // (the dots a shade darker toward plum: they still read on the brightest floors)
+    const dot = lerpColor(col, C.outline, 0.3);
+    for (let k = 0; k < g.n; k++) {
+      const x = g.x[k];
+      const y = g.y[k];
+      const br = g.r[k];
+      if (g.down[k] > 0) {
+        const q = 1 - g.down[k] / Math.max(1e-3, g.downFor[k]);
+        const blink = q > 0.75 ? 0.6 + 0.4 * Math.sin(time * 28) : 1;
+        // a DOTTED ring (never a solid orb: enemy bullets are solid glowing orbs, often pink too) over a faint
+        // plum ring that reads on the bright pastel floors and the dark ones; it fills in from the centre
+        r.ring(Layer.Fx, x, y, br + 1.5, C.outline, 0.24 * blink);
+        const R = br + 1.5;
+        const a0 = time * 2.2 + k;
+        for (let i = 0; i < GHOST_DOTS; i++) {
+          const a = a0 + (i / GHOST_DOTS) * TAU;
+          r.spr(Layer.Fx, this.hPx, x + Math.cos(a) * R, y + Math.sin(a) * R, 1.6, 1.6, 0, dot, (0.7 + 0.3 * q) * blink, 0, Flag.NoSnap);
+        }
+        if (q > 0.05) r.circle(Layer.Fx, x, y, Math.max(0.8, br * q), col, (0.18 + 0.32 * q) * blink);
+        if (q > 0.75) r.circle(Layer.FxAdd, x, y, 1.2, C.white, 0.8 * blink, Flag.Add);
+        continue;
+      }
+      if (g.chips[k] > 0 && g.block > 1) {
+        const a = 0.25 + 0.4 * (g.chips[k] / g.block);
+        r.ring(Layer.Fx, x, y, br + 2, C.white, a * (0.7 + 0.3 * Math.sin(time * 20 + k)));
       }
     }
   }

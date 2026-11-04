@@ -40,6 +40,9 @@ src/
     meta.ts            legacy Dream Shop ranks (WorldOptions.meta; tests / balance probe)
     upgrades.ts        level-up card generation / application (pools, banish, Limit Break cards, Light Novel
                        titles), chest rewards (chest luck)
+    evo-hints.ts       evolution hints for the level-up / chest cards and the pause list: a known recipe's state
+                       (ready / have / missing / blocked), pair-completing and READY-making picks; `evolution`
+                       normalised to a list (several evolutions per weapon); the known rule comes in as input
     registry.ts        auto-registry (import.meta.glob) of weapons / enemies / bosses / ultimates / stages /
                        relics / talent trees / twists (+ registerStage for tests / tools, twistHeat, stageInfos)
     stages/*.ts        one file per stage (dream-meadow.ts = the original slice, timeline included); candy-kingdom.ts
@@ -189,7 +192,8 @@ src/
                        heroes (+ hero page), gacha (Merch Machine), wiki, celebrate (unlock cards, boot notices),
                        parts (stage thumbnails, relic tiles), copy.ts + copy-data.ts (satire bible lines), hub.css
     screens/*.ts       splash, levelup, chest, pause, settings (+ save data tab), over (TO BE CONTINUED), results
-                       (Episode Results)
+                       (Episode Results); evo-hints.ts draws the evolution hint lines / glow / pause badges (KE_CSS)
+                       and owns the known rule (`runKnown`: Wiki discoveries + this run's evolutions; practice = all)
 
   debug/
     bot.ts             autoplay bot + `simulate()` headless runner (PURE; used by tests, ?autoplay, ?skip, attract,
@@ -510,6 +514,18 @@ hook, per-leg hit lists), `thunder-bell.ts` (marker projectile + chain via
 (no projectiles, per-enemy tick cooldown on the slot channel + slow),
 `prism-beam.ts` (owned beams with an exact segment hit test).
 
+**Orbiting bodies guard the hero** (`weapons/_orbital.ts`, Orbital Guard): a weapon whose projectiles orbit her
+(Yarn Orbit / Cosmic Yarn, Teapot Tempest / Eternal Tea Party) calls `guardTick` once per step, `guardBody` per
+body after placing it (slot k = ring index / cup ordinal; a broken body keeps its projectile with r 0 / scale 0),
+sets `guard.n` (bodies placed) and `guard.ref` (its own count without the Amount stat) and calls `guardBlock`:
+bodies that are up destroy the `world.bullets` they touch (beams, slams and telegraphed blasts are not bullets),
+break after the level's `block` bullets and reform after `mendTime` (`mend` s scaled by the cooldown stat at half
+rate, the Amount stat's extra bodies and a second guarding weapon; knobs in `CFG.guard`, docs/content/weapons.md
+§7). Only instances in `world.weapons` block (A Real Friend's copy never does). Per-instance state is typed arrays
+(`guardOf` / `guardIf` for the view); cues are `weaponFx` WFX_ORB_BLOCK / BREAK / REFORM; blocks count in
+`RunStats.orbitalBlocks`. A new orbital weapon adds `block` / `mend` to its levels, the three calls, and its id
+to `GUARDED` in `view/weapon-fx.ts` (the ghost rings).
+
 ### Enemy (`src/game/enemies/<name>.ts`)
 
 ```ts
@@ -819,6 +835,7 @@ carries trait behaviour, and the bot's per-hero distances live in `debug/bot.ts`
 | Boss phase change (banner, flash, shockwave, speed lines, duck), enrage (WARNING banner, red grade + vignette) | `bestiary-fx.ts bossPhase / bossEnrage / applyGrade` |
 | VICTORY: slow-mo chained explosions up the final boss, dawn flash at 1.7 s, enemies dissolve into light, the stage's `victory.title` / `line` ("DAWN BREAKS!", "SUGAR CRASH!" ...: the title steps down a whole pixel scale and a long line wraps onto two rows when the view is too narrow), sunrise grade sweep + sun + god rays, fireworks, victory music, results modal at 7.2 s | `bestiary-fx.ts finalDeath / victory / drawDawn`, `App.gameFrame` |
 | Bullet clears pop every bullet into a sparkle | `bestiary-fx.ts bulletsCleared` |
+| Orbital Guard: a bullet pops on an orbiting body's rim (flare, tiny ring, sparks), the body shatters (bits in its colour, puff, ring), a dotted ghost ring (never a solid orb: bullets are solid) fills in where it will reform and blinks before it does, the reform collapses a ring onto it with a pop; sfx rate-limited, cues budgeted per frame. Warm Tea: an amber ring at Pudding's feet whose 8 dots count the seconds left, a warm glow and steam, blinking as it cools | `view/weapon-fx.ts guardCue / drawGuard`, `view/heroes-a-fx.ts drawWarmTea` |
 | Combo counter, rank stamps (one-shot shine inside the glyph's gradient fill), SSS border (opacity crossfade), milestone blip every 25 (`comboUp`); the timer bar drains faster at high ranks (gold-pink from S), a rank drop replays the letter falling in + a red flinch on the counter + a soft high `comboBreak` | `hud.ts` (WAAPI), `feedback.ts enemyKilled / comboDrop` |
 | Peak-chaos readability: adaptive bloom limiter (`r.post.load` from the glow-instance count), fewer sparks / puffs / numbers, fainter + smaller enemy numbers (a screen with 40+ enemy bullets counts as busy too), hero beacon (faint silhouette + ring above player fx, under bullets; also forced on for ~0.5 s when an explosion / Raijin blast lands on the hero, `WorldView.coverHero`), small player shots fade within 16 px of the hero's body (Galaxy Barrage streams spawn there); the beacon redraws the hero's current frame translucent (its plum outline reads over white blasts and pink star clouds), and the live boss gets the same treatment (boss beacon) so it never vanishes under six evolutions | `render/post.ts feedGlow`, `feedback.ts frame()`, `fx/damage.ts busy`, `WorldView.drawHeroBeacon / drawBossBeacon / drawProjectiles` |
 | HUD banners while a boss is alive drop below the hero and shrink (`.banner.low`): Lady Lunatic fights from the upper half, so ENRAGED! / ELITE! / EVOLUTION! never cover her or her bullets | `hud.ts banner()`, `styles.css` |
@@ -829,6 +846,7 @@ carries trait behaviour, and the bot's per-hero distances live in `debug/bot.ts`
 | Relic / talent procs (name tag + flourish), shield BLOCK!, PLOT ARMOR! (hitstop, slow-mo, rays), ENCORE!, SAKUGA MODE border, the rival's title pop | `view/relic-fx.ts` |
 | Filler Arc: final boss throes, "TO BE CONTINUED..." freeze-frame (letterbox, sepia), record scratch, "JUST KIDDING! ...IN THE FILLER ARC!", fireworks, the battle theme returns; elite-wave / rematch banners, FILLER EPISODE cards every 5:00 | `view/relic-fx.ts fillerArc` |
 | Banish mode (cards get a red BANISH veil, unbanishable ones grey out), SKIP, LIMIT BREAK! tags, 5-6 card grid | `ui/screens/levelup.ts` (LU_CSS) |
+| Evolution hints, once a recipe is discovered: a weapon card's "→ EVO · needs PASSIVE" line (READY! / Lv 3→4 of 5 / greyed passive / NO SLOT), a NEW passive's "Evolves WEAPON → EVO"; a gold (READY) or aqua (completes the pair) ring + opacity-pulsed inner glow, static under reduced motion; compact lines in the 5-6 card grid and short landscape; the chest reveal; the pause menu's EVOLUTIONS list + slot badges | `game/evo-hints.ts` (rules), `ui/screens/evo-hints.ts` (KE_CSS) |
 
 ---
 

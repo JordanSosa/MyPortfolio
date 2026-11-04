@@ -153,6 +153,8 @@ export interface SliceRec {
   xp: number;
   maxHp: number;
   bossAlive: boolean;
+  /** Enemy bullets eaten by orbiting weapon bodies over the slice (Orbital Guard: RunStats.orbitalBlocks). */
+  blocks?: number;
 }
 
 export interface BossJob extends CellSpec {
@@ -178,6 +180,8 @@ export interface BossRec {
   maxHp: number;
   levelEnd: number;
   spawned: boolean;
+  /** Enemy bullets eaten by orbiting weapon bodies during the fight (Orbital Guard). */
+  blocks?: number;
 }
 
 export interface FullJob extends CellSpec {

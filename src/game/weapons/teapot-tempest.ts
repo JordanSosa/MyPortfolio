@@ -1,25 +1,35 @@
 /**
  * Teapot Tempest (Pudding's signature, docs/content/weapons.md §2.2):
  * `amount` teacups orbit at r 30 x area, `speed` rad/s, hitting on contact
- * (`dmg`, per-enemy re-hit `every` s). Every `cd` s the cup nearest the action
- * tips over and leaves a tea puddle (r `puddleR` x area, `life` x duration s,
- * at most 6, the oldest dries first): enemies in it take `puddleDmg` every
- * 0.5 s and are slowed 15 %; the hero standing in any puddle heals `heal`
- * HP/s x healMul (puddles never stack). The only signature weapon that heals.
+ * (`dmg`, per-enemy re-hit `every` s). Every `cd` s a cup tips over and leaves
+ * a tea puddle (r `puddleR` x area, `life` x duration s, at most 6, the oldest
+ * dries first): while Pudding moves, the cup on her heading tips and the tea
+ * lands on her path (LEAD px ahead); standing still, the cup nearest the action.
+ * Enemies in a puddle take `puddleDmg` every 0.5 s and are slowed 15 %.
+ * WARM TEA: brushing any puddle (her feet within its rim + BRUSH px) warms her
+ * up for WARM_T s (refreshed by any puddle, never stacks): `heal` HP/s x
+ * healMul for as long as it lasts, so the tea heals on the move - no standing
+ * in it. The only signature weapon that heals.
+ * ORBITAL GUARD (weapons/_orbital.ts): each cup eats the first enemy bullet it
+ * touches, breaks, and is back its mend time later (`mend` s, scaled: _orbital.ts).
  * Evolution: Eternal Tea Party (+ Bento Box) - a flying teapot pours a
- * scalding tea moat around Pudding (ring band, slows), six cups fling hot
- * droplets at enemies outside it, kills inside heal and drop petit fours.
+ * scalding tea moat around Pudding (ring band, slows) and, every `pour` s, a
+ * puddle on her path (Warm Tea at the evolution's `heal`); six sturdier cups
+ * (`block` 2) fling hot droplets at enemies outside the moat, kills inside heal
+ * and drop petit fours.
  *
  * Pudding's talents read here (both forms where it makes sense): Free Refills
- * (+0.5 s puddle life per rank), Extra Cups (+1 cup per rank), Tea Ceremony
- * (puddles / the moat twice as big, slow 40 %), Flying Teacup Service (every
- * 3 s a cup is thrown at the farthest enemy in view: r 24, 40 damage, leaves a
- * puddle). Pudding C6: puddles heal twice as fast.
+ * (+0.5 s puddle life and Warm Tea per rank), Extra Cups (+1 cup per rank), Tea
+ * Ceremony (puddles / the moat twice as big, slow 40 %), Flying Teacup Service
+ * (every 3 s a cup is thrown at the farthest enemy in view: r 24, 40 damage,
+ * leaves a puddle). Pudding C6: Warm Tea heals twice as fast.
  *
  * Cups and puddles are owned projectiles (p.a = 0 cup, 1 puddle) with no
  * sprite: src/view/heroes-a-fx.ts draws them (cup tilt from p.b = tip time,
- * puddle frames from age / life). Puddles tick on CH_MISC so they never share
- * a re-hit window with the cups (slot channel).
+ * scale 0 = broken, puddle frames from age / life); inst.data.warm / warmMax =
+ * Warm Tea seconds left / its full length (the view's steam ring). Puddles
+ * tick on CH_MISC so they never share a re-hit window with the cups (slot
+ * channel).
  */
 import { C } from "../../art/palette";
 import { TAU } from "../../core/math";
@@ -28,7 +38,8 @@ import { PK_ATTACHED, PK_FALL, PK_FREE, PK_MANAGED, ROT_SPIN, SHAPE_RING, type E
 import type { World } from "../world";
 import { fired, killOwned, own, prune, wstats, type WStats } from "./_shared";
 import { sfxAt } from "./_fx";
-import { HFX_PUD_SHATTER, HFX_PUD_SIP, HFX_PUD_SPILL, dropPudding, dropSnack, heroesA, hfx, slowEnemy } from "./_heroes-a";
+import { HFX_PUD_SHATTER, HFX_PUD_SIP, HFX_PUD_SPILL, HFX_PUD_WARM, dropPudding, dropSnack, heroesA, hfx, slowEnemy } from "./_heroes-a";
+import { GUARD_MAX, guardBlock, guardBody, guardOf, guardTick } from "./_orbital";
 
 const CUP = 0;
 const PUDDLE = 1;
@@ -36,7 +47,17 @@ const MOAT = 2;
 const MAX_PUDDLES = 6;
 const ORBIT_R = 30;
 /** Flying Teacup Service puddles use Teapot Tempest's Lv5 numbers. */
-const TOSS_PUDDLE = { r: 20, dmg: 8, life: 5 };
+const TOSS_PUDDLE = { r: 20, dmg: 12, life: 5 };
+/** Warm Tea: seconds per brush (+0.5 per Free Refills rank); brush reach past a puddle's rim (px). */
+export const WARM_T = 3;
+const BRUSH = 4;
+/** Moving spills land this far ahead of Pudding's feet (px), PATH_K of the way from the tipping cup. */
+const LEAD = 30;
+const PATH_K = 0.8;
+/** Pudding counts as moving above this speed (px/s). */
+const MOVING = 20;
+/** Teacup body radius (contact hits and Orbital Guard). */
+const CUP_R = 5;
 
 /** Puddle slow (Tea Ceremony: 40 %) and size multiplier. */
 function ceremony(w: World): boolean {
@@ -68,35 +89,61 @@ export function teaPuddle(w: World, inst: WeaponInstance | null, x: number, y: n
   return p;
 }
 
-/** Heal the hero while standing in tea (1 s sips: one number per second, not a stream). */
-function sip(w: World, inst: WeaponInstance, inside: boolean, hps: number, dt: number): void {
+/** Warm Tea length (s): WARM_T + 0.5 per Free Refills rank. */
+export function warmTime(w: World): number {
+  return WARM_T + 0.5 * w.talentRank("pudding_refill");
+}
+
+/**
+ * WARM TEA: brushing any of this weapon's puddles sets the buff to its full length (refresh, never
+ * stack); while it lasts the hero heals `hps` x healMul (Pudding C6 x2) in 1 s sips - one number per
+ * second, not a stream - plus the remainder when the tea cools, so one brush heals hps x warmTime.
+ */
+function warmTea(w: World, inst: WeaponInstance, hps: number, dt: number): void {
+  // one Warm Tea per hero: a copy of the weapon outside her slots (A Real Friend's) scalds with its puddles
+  // but never heals - its puddles land on the Friend's own path, so it would double her healing
+  if (!w.weapons.includes(inst)) return;
   const d = inst.data;
   const pl = w.player;
-  if (!inside || pl.hp >= pl.maxHp) {
+  if (inPuddle(w, inst)) {
+    if (!((d.warm ?? 0) > 0)) hfx(w, HFX_PUD_WARM, pl.x, pl.y);
+    d.warm = d.warmMax = warmTime(w);
+  }
+  const left = d.warm ?? 0;
+  if (left <= 0) {
     d.sip = 0;
     return;
   }
-  d.sip = (d.sip ?? 0) + dt;
-  if (d.sip < 1) return;
-  d.sip -= 1;
-  // Pudding C6: puddles heal twice as fast
+  d.sip = (d.sip ?? 0) + Math.min(dt, left);
+  d.warm = Math.max(0, left - dt);
+  if (d.sip < 1 - 1e-6 && d.warm > 0) return;
+  const s = Math.min(1, d.sip);
+  d.sip -= s;
+  // (a cooled-down sliver is not worth a number)
+  if (s < 0.05 || pl.hp >= pl.maxHp) return;
+  // Pudding C6: Warm Tea heals twice as fast
   const k = w.hero.id === "pudding" && w.cons >= 6 ? 2 : 1;
   // (silent: the view shows a small tea-steam "+N" instead of the full heal fanfare every second)
   const before = pl.hp;
-  w.heal(hps * k, true);
+  w.heal(hps * k * s, true);
   hfx(w, HFX_PUD_SIP, pl.x, pl.y, pl.x, pl.y, 0, Math.round(pl.hp - before));
 }
 
-/** Keep `n` cups orbiting (p.a = CUP); returns nothing, cups are the first entries found. */
-function orbitCups(w: World, inst: WeaponInstance, n: number, R: number, spin: number, dmg: number, every: number, ch: number, dt: number): void {
+/**
+ * Keep `n` cups orbiting (p.a = CUP) and guard with them (Orbital Guard: `block` bullets break a cup
+ * for its mend time (mendTime); a broken cup has r 0 / scale 0 and neither hits, tips nor flings).
+ */
+function orbitCups(w: World, inst: WeaponInstance, n: number, mine: number, R: number, spin: number, dmg: number, every: number, ch: number, block: number, mend: number, dt: number): void {
   const pl = w.player;
+  const g = guardOf(inst);
+  guardTick(w, g, mend, inst.def.color, dt);
   let have = 0;
   for (let i = 0; i < inst.projs.length; i++) if (inst.projs[i].a === CUP) have++;
   while (have < n) {
     const p = w.spawnProjectile(inst);
     p.kind = PK_MANAGED;
     p.a = CUP;
-    p.r = 5;
+    p.r = CUP_R;
     p.pierce = Infinity;
     p.life = Infinity;
     p.knock = 30;
@@ -122,14 +169,29 @@ function orbitCups(w: World, inst: WeaponInstance, n: number, R: number, spin: n
     p.hitEvery = every;
     p.ch = ch;
     if (p.b > 0) p.b = Math.max(0, p.b - dt);
+    if (k < GUARD_MAX) guardBody(g, k, p, CUP_R, 1);
     k++;
   }
+  g.n = Math.min(k, GUARD_MAX);
+  g.ref = mine;
+  guardBlock(w, g, block, mend, inst.def.color, pl.x, pl.y - CFG.playerCy, R);
 }
 
-/** The cup nearest the nearest enemy (else the one in front of the hero). */
+/** Is Pudding on the move (her heading is pl.aimX / aimY)? */
+function moving(w: World): boolean {
+  const pl = w.player;
+  return pl.moving && pl.vx * pl.vx + pl.vy * pl.vy > MOVING * MOVING;
+}
+
+/**
+ * The cup that tips: moving, the one nearest her heading; still, the one nearest the nearest enemy
+ * (else the one in front of her). A cup that is up wins; with every cup broken the tea still spills
+ * from the best slot (no tipping cup to see), so a volley that breaks them never cuts off the healing.
+ */
 function frontCup(w: World, inst: WeaponInstance): Projectile | null {
   const pl = w.player;
-  const e = w.nearestEnemy(pl.x, pl.y - CFG.playerCy, 140);
+  const go = moving(w);
+  const e = go ? null : w.nearestEnemy(pl.x, pl.y - CFG.playerCy, 140);
   const fx = e ? e.x : pl.x + pl.aimX * 40;
   const fy = e ? e.y - e.cy : pl.y - CFG.playerCy + pl.aimY * 40;
   let best: Projectile | null = null;
@@ -139,7 +201,8 @@ function frontCup(w: World, inst: WeaponInstance): Projectile | null {
     if (p.a !== CUP || p.dead) continue;
     const dx = p.x - fx;
     const dy = p.y - fy;
-    const d2 = dx * dx + dy * dy;
+    // (broken cups only as a last resort)
+    const d2 = dx * dx + dy * dy + (p.r <= 0 ? 1e6 : 0);
     if (d2 < bd) {
       bd = d2;
       best = p;
@@ -166,7 +229,7 @@ function capPuddles(inst: WeaponInstance): void {
   }
 }
 
-/** Is the hero's feet point inside any of this weapon's puddles? */
+/** Do the hero's feet brush any of this weapon's puddles (within its rim + BRUSH px; puddles are 1.6:1 ellipses)? */
 function inPuddle(w: World, inst: WeaponInstance): boolean {
   const pl = w.player;
   for (let i = 0; i < inst.projs.length; i++) {
@@ -174,9 +237,23 @@ function inPuddle(w: World, inst: WeaponInstance): boolean {
     if ((p.a !== PUDDLE && p.a !== 3) || p.dead) continue;
     const dx = pl.x - p.x;
     const dy = (pl.y - p.y) * 1.6;
-    if (dx * dx + dy * dy <= p.r * p.r) return true;
+    const rr = p.r + BRUSH;
+    if (dx * dx + dy * dy <= rr * rr) return true;
   }
   return false;
+}
+
+/** Where a spill lands: on Pudding's path while she moves (PATH_K of the way from (x, y) to LEAD px ahead), else (x, y). */
+const spot = { x: 0, y: 0 };
+function spillSpot(w: World, x: number, y: number): { x: number; y: number } {
+  spot.x = x;
+  spot.y = y;
+  if (moving(w)) {
+    const pl = w.player;
+    spot.x += (pl.x + pl.aimX * LEAD - x) * PATH_K;
+    spot.y += (pl.y + pl.aimY * LEAD - y) * PATH_K;
+  }
+  return spot;
 }
 
 // ---------------------------------------------------------------- Flying Teacup Service
@@ -271,15 +348,15 @@ export const teapotTempest: WeaponDef = {
   icon: "icon_teapot_tempest",
   color: C.gold,
   sfx: "teacup",
-  desc: "Teacups orbit you and spill tea. Puddles heal you and scald enemies.",
+  desc: "Teacups orbit you, block enemy shots and spill tea on your path. Brush a puddle: Warm Tea heals you on the move.",
   levels: [
-    { dmg: 8, cd: 2.5, amount: 2, speed: 3.0, every: 0.5, puddleR: 14, puddleDmg: 4, life: 4, heal: 1, knock: 30 },
-    { dmg: 8, cd: 2.5, amount: 3, speed: 3.0, every: 0.5, puddleR: 14, puddleDmg: 4, life: 4, heal: 1, knock: 30 },
-    { dmg: 11, cd: 2.5, amount: 3, speed: 3.0, every: 0.5, puddleR: 16, puddleDmg: 6, life: 4, heal: 1, knock: 30 },
-    { dmg: 11, cd: 2.0, amount: 4, speed: 3.2, every: 0.5, puddleR: 16, puddleDmg: 6, life: 4, heal: 1, knock: 30 },
-    { dmg: 14, cd: 2.0, amount: 4, speed: 3.2, every: 0.45, puddleR: 20, puddleDmg: 8, life: 5, heal: 1.5, knock: 30 },
+    { dmg: 8, cd: 2.5, amount: 2, speed: 3.0, every: 0.5, puddleR: 14, puddleDmg: 6, life: 4, heal: 1.5, knock: 30, block: 1, mend: 2.5 },
+    { dmg: 8, cd: 2.5, amount: 3, speed: 3.0, every: 0.5, puddleR: 14, puddleDmg: 6, life: 4, heal: 1.5, knock: 30, block: 1, mend: 2.5 },
+    { dmg: 11, cd: 2.5, amount: 3, speed: 3.0, every: 0.5, puddleR: 16, puddleDmg: 8, life: 4, heal: 2, knock: 30, block: 1, mend: 2.5 },
+    { dmg: 11, cd: 2.0, amount: 4, speed: 3.2, every: 0.5, puddleR: 16, puddleDmg: 8, life: 4, heal: 2, knock: 30, block: 1, mend: 2.5 },
+    { dmg: 14, cd: 2.0, amount: 4, speed: 3.2, every: 0.45, puddleR: 20, puddleDmg: 12, life: 5, heal: 3, knock: 30, block: 1, mend: 2.2 },
   ],
-  upgrades: ["+1 teacup", "Damage +3, hotter, wider puddles", "+1 teacup, spills more often", "Damage +3, bigger, longer, more healing puddles"],
+  upgrades: ["+1 teacup", "Damage +3, hotter, wider puddles, warmer tea", "+1 teacup, spills more often", "Damage +3, bigger, longer puddles, much warmer tea"],
   evolution: { into: "eternal_tea_party", with: "bento_box" },
   // mastery Limit Breaks (docs/content/weapons.md §4): Lv6 at rank 5, Lv7 at rank 10
   limitBreak: [
@@ -290,15 +367,17 @@ export const teapotTempest: WeaponDef = {
     prune(inst);
     const S = wstats(w, inst);
     const L = S.L;
-    const n = Math.min(10, S.amount + w.talentRank("pudding_extra_cups"));
-    orbitCups(w, inst, n, ORBIT_R * S.area, S.L.speed ?? 3, S.dmg, L.every ?? 0.5, inst.slot, dt);
+    const extra = w.talentRank("pudding_extra_cups");
+    const n = Math.min(10, S.amount + extra);
+    // (own cups: level / Limit Break + Extra Cups; the Amount stat's extra share the guard, weapons/_orbital.ts)
+    orbitCups(w, inst, n, S.amount - w.stats.amount + extra, ORBIT_R * S.area, S.L.speed ?? 3, S.dmg, L.every ?? 0.5, inst.slot, L.block ?? 1, L.mend ?? 2.5, dt);
     inst.timer -= dt;
     if (inst.timer <= 0) {
       inst.timer = S.cd;
       spill(w, inst, S);
     }
     capPuddles(inst);
-    sip(w, inst, inPuddle(w, inst), L.heal ?? 1, dt);
+    warmTea(w, inst, L.heal ?? 1.5, dt);
     cupToss(w, inst, dt);
   },
   dispose(_w, inst) {
@@ -314,8 +393,10 @@ function spill(w: World, inst: WeaponInstance, S: WStats): void {
   const big = ceremony(w) ? 2 : 1;
   const life = ((L.life ?? 4) + 0.5 * w.talentRank("pudding_refill")) * w.stats.duration;
   const dk = S.dmg / Math.max(1e-6, L.dmg);
-  teaPuddle(w, inst, c.x, c.y + CFG.playerCy * 0.75, (L.puddleR ?? 14) * S.area * big, (L.puddleDmg ?? 4) * dk, life);
-  hfx(w, HFX_PUD_SPILL, c.x, c.y);
+  // (moving: the tea lands on her path, a step ahead - she brushes it without breaking stride)
+  const at = spillSpot(w, c.x, c.y + CFG.playerCy * 0.75);
+  teaPuddle(w, inst, at.x, at.y, (L.puddleR ?? 14) * S.area * big, (L.puddleDmg ?? 4) * dk, life);
+  hfx(w, HFX_PUD_SPILL, at.x, at.y - 4, c.x, c.y);
   fired(w, inst, c.x, c.y);
 }
 
@@ -381,8 +462,13 @@ export const eternalTeaParty: WeaponDef = {
   color: C.gold,
   sfx: "teacup",
   evolved: true,
-  desc: "EVOLUTION! A flying teapot pours a scalding tea moat around you while six cups fling hot droplets.",
-  levels: [{ dmg: 16, cd: 1.2, amount: 6, speed: 3.4, every: 0.4, moatR: 44, moatW: 10, moatDmg: 10, slow: 0.7, dropDmg: 12, killHeal: 8, petit: 0.02, knock: 30 }],
+  desc: "EVOLUTION! A flying teapot pours a scalding tea moat around you and warm tea on your path; six sturdy cups fling hot droplets and block shots.",
+  levels: [
+    {
+      dmg: 16, cd: 1.2, amount: 6, speed: 3.4, every: 0.4, moatR: 44, moatW: 10, moatDmg: 10, slow: 0.7, dropDmg: 12, killHeal: 8, petit: 0.02, knock: 30,
+      pour: 2, puddleR: 20, puddleDmg: 8, life: 4, heal: 3.5, block: 2, mend: 1.5,
+    },
+  ],
   upgrades: [],
   init(w) {
     moatKills(w);
@@ -392,9 +478,10 @@ export const eternalTeaParty: WeaponDef = {
     const S = wstats(w, inst);
     const L = S.L;
     const dk = S.dmg / Math.max(1e-6, L.dmg);
-    const n = Math.min(10, S.amount + w.talentRank("pudding_extra_cups"));
+    const extra = w.talentRank("pudding_extra_cups");
+    const n = Math.min(10, S.amount + extra);
     // cups on CH_MISC: the moat owns the slot channel
-    orbitCups(w, inst, n, ORBIT_R * Math.sqrt(S.area), L.speed ?? 3.4, S.dmg, L.every ?? 0.4, CH_MISC, dt);
+    orbitCups(w, inst, n, S.amount - w.stats.amount + extra, ORBIT_R * Math.sqrt(S.area), L.speed ?? 3.4, S.dmg, L.every ?? 0.4, CH_MISC, L.block ?? 2, L.mend ?? 1.5, dt);
     // the moat (one attached ring band, re-made if lost)
     let moat: Projectile | null = null;
     for (let i = 0; i < inst.projs.length; i++) if (inst.projs[i].a === MOAT) moat = inst.projs[i];
@@ -428,7 +515,7 @@ export const eternalTeaParty: WeaponDef = {
       let j = 0;
       for (let i = 0; i < inst.projs.length; i++) {
         const c = inst.projs[i];
-        if (c.a !== CUP || c.dead) continue;
+        if (c.a !== CUP || c.dead || c.r <= 0) continue;
         // the k-th cup takes the k-th nearest target outside the moat
         let t: Enemy | null = null;
         while (j < m) {
@@ -446,8 +533,20 @@ export const eternalTeaParty: WeaponDef = {
       }
       fired(w, inst, pl.x, pl.y);
     }
-    // (Flying Teacup Service puddles heal like Teapot Tempest's)
-    sip(w, inst, inPuddle(w, inst), 1.5, dt);
+    // the teapot pours warm tea on her path every `pour` s (at her feet while she stands still)
+    const d = inst.data;
+    d.pour = (d.pour ?? 0.5) - dt;
+    if (d.pour <= 0) {
+      d.pour = (L.pour ?? 2) * w.stats.cooldown;
+      const pl = w.player;
+      const at = spillSpot(w, pl.x, pl.y);
+      const life = ((L.life ?? 4) + 0.5 * w.talentRank("pudding_refill")) * w.stats.duration;
+      teaPuddle(w, inst, at.x, at.y, (L.puddleR ?? 20) * S.area * big, (L.puddleDmg ?? 8) * dk, life);
+      hfx(w, HFX_PUD_SPILL, at.x, at.y - 4, pl.x, pl.y - 34);
+    }
+    capPuddles(inst);
+    // (path pours and Flying Teacup Service puddles both warm her up)
+    warmTea(w, inst, L.heal ?? 3.5, dt);
     cupToss(w, inst, dt);
   },
   dispose(_w, inst) {

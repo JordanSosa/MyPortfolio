@@ -67,6 +67,12 @@ export const CFG = {
   limitBreakDmg: 0.2,
   /** An evolution inherits this much extra damage per Limit Break level its base weapon had when it evolved. */
   limitBreakInherit: 0.15,
+  /**
+   * Orbital Guard mend time (weapons/_orbital.ts mendTime): `cd` = the share of the cooldown stat's rate
+   * that speeds a mend up, `amount` = the exponent of the extra-body dilution (bodies / the weapon's own
+   * count), `share` = extra recovery per extra guarding weapon held. Lab what-if: --set "cfg.guard.cd=1".
+   */
+  guard: { cd: 0.5, amount: 0.5, share: 0.5 },
   /** Level-up skip refund: this fraction of the current level's XP cost, plus coins. */
   skipXp: 0.25,
   skipCoins: 10,
