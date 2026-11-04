@@ -2253,7 +2253,7 @@
   grid-template-rows: auto;
   justify-content: center;
 }
-.summon.one .cd {
+.summon.one .gc-cd {
   aspect-ratio: 3 / 4;
 }
 @media (orientation: landscape) {
@@ -2268,14 +2268,14 @@
     grid-template-rows: auto auto;
     gap: 0.6em;
   }
-  .summon.ten .cd {
+  .summon.ten .gc-cd {
     aspect-ratio: 3 / 4;
   }
   .summon.one .sm-cards {
     grid-template-columns: min(30vw, 15em, calc((100vh - var(--top) - var(--sumh) - 1em) * 0.75));
   }
 }
-.cd {
+.gc-cd {
   position: relative;
   min-width: 0;
   min-height: 0;
@@ -2287,7 +2287,7 @@
   transform-style: preserve-3d;
   transition: transform 0.36s cubic-bezier(0.3, 1.35, 0.5, 1);
 }
-.cd.flip .cd-in {
+.gc-cd.flip .cd-in {
   transform: rotateY(180deg);
 }
 .cd-back,
@@ -2312,7 +2312,7 @@
   color: var(--rc2, #fff);
   text-shadow: var(--ol1), 0 0 10px var(--rc, #fff);
 }
-.cd.hi .cd-back::after {
+.gc-cd.hi .cd-back::after {
   content: "";
   position: absolute;
   inset: 0;
@@ -2320,7 +2320,7 @@
   transform: translateX(-110%);
   animation: shine 1.4s ease-in-out infinite;
 }
-.cd.tease .cd-in {
+.gc-cd.tease .cd-in {
   animation: tease 0.34s linear;
 }
 @keyframes tease {
@@ -2391,7 +2391,7 @@
   font-size: max(8px, 0.56em);
   padding: 0.08em 0.35em 0.12em;
 }
-.cd.flip .cd-chip {
+.gc-cd.flip .cd-chip {
   animation: chip-pop 0.42s 0.22s cubic-bezier(0.3, 1.8, 0.5, 1) both;
 }
 @keyframes chip-pop {
@@ -2574,7 +2574,7 @@
 .sm-btns .btn {
   min-width: 9em;
 }
-.summon.done .cd {
+.summon.done .gc-cd {
   cursor: pointer;
 }
 @media (orientation: landscape) and (max-height: 520px) {

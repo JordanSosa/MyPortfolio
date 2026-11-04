@@ -76,7 +76,7 @@ export function machineArt(): string {
 /** Result card: face-down back (rarity-coloured, corner ornaments) + face (art, badge, name, result chip). */
 export function cardHtml(it: GachaItem, i: number, chip: string, extra = "", sub = ""): string {
   const rc = RARITY_CLS[it.rarity];
-  return `<div class="cd r-${rc}${isSsrPlus(it.rarity) ? " hi" : ""} ${extra}" style="--i:${i}" data-i="${i}">
+  return `<div class="gc-cd r-${rc}${isSsrPlus(it.rarity) ? " hi" : ""} ${extra}" style="--i:${i}" data-i="${i}">
     <div class="cd-in">
       <div class="cd-back"><i class="cd-emb">✦</i>${cardCorners(it.rarity)}</div>
       <div class="cd-face rf r-${rc}">

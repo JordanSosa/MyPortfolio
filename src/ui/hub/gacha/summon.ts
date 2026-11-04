@@ -155,7 +155,7 @@ export class Summon implements Tickable {
       <button class="sm-skip" data-nav data-act="skip">${esc(C.SKIP)}</button>`;
     this.fx = this.rm ? null : new Particles("sm-fx");
     if (this.fx) this.el.insertBefore(this.fx.el, this.q(".sm-world"));
-    this.cards = Array.from(this.el.querySelectorAll<HTMLElement>(".cd"));
+    this.cards = Array.from(this.el.querySelectorAll<HTMLElement>(".gc-cd"));
     host.ui.appendChild(this.el);
     this.layer = { root: this.el, onBack: () => (this.done ? this.close() : this.skip()), focus: null };
     host.nav.push(this.layer);

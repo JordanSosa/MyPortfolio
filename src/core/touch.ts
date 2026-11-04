@@ -50,7 +50,7 @@ const CSS = `
   box-shadow:0 0 20px rgba(79,230,223,.75),inset 0 -6px 0 rgba(31,42,115,.35),0 4px 0 rgba(45,27,69,.5);font-size:19px}
 .kk-dash .fil{stroke:#bafff6}
 .kk-dash .glo{stroke:#4fe6df}
-.kk-dash.cd{filter:saturate(.45) brightness(.8)}
+.kk-dash.kk-cd{filter:saturate(.45) brightness(.8)}
 .kk-ult{width:74px;height:74px;right:calc(58px + env(safe-area-inset-right,0px));bottom:calc(134px + env(safe-area-inset-bottom,0px));
   background:radial-gradient(circle at 35% 28%,#fff 0 9%,#ffb8dc 30%,#b47cff 72%,#743fd1 100%);
   box-shadow:0 0 14px rgba(180,124,255,.6),inset 0 -6px 0 rgba(45,27,69,.35),0 4px 0 rgba(45,27,69,.5);font-size:12.5px;
@@ -184,7 +184,8 @@ export class TouchControls {
     }
     if (ready !== this.dashReady) {
       this.dashReady = ready;
-      this.dashBtn.classList.toggle("cd", !ready);
+      // namespaced: a bare "cd" class collided with the gacha card styles (global .cd{position:relative} threw the button to the top-left)
+      this.dashBtn.classList.toggle("kk-cd", !ready);
       if (ready) play(this.dashBtn, POP_KF, POP_OPTS);
     }
   }
