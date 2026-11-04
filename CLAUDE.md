@@ -43,7 +43,7 @@ Further docs:
 | Unit tests while iterating | `npm test` (the fast suite); `npm run test:slow` / `npm run test:all` for long headless runs | 8 s / 40 s / 50 s |
 | Type errors | `npm run typecheck` | 2 s |
 | To *see* the game (any change to UI, art, fx or layout) | `npm run scenes`, then open `shots/scenes/latest/contact.png` | ~70 s for 82 shots |
-| A narrower visual check | `npm run scenes -- --only boss:,ult: --devices i13,se`; `--all` covers all 81 scenarios | seconds |
+| A narrower visual check | `npm run scenes -- --only boss:,ult: --devices i13,se`; `--all` covers all 86 scenarios | seconds |
 | A transient effect (an ult, a flash, a phase change) | film it: `npm run scenes -- --only "ult:kuro~180/15"` (a checked shot every 15 frames for 180) or `--film` | ~6 s |
 | Visual regressions | `npm run scenes -- --baseline` once, then `npm run scenes -- --diff` | |
 | A specific game state | `/?scenario=<name>&step=1`, then `__kk.step(n)` and `await __kk.snapshot()` (JSON). List: `await __kk.scenarios()` | <1 s |
@@ -51,7 +51,7 @@ Further docs:
 | A balance or difficulty answer | `npm run balance:lab` and what-ifs with `--set "boss.*.hp*=0.9"` | 10 s warm, 85 s cold |
 | Publishing the artifact | `npm run check:artifact` (the CSP boot check); publish `shots/artifact/kira-kira-overdrive.html` | 18 s |
 | A change to audio | `npm run check:audio` (phone cost budget + lite-profile shape, clipping, NaN; the profile each device gets; Android focus-loss recovery) | 18 s |
-| The real flows with real taps | `node scripts/e2e.mjs` (3 devices in parallel) | ~3 min |
+| The real flows with real taps | `node scripts/e2e.mjs` (3 devices in parallel) | ~4.5 min |
 | Did a tool really catch an old bug? | `docs/DEVTOOLS.md` §8: export the old commit, link `node_modules`, run the tool from the copy | |
 | A change to CSS or class names | `npm run lint:css` | 1 s |
 | Bundle growth | `npm run check:bundle` (main-chunk budget; dev code must stay lazy) | 5 s |

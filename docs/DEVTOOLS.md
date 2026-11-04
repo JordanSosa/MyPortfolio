@@ -82,7 +82,7 @@ Measured on this container (headless Chromium + SwiftShader, 4 cores shared): `r
 `await __kk.scenario(name, { seed, hero, profile })` -> `{ ok, ms, marks, error, screen, modal, t }`.
 At boot `<html data-kk-scenario="pending|ready|error">` and `__kk.scenarioState` report progress, so a
 script waits with `page.waitForFunction(() => document.documentElement.dataset.kkScenario !== "pending")`.
-`__kk.scenarios()` lists every concrete name (81 today: parametric kinds expand over the registries).
+`__kk.scenarios()` lists every concrete name (86 today: parametric kinds expand over the registries).
 
 | Name | State |
 | --- | --- |

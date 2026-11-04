@@ -1219,7 +1219,7 @@ npm run test:slow              # tests tagged { tags: ["slow"] }: full stage run
 npm run test:all               # both (the pre-split `npm test`): unit + headless bot runs, bosses, ults, determinism,
                                # run integrity, AutoQuality / save validation / fmtNum (tests/quality.test.ts)
                                # (testTimeout 60 s, 240 s for "slow": the full-run sims take 5-9 s on a loaded machine)
-node scripts/e2e.mjs           # (~2.5 min: the 3 devices in parallel, one browser each; --serial ~5 min)
+node scripts/e2e.mjs           # (~4.5 min: the 3 devices in parallel, one browser each; --joystick ~35 s)
                                # desktop + mobile portrait + mobile landscape: splash -> hub -> PLAY -> episodes -> loadout
                                # -> START EPISODE -> run -> quit -> Episode Results -> hub; hub pages (board buy, talents,
                                # pull, wiki, settings export, Android Back); autoplay level-up / chest / pause / results
