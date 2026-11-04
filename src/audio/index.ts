@@ -33,6 +33,8 @@ class RealtimeAudio implements AudioAPI {
   private engine: Engine | null = null;
   private timer: ReturnType<typeof setInterval> | null = null;
   private failed = false;
+  /** Phone audio profile (wantLite). */
+  private lite = false;
   private hooked = false;
   private wantSuspended = false;
   private everRunning = false;
@@ -77,11 +79,25 @@ class RealtimeAudio implements AudioAPI {
       this.failed = true;
       return;
     }
-    let ctx: AudioContext;
-    try {
-      ctx = new C({ latencyHint: "interactive" });
-    } catch {
-      ctx = new C();
+    this.lite = wantLite();
+    // Phones: half the sample rate (half the synthesis cost; plenty for chiptune on a phone speaker) and
+    // bigger buffers ('playback') so a busy frame does not underrun into static. Desktop keeps the full
+    // rate and the lowest latency.
+    const tries: AudioContextOptions[] = this.lite
+      ? [{ latencyHint: "playback", sampleRate: 24000 }, { latencyHint: "playback" }, {}]
+      : [{ latencyHint: "interactive" }, {}];
+    let ctx: AudioContext | null = null;
+    for (const o of tries) {
+      try {
+        ctx = new C(o);
+        break;
+      } catch {
+        /* try the next, simpler option set */
+      }
+    }
+    if (!ctx) {
+      this.failed = true;
+      return;
     }
     this.ctx = ctx;
     this.createdAt = now();
@@ -111,7 +127,7 @@ class RealtimeAudio implements AudioAPI {
   private build(ctx: AudioContext): void {
     if (this.ctx !== ctx || this.engine) return;
     try {
-      this.engine = new Engine(ctx);
+      this.engine = new Engine(ctx, { lite: this.lite });
     } catch (e) {
       console.warn("[audio] engine init failed", e);
       this.failed = true;
@@ -286,6 +302,22 @@ class RealtimeAudio implements AudioAPI {
   resume(): void {
     this.wantSuspended = false;
     this.kick();
+  }
+}
+
+/**
+ * The phone audio profile: touch-first devices (coarse pointer) or Android / iOS user agents.
+ * `?audio=full` / `?audio=lite` override it (testing).
+ */
+function wantLite(): boolean {
+  try {
+    const q = new URLSearchParams(location.search).get("audio");
+    if (q === "full") return false;
+    if (q === "lite") return true;
+    if (typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches) return true;
+    return /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+  } catch {
+    return false;
   }
 }
 

@@ -31,9 +31,23 @@ import { kitFor, semis, Voice, type Kit } from "./synth";
 export const SFX_REV_MS = 900;
 export const MUSIC_REV_MS = 1300;
 export const MAX_VOICES = 24;
+/** Phone profile voice cap. */
+export const MAX_VOICES_LITE = 12;
+
+/**
+ * Engine options. `lite` = the phone profile: phones crackled because the full graph (two stereo
+ * convolution reverbs + up to 24 synth voices) needed more than one real-time audio core in busy
+ * fights. Lite drops the music reverb, shortens the sfx impulse and caps voices at 14; the context
+ * itself is also created at 24 kHz with a 'playback' latency hint (src/audio/index.ts).
+ */
+export interface EngineOpts {
+  lite?: boolean;
+}
 /** Global budget for new low-priority voices: per 1/60 s window, and a token bucket per second. */
 export const LOW_PER_FRAME = 3;
 export const LOW_PER_SECOND = 16;
+/** Phone profile: new low-priority voices per second (each one is several nodes; this is where busy fights spend the audio CPU). */
+export const LOW_PER_SECOND_LITE = 9;
 const LOW_BURST = 8;
 /** Fair share inside the budget: one id gets at most LOW_ID_PER_SECOND of it (hits can't starve kill pops). */
 export const LOW_ID_PER_SECOND = 4;
@@ -128,8 +142,15 @@ export class Engine {
   /** how far ahead of currentTime sfx are scheduled */
   private readonly ahead: number;
 
-  constructor(ctx: BaseAudioContext) {
+  /** Phone profile (see EngineOpts). */
+  readonly lite: boolean;
+  /** Simultaneous voice cap (MAX_VOICES, or MAX_VOICES_LITE on phones). */
+  private readonly maxVoices: number;
+
+  constructor(ctx: BaseAudioContext, opts: EngineOpts = {}) {
     this.ctx = ctx;
+    this.lite = !!opts.lite;
+    this.maxVoices = this.lite ? MAX_VOICES_LITE : MAX_VOICES;
     this.realtime = typeof OfflineAudioContext === "undefined" || !(ctx instanceof OfflineAudioContext);
     // Mobile browsers render in bursts of several quanta, so `currentTime` seen from the
     // main thread can lag the audio thread. Scheduling a little ahead keeps attacks intact.
@@ -148,7 +169,8 @@ export class Engine {
     this.sfxIn.connect(this.sfxVol);
     // (realtime: the impulses are built well after the unlock gesture, in separate idle tasks, past the
     // ~300 ms screen transition the tap starts and the first music compile: SFX_REV_MS / MUSIC_REV_MS)
-    this.sfxRev = makeReverb(ctx, this.sfxVol, 1.1, 2.2, 0.55, 0.7, 7, this.realtime ? SFX_REV_MS : -1);
+    // phones: a short sfx impulse (convolution cost grows with its length)
+    this.sfxRev = makeReverb(ctx, this.sfxVol, this.lite ? 0.55 : 1.1, 2.2, this.lite ? 0.5 : 0.55, 0.7, 7, this.realtime ? SFX_REV_MS : -1);
 
     this.duckGain = ctx.createGain();
     this.duckGain.connect(this.masterGain);
@@ -162,7 +184,11 @@ export class Engine {
     this.musicVol.connect(this.musicLP);
     this.musicIn = ctx.createGain();
     this.musicIn.connect(this.musicVol);
-    this.musicRev = makeReverb(ctx, this.musicIn, 1.8, 2.4, MUSIC_REV_WET, 0.55, 3, this.realtime ? MUSIC_REV_MS : -1);
+    // phones: no second convolver - the music keeps its ping-pong delay for space; the reverb send goes to
+    // an unconnected gain (never pulled by the graph, so it costs nothing)
+    this.musicRev = this.lite
+      ? { input: ctx.createGain(), output: ctx.createGain() }
+      : makeReverb(ctx, this.musicIn, 1.8, 2.4, MUSIC_REV_WET, 0.55, 3, this.realtime ? MUSIC_REV_MS : -1);
     this.musicDly = makeDelay(ctx, this.musicIn, 0.3, 0.38, MUSIC_DLY_WET);
   }
 
@@ -238,7 +264,7 @@ export class Engine {
       if (!oldestSame || a.start < oldestSame.start) oldestSame = a;
     }
     if (same >= max && oldestSame) this.steal(oldestSame, now);
-    if (this.voices.length >= MAX_VOICES) {
+    if (this.voices.length >= this.maxVoices) {
       let victim: Active | null = null;
       for (const a of this.voices) {
         if (!victim || a.pri < victim.pri || (a.pri === victim.pri && a.start < victim.start)) victim = a;
@@ -291,7 +317,7 @@ export class Engine {
       this.lowWinN = 0;
     }
     if (t > this.lowT) {
-      this.lowTokens = Math.min(LOW_BURST, this.lowTokens + (t - this.lowT) * LOW_PER_SECOND);
+      this.lowTokens = Math.min(LOW_BURST, this.lowTokens + (t - this.lowT) * (this.lite ? LOW_PER_SECOND_LITE : LOW_PER_SECOND));
       this.lowT = t;
     }
     let b = this.lowId.get(id);
@@ -307,7 +333,7 @@ export class Engine {
       b[0] -= 1;
       return true;
     }
-    if (this.lowWinN >= LOW_PER_FRAME || this.lowTokens < 1 || b[0] < 1) return false;
+    if (this.lowWinN >= (this.lite ? 2 : LOW_PER_FRAME) || this.lowTokens < 1 || b[0] < 1) return false;
     this.lowWinN++;
     this.lowTokens -= 1;
     b[0] -= 1;

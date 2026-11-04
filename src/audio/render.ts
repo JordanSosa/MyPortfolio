@@ -126,6 +126,8 @@ export interface ChaosOpts {
   ids?: SfxId[];
   /** Season 2 extras: lightstick on every beat, honk / transform / nani / baka every few seconds */
   s2?: boolean;
+  /** Phone audio profile (EngineOpts.lite). */
+  lite?: boolean;
 }
 
 /**
@@ -134,7 +136,7 @@ export interface ChaosOpts {
  */
 export async function renderChaos(seconds = 8, sr = 44100, o: ChaosOpts = {}): Promise<AudioBuffer> {
   const ctx = offline(seconds, sr);
-  const eng = new Engine(ctx);
+  const eng = new Engine(ctx, { lite: !!o.lite });
   let vt = 0;
   eng.clock = () => vt;
   eng.setVolumes(DEFAULT_VOLS);

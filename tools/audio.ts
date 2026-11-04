@@ -203,7 +203,13 @@ window.__audioRender = {
     const r = await renderSpam(id, count, every);
     return { ...(await pack(r.buf, true)), played: r.played };
   },
-  chaos: async (seconds: number, o?: ChaosOpts) => pack(await renderChaos(seconds, 44100, o), false),
+  chaos: async (seconds: number, o?: ChaosOpts, sr = 44100) => pack(await renderChaos(seconds, sr, o), false),
+  /** Render only (no WAV packing): for cost measurements. Returns the wall time in ms. */
+  chaosCost: async (seconds: number, o?: ChaosOpts, sr = 44100) => {
+    const t0 = performance.now();
+    await renderChaos(seconds, sr, o);
+    return performance.now() - t0;
+  },
   scenes: Object.keys(SCENES),
   scene: async (name: string) => pack(await renderScene(SCENES[name].steps, SCENES[name].seconds), false),
   track: async (track: Exclude<MusicTrack, "none">, o: TrackRenderOpts) => {
