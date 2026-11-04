@@ -1,9 +1,11 @@
 /**
- * Boot: fonts, page shell, app (renderer + atlas + input + audio + screens), debug hooks.
+ * Boot: fonts, page shell, atlas, app (renderer + input + audio + screens), debug hooks.
  *
  * index.html carries a static, inline-styled splash (#boot) so the first paint
- * is immediate; boot() waits one animation frame (so that splash is on screen
- * before the long App constructor) and removes it once the app has started.
+ * is immediate; boot() waits one animation frame (so that splash is on screen),
+ * loads the texture atlas (the production build's baked atlas.png, or the
+ * sprites painted at runtime on the dev server: render/atlas-source.ts, docs/
+ * ENGINE.md "Boot path"), builds the App and removes the splash once it runs.
  * A constructor failure only reports "needs WebGL2" when WebGL2 really is
  * missing; anything else (e.g. a bad saved setting) resets the settings and
  * retries once before showing a generic error.
@@ -16,6 +18,7 @@ import "./ui/kit/kit.css";
 import "./ui/hub/hub.css";
 import { readParams } from "./debug/params";
 import { installHooks } from "./debug/hooks";
+import { preloadAtlas } from "./render/atlas-source";
 import { App } from "./ui/app";
 import { resetSettings } from "./ui/save";
 
@@ -91,8 +94,15 @@ async function boot(): Promise<void> {
     },
     { passive: false },
   );
-  // let the static splash (index.html #boot) paint before the long constructor runs
+  // let the static splash (index.html #boot) paint before the atlas loads and the constructor runs
   await new Promise<void>((r) => requestAnimationFrame(() => r()));
+  try {
+    await preloadAtlas();
+  } catch (e) {
+    console.error(e);
+    fatal("The game's art could not be loaded.<br>Please check your connection and reload the page.");
+    return;
+  }
   const app = createApp();
   if (!app) return;
   installHooks(app);

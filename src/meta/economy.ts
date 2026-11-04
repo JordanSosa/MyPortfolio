@@ -183,7 +183,10 @@ export function computePayout(inp: PayoutInput): Payout {
   c.mul("curse", "Curse", heatMul(curse, P.curseRewardPer), "More enemies, more rewards");
 
   const g = new Ledger();
-  g.add("trickle", "Episode stipend", P.gemsPerRun + (s.time / 60) * P.gemsPerMinute + (s.endlessTime / 60) * P.endlessGemsPerMinute);
+  // the flat stipend is earned over the first minute: an instant quit (pause -> DROP) pays ~0, so a
+  // RETRY / quit loop never farms gems (or their heat / curse / stage multipliers) without any risk
+  const stipend = P.gemsPerRun * Math.min(1, Math.max(0, s.time) / P.stipendSeconds);
+  g.add("trickle", "Episode stipend", stipend + (s.time / 60) * P.gemsPerMinute + (s.endlessTime / 60) * P.endlessGemsPerMinute);
   g.mul("gemFind", "Gem find", Math.max(0, s.gemFind ?? 1));
   g.mul("heat", `Heat ${s.heat}`, heatMul(s.heat, P.heatGemPer));
   g.mul("curse", "Curse", heatMul(curse, P.curseRewardPer));

@@ -9,6 +9,8 @@ import { RARITIES, type Rarity } from "../../game/defs";
 import { gameContent, type MetaContent } from "../content";
 import { discover } from "../codex";
 import { addHeroCopy } from "../heroes";
+import { autoEquipNewRelics } from "../loadout";
+import { evaluateUnlocks, type UnlockEvent } from "../unlocks";
 import type { BannerKind, DupeResult, Profile, PullRecord } from "../profile";
 import { TUNING } from "../tuning";
 import { mathRandom, type RandomSource } from "../util";
@@ -52,6 +54,27 @@ export interface PullOutcome {
   codexGems: number;
   /** The MYTHIC spark is claimable. */
   sparkReady: boolean;
+  /** Unlocks the new items completed right away (a hero's signature weapon, hero-count passives ...). */
+  unlocks: UnlockEvent[];
+  /** First-time relics put into free relic slots (autoEquipNewRelics). */
+  equipped: string[];
+}
+
+/** What a grant finished on the account: unlock rules met by it, and new relics auto-equipped. */
+export interface GrantFollowUp {
+  unlocks: UnlockEvent[];
+  equipped: string[];
+}
+
+/**
+ * After items were granted (pulls, exchange buys, the spark): unlock rules they completed (a new
+ * hero's signature weapon, "own 4 heroes" ...) fire now instead of at the next run's Results, and
+ * relics owned for the first time go into free relic slots.
+ */
+export function afterGrant(p: Profile, results: readonly Pick<PullResult, "item" | "result">[], ctx: MetaContent = gameContent()): GrantFollowUp {
+  const unlocks = evaluateUnlocks(p, ctx).filter((u) => !u.start);
+  const fresh = results.filter((r) => r.item.kind === "relic" && r.result === "new").map((r) => r.item.id);
+  return { unlocks, equipped: autoEquipNewRelics(p, fresh, ctx) };
 }
 
 const ROLLER = new RarityRoller();
@@ -120,7 +143,7 @@ export interface PullOpts {
  */
 export function pull(p: Profile, banner: BannerKind, count: 1 | 10, rng: RandomSource = mathRandom, ctx: MetaContent = gameContent(), opts: PullOpts = {}): PullOutcome {
   const G = TUNING.gacha;
-  const fail = (error: PullError): PullOutcome => ({ ok: false, error, banner, results: [], best: "N", gemsSpent: 0, copium: 0, codexGems: 0, sparkReady: p.gacha.spark >= G.spark });
+  const fail = (error: PullError): PullOutcome => ({ ok: false, error, banner, results: [], best: "N", gemsSpent: 0, copium: 0, codexGems: 0, sparkReady: p.gacha.spark >= G.spark, unlocks: [], equipped: [] });
   if (count !== 1 && count !== 10) return fail("count");
   const view = bannerView(p, banner, ctx);
   if (!view.available) return fail("banner");
@@ -223,7 +246,8 @@ export function pull(p: Profile, banner: BannerKind, count: 1 | 10, rng: RandomS
   }
   if (count === 10) stats.tenPulls++;
   stats.gemsSpent += cost;
-  return { ok: true, banner, results, best: rarityAt(best), gemsSpent: cost, copium, codexGems, sparkReady: p.gacha.spark >= G.spark };
+  const follow = afterGrant(p, results, ctx);
+  return { ok: true, banner, results, best: rarityAt(best), gemsSpent: cost, copium, codexGems, sparkReady: p.gacha.spark >= G.spark, unlocks: follow.unlocks, equipped: follow.equipped };
 }
 
 // ---------------------------------------------------------------- spark
@@ -238,7 +262,7 @@ export function sparkChoices(ctx: MetaContent = gameContent()): GachaItem[] {
 }
 
 /** Claim the MYTHIC spark (TUNING.gacha.spark pulls): any MYTHIC of your choice. */
-export function claimSpark(p: Profile, id: string, ctx: MetaContent = gameContent()): { ok: boolean; reason?: "pulls" | "item"; result?: PullResult } {
+export function claimSpark(p: Profile, id: string, ctx: MetaContent = gameContent()): { ok: boolean; reason?: "pulls" | "item"; result?: PullResult } & Partial<GrantFollowUp> {
   const G = TUNING.gacha;
   if (p.gacha.spark < G.spark) return { ok: false, reason: "pulls" };
   const item = sparkChoices(ctx).find((x) => x.id === id);
@@ -249,7 +273,7 @@ export function claimSpark(p: Profile, id: string, ctx: MetaContent = gameConten
   p.lifetime.copiumEarned += g.copium;
   p.gacha.stats.copiumEarned += g.copium;
   const result: PullResult = { item, rarity: item.rarity, result: g.result, level: g.level, copium: g.copium, featured: false, lost5050: false, won5050: false, pity: "", pityCount: 0, codexGems: g.codexGems };
-  return { ok: true, result };
+  return { ok: true, result, ...afterGrant(p, [result], ctx) };
 }
 
 // ---------------------------------------------------------------- stats view

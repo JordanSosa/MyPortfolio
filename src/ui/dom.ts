@@ -54,10 +54,19 @@ const decoded: HTMLImageElement[] = [];
 /**
  * Encode the UI sprites ahead of time in small idle chunks, and decode them
  * (img.decode()), so opening a modal never stalls on PNG encoding or on
- * decoding a dozen icons inside its first paint mid-game.
+ * decoding a dozen icons inside its first paint mid-game. Real idle time only
+ * (requestIdleCallback without a timeout, a slice never longer than 8 ms; a
+ * 50 ms timer where it is missing), and nothing at all while `canRun()` says
+ * no (a run, a modal, an overlay, a screen change): the queue waits on a
+ * coarse timer instead of polling every frame. List the most-needed sprites
+ * first.
  */
-export function prewarmSprites(ids: [string, number][]): void {
+/** Sprite prewarm progress (debug / perf scripts: `__kk.prewarm()`). */
+export const prewarmState = { done: 0, total: 0 };
+
+export function prewarmSprites(ids: [string, number][], canRun: () => boolean = () => true): void {
   let i = 0;
+  prewarmState.total += ids.length;
   const decode = (url: string) => {
     if (!url || typeof Image === "undefined") return;
     const im = new Image();
@@ -65,16 +74,24 @@ export function prewarmSprites(ids: [string, number][]): void {
     decoded.push(im);
     im.decode?.().catch(() => {});
   };
-  const idle = (cb: () => void) => {
-    const ric = (window as Window & { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number }).requestIdleCallback;
-    if (ric) ric(cb, { timeout: 300 });
-    else setTimeout(cb, 16);
+  type Deadline = { timeRemaining(): number };
+  const ric = (window as Window & { requestIdleCallback?: (cb: (d: Deadline) => void) => number }).requestIdleCallback;
+  const idle = (cb: (d?: Deadline) => void) => {
+    if (ric) ric(cb);
+    else setTimeout(cb, 50);
   };
-  const step = () => {
+  const step = (d?: Deadline) => {
+    if (!canRun()) {
+      // blocked (gameplay, a modal...): look again in a while, never every frame
+      setTimeout(() => idle(step), 500);
+      return;
+    }
     const t0 = performance.now();
-    while (i < ids.length && performance.now() - t0 < 6) {
+    const budget = d ? Math.min(8, d.timeRemaining()) : 6;
+    while (i < ids.length && performance.now() - t0 < budget) {
       const [id, f] = ids[i++];
       decode(sprite(id, f));
+      prewarmState.done++;
     }
     if (i < ids.length) idle(step);
   };

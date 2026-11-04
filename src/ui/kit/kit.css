@@ -22,8 +22,11 @@
 .kscroll-x {
   overflow-x: auto;
   overflow-y: hidden;
-  overscroll-behavior: contain;
-  touch-action: pan-x;
+  /* a vertical swipe that starts on the strip still scrolls the page (pan-y + no y containment);
+     only the sideways overscroll stays inside the strip (no browser back-swipe) */
+  overscroll-behavior-x: contain;
+  overscroll-behavior-y: auto;
+  touch-action: pan-x pan-y;
   scrollbar-width: none;
 }
 .kscroll-x::-webkit-scrollbar {
@@ -617,9 +620,11 @@ button.krow:active {
   padding: 0.3em 0.2em 0.5em;
   overflow-x: auto;
   overflow-y: hidden;
-  touch-action: pan-x;
+  /* (same as .kscroll-x: vertical swipes starting on the tabs scroll the page) */
+  touch-action: pan-x pan-y;
   scrollbar-width: none;
-  overscroll-behavior: contain;
+  overscroll-behavior-x: contain;
+  overscroll-behavior-y: auto;
   flex: none;
 }
 .tabbar::-webkit-scrollbar {

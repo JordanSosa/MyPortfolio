@@ -257,7 +257,9 @@ export function applyRunToProfile(p: Profile, summary: RunInput, ctx: MetaConten
   }
 
   // --- banner rotation, unlocks, achievements
-  const rotated = advanceRotation(p);
+  // (only runs that were really played count toward the rotation: a RETRY / quit loop never spins the
+  // banners; the run still counts for the episode number above)
+  const rotated = s.time >= TUNING.rotation.minRunSeconds || s.stageCleared ? advanceRotation(p) : false;
   const unlocks = evaluateUnlocks(p, ctx).filter((e) => !e.start);
   const achievements = evaluateAchievements(p, s, ctx);
   for (const a of achievements) if (a.unlocked) unlocks.push(a.unlocked);

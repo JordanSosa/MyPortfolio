@@ -95,13 +95,14 @@ export function stagesPage(hub: Hub): HubPage {
         <span class="ep-no">EP ${e.order}</span>
         ${open && info ? `<span class="ep-rate">Ratings ×${ratingMul(info.rewardMul)}</span>` : ""}
         ${open && (rec?.clears ?? 0) > 0 ? `<span class="ep-clear">CLEARED ✓</span>` : ""}
+        ${open && !((rec?.runs ?? 0) > 0) ? `<span class="ep-new">NEW!</span>` : ""}
         ${e.state === "production" ? `<span class="ep-prod">NOW IN PRODUCTION</span>` : ""}
       </span>
       <span class="ep-body">
         <b class="ep-name">${name}</b>
         <small class="ep-sub">${sub}</small>
         <span class="ep-blurb">${blurb}</span>
-        ${open ? `<span class="ep-recs">${stageRecords(rec, info)}</span>` : `<span class="ep-lock"><i class="lock-i"></i></span>`}
+        ${open ? `<span class="ep-recs">${stageRecords(rec, info, true)}</span>` : `<span class="ep-lock"><i class="lock-i"></i></span>`}
       </span>
     </button>`;
   };

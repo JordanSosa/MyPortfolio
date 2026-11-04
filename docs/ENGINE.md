@@ -48,9 +48,11 @@ All drawing must happen **between `beginFrame` and `endFrame`**.
 
 ## 2. Renderer (`src/render/renderer.ts`)
 
-`new Renderer({ canvas?, parent?, quality?, clearColor?, extraSprites?, pixelScale? })`
-creates a fixed full-screen canvas (with `touch-action: none`), builds the atlas
-and sets up WebGL2. It throws if WebGL2 is unavailable.
+`new Renderer({ canvas?, parent?, quality?, clearColor?, atlas?, pixelScale? })`
+creates a fixed full-screen canvas (with `touch-action: none`), takes the atlas
+that `preloadAtlas()` loaded (section 10: `await preloadAtlas()` once before the
+first Renderer; `atlas` overrides it) and sets up WebGL2. It throws if WebGL2 is
+unavailable.
 
 Pixel scale (DESIGN 8.1): the short side of the screen shows
 `clamp(minCssDim / 1.8, 200, 300)` art px, so a portrait phone is about 216 px
@@ -502,3 +504,51 @@ resolution:
   With "Reduce flashing" on, the show-degrading directives are ignored and the
   boss's view draws a corner badge naming the phase instead.
 
+
+## 10. Boot path: the baked atlas (`src/render/atlas-source.ts`, `tools/bake-atlas.ts`)
+
+The production build never paints a sprite on the player's device. Painting,
+rasterising and packing the ~410 sprite modules at module load used to be a
+2.5 s main-thread task on a mid phone (4x CPU throttle) before the first frame.
+
+```
+index.html  static #boot splash (inline styles: first paint)
+main.ts     rAF (splash on screen) -> await preloadAtlas() -> new App() -> app.start() -> remove #boot
+              |                                         Renderer constructor: takeAtlas() (sync)
+              +- production: virtual:kk-atlas { meta, url } -> fetch atlas.png -> texels -> Atlas.fromBaked
+              +- dev server / Vitest / tools: await import("../art/sprites/index") -> new Atlas({ sprites, fonts })
+```
+
+- **Build** (`vite.config.ts` plugin `kko-baked-atlas`, `buildStart`): runs
+  `tools/bake-atlas.ts` through Vite's module runner (`runnerImport`: the
+  registry uses `import.meta.glob`), i.e. `new Atlas({ sprites: ALL_SPRITES,
+  fonts: ALL_FONTS })` in Node (no GL), and serves `virtual:kk-atlas` =
+  `{ meta, url }`: `meta` = `atlas.toBaked()` (size, frame tables
+  fx/fy/fw/fh/fox/foy, sprite infos, font tables, `missing`) plus the texel
+  palette and an FNV-1a hash; `url` = the emitted `assets/atlas-<hash>.png`, or a
+  `data:` URI in `--mode single`. On the dev server and in Vitest the module is
+  `null`. `import.meta.env.PROD` drops the runtime branch from the bundle, so no
+  sprite module ships (the main chunk is ~280 KB smaller).
+- **atlas.png** is not an RGBA image: the atlas holds only ~475 distinct
+  premultiplied texels, so the PNG is 8-bit grayscale, `width x 2·height`, of
+  16-bit indices into `meta.palette` (rows `[0, h)` low bytes, `[h, 2h)` high
+  bytes; PNG filter 0; zlib default strategy). ~130 KB, where an RGBA PNG of the
+  same texels is 0.7-1 MB.
+- **Load** (`preloadAtlas`): where `DecompressionStream` exists, the IDAT
+  stream is inflated natively and the filter-0 scanlines ARE the index planes
+  (exact by construction, no JS PNG decoder); elsewhere (iOS < 16.4) the
+  browser decodes the PNG and the planes are read back from a canvas (opaque
+  gray survives exactly; `meta.hash` is checked and a mismatch is warned). The
+  palette lookup produces exactly the premultiplied bytes `buildPixels()`
+  uploads, kept for `upload()` (context restore).
+- **DOM icons**: a baked atlas cuts `raster(id)` frames out of the texels on
+  first use (cached). Opaque / clear texels are exact; a partly transparent
+  texel gets the colour that premultiplies back to the same texel, so
+  `canvas()` / `dataURL()` produce the same PNGs as the painted rasters
+  (checked for every sprite in `shots/.../atlas-compare.mjs`).
+- **extraSprites** (stand-in art, `tools/engine-test.ts`):
+  `preloadAtlas({ extraSprites })`. Only the runtime atlas packs them (dev
+  server); a baked atlas warns and ignores them.
+- `tests/atlas-bake.test.ts`: atlas.png decoded with pngjs + the palette is
+  byte-identical to a runtime atlas' `buildPixels()`; tables, sprite and font
+  infos deep-equal; `fromBaked` lookups and cut rasters match.

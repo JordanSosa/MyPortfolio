@@ -33,6 +33,8 @@ import { heroDef } from "../../game/heroes";
 import { WEAPONS } from "../../game/registry";
 import type { RunSummary } from "../../game/world";
 import { claimAllAchievements } from "../../meta/achievements/engine";
+import { affordableNodes } from "../../meta/board/board";
+import { bannerViews } from "../../meta/gacha/banners";
 import type { PayoutLine } from "../../meta/economy";
 import { gameContent } from "../../meta/content";
 import type { RunReport } from "../../meta/rewards";
@@ -104,7 +106,8 @@ export function showResults(app: App, s: RunSummary, r: RunReport, ep: EpisodeIn
   const rot = r.banner.rotated ? tag("NEW BANNERS IN THE MERCH MACHINE!", "rainbow") : r.banner.featuredHero || r.banner.featuredRelic ? tag(`BANNER ENDS IN ${r.banner.runsLeft} RUN${r.banner.runsLeft === 1 ? "" : "S"}!!`, "pink") : "";
   if (rot) recChips.push(rot);
   const afford = r.affordable;
-  const affordText = [afford.boardNodes > 0 ? `${afford.boardNodes} board node${afford.boardNodes === 1 ? "" : "s"}` : "", afford.tenPull ? "a 10-pull" : afford.singlePull ? "a pull" : ""].filter(Boolean).join(" · ");
+  const affordOf = (nodes: number, ten: boolean, one: boolean) => [nodes > 0 ? `${nodes} board node${nodes === 1 ? "" : "s"}` : "", ten ? "a 10-pull" : one ? "a pull" : ""].filter(Boolean).join(" · ");
+  const affordText = affordOf(afford.boardNodes, afford.tenPull, afford.singlePull);
   const maxD = Math.max(1, ...s.weapons.map((x) => x.damage));
   const gc = gradeComment(r.grade);
   const nextLine = nextTimeLine(clear, { hero: r.heroName, stage: r.stageName, n: r.episode });
@@ -114,6 +117,7 @@ export function showResults(app: App, s: RunSummary, r: RunReport, ep: EpisodeIn
     ${sparkles(clear ? 22 : 8)}
     ${clear ? confetti(46, "er-conf") : ""}
     <div class="er-top"></div>
+    ${!app.practice && !save.writeOk ? `<div class="er-savefail" role="alert">⚠ Saving failed: this episode only lives in this window. Export your save in Settings → SAVE DATA.</div>` : ""}
     <div class="er-scroll kscroll">
       <div class="er-main">
         <header class="er-head">
@@ -159,7 +163,7 @@ export function showResults(app: App, s: RunSummary, r: RunReport, ep: EpisodeIn
           <div class="nt-head"><span class="nt-k">NEXT TIME ON</span><span class="nt-logo">KIRA<i>☆</i>KIRA OVERDRIVE</span></div>
           <p class="nt-line" aria-hidden="true"><span class="nt-tx"></span><i class="nt-caret"></i></p>
         </section>
-        ${affordText ? `<section class="er-afford">You can afford: <b>${esc(affordText)}</b></section>` : ""}
+        <section class="er-afford"${affordText ? "" : " hidden"}>You can afford: <b>${esc(affordText)}</b></section>
         <details class="er-dmg"><summary>DAMAGE BREAKDOWN</summary><div class="dmg-list">${s.weapons
           .slice(0, 7)
           .map((x) => `<div class="dmg">${x.icon ? img(x.icon) : '<span class="noi">★</span>'}<div class="bar"><i style="transform:scaleX(${(x.damage / maxD).toFixed(3)})"></i><span>${esc(x.name)}</span></div><b>${fmtNum(x.damage)}</b></div>`)
@@ -316,17 +320,26 @@ export function showResults(app: App, s: RunSummary, r: RunReport, ep: EpisodeIn
   cursor += 0.3;
   // celebrations for new unlocks: always shown once (a skip / reduced motion shows them at once; a button
   // pressed before their beat shows them first, then acts)
-  const unlocks = r.unlocks.filter((u) => !u.start);
+  // (unlocks a TBC RETRY skipped, then this run's)
+  const unlocks = [...(app.practice ? [] : save.takePendingUnlocks()), ...r.unlocks].filter((u) => !u.start);
   let celebrating = false;
+  /** A button pressed while the cards are up (keyboard / gamepad focus behind them): it acts once they are done. */
+  let after: (() => void) | undefined;
   const celebrate = (then?: () => void) => {
-    if (celebrating || !unlocks.length) {
-      if (!celebrating) then?.();
+    if (celebrating) {
+      if (then) after = then;
+      return;
+    }
+    if (!unlocks.length) {
+      then?.();
       return;
     }
     celebrating = true;
     celebrateUnlocks(app, unlocks.splice(0), () => {
       celebrating = false;
-      then?.();
+      const go = after ?? then;
+      after = undefined;
+      go?.();
     });
   };
   if (unlocks.length) {
@@ -366,37 +379,63 @@ export function showResults(app: App, s: RunSummary, r: RunReport, ep: EpisodeIn
   };
 
   // ---------------------------------------------------------------- buttons
+  /** After a claim the balances moved: "You can afford" says what the gems / coins buy now (a pull, a 10-pull). */
+  const refreshAfford = () => {
+    if (app.practice) return;
+    const ctx2 = gameContent();
+    const views = bannerViews(save.profile, ctx2);
+    const text = affordOf(affordableNodes(save.profile, ctx2).length, views.some((v) => v.canPull10), views.some((v) => v.canPull1));
+    const af = el.querySelector(".er-afford") as HTMLElement | null;
+    if (!af) return;
+    af.hidden = !text;
+    const b = af.querySelector("b");
+    if (b && b.textContent !== text) {
+      b.textContent = text;
+      pop(af, 1.06);
+    }
+  };
+  /** Claim every Plot Point reward (CLAIM ALL, or on the way out: the Pilot Episode gems pay the first pull). */
+  const claim = (): { count: number; gems: number; coins: number } => {
+    if (app.practice) return { count: 0, gems: 0, coins: 0 };
+    const res = claimAllAchievements(save.profile);
+    if (!res.count) return res;
+    save.save();
+    app.sfx("currencyGain");
+    const box = el.querySelector(".ac-claim") as HTMLElement | null;
+    const land = () => cbar.sync(save.profile.currencies);
+    if (res.gems) flyCurrency(el, box, cbar.pill("gems"), "gems", 6, land);
+    if (res.coins) flyCurrency(el, box, cbar.pill("coins"), "coins", 6, land);
+    if (!res.gems && !res.coins) land();
+    if (box) box.innerHTML = tag(`CLAIMED ${[res.gems ? `+${fmtInt(res.gems)} ♦` : "", res.coins ? `+${fmtInt(res.coins)} ★` : ""].filter(Boolean).join(" ")}`, "green");
+    for (const c of el.querySelectorAll(".ach-card")) c.classList.add("claimed");
+    refreshAfford();
+    return res;
+  };
+  /** Leaving Results (UPGRADE / RETRY / HUB / Back): unclaimed gem / coin Plot Points are claimed for the player. */
+  const leave = (go: () => void) => {
+    claim();
+    celebrate(go);
+  };
   onTap(el.querySelector('[data-act="upgrade"]'), () => {
     app.sfx("uiConfirm");
-    celebrate(() => app.goHub(["home", "board"], { focus: "affordable" }));
+    leave(() => app.goHub(["home", "board"], { focus: "affordable" }));
   });
-  onTap(el.querySelector('[data-act="retry"]'), () => celebrate(() => app.retry()));
+  onTap(el.querySelector('[data-act="retry"]'), () => leave(() => app.retry()));
   onTap(el.querySelector('[data-act="hub"]'), () => {
     app.sfx("uiBack");
-    celebrate(() => app.goHub());
+    leave(() => app.goHub());
   });
   onTap(el.querySelector('[data-act="claim"]'), (e) => {
-    const res = claimAllAchievements(save.profile);
-    save.save();
     const b = e.currentTarget as HTMLElement | null;
-    if (res.count) {
-      app.sfx("currencyGain");
-      skip();
-      const box = el.querySelector(".ac-claim") as HTMLElement | null;
-      const land = () => cbar.sync(save.profile.currencies);
-      if (res.gems) flyCurrency(el, box, cbar.pill("gems"), "gems", 6, land);
-      if (res.coins) flyCurrency(el, box, cbar.pill("coins"), "coins", 6, land);
-      if (!res.gems && !res.coins) land();
-      if (box) box.innerHTML = tag(`CLAIMED ${[res.gems ? `+${fmtInt(res.gems)} ♦` : "", res.coins ? `+${fmtInt(res.coins)} ★` : ""].filter(Boolean).join(" ")}`, "green");
-      for (const c of el.querySelectorAll(".ach-card")) c.classList.add("claimed");
-    } else if (b) b.remove();
+    skip();
+    if (!claim().count && b) b.remove();
   });
   // tapping the show (not a button) skips to the end
   scroller.addEventListener("click", (e) => {
     if ((e.target as HTMLElement).closest("button, summary")) return;
     skip();
   });
-  const L = layer(el, () => celebrate(() => app.goHub()));
+  const L = layer(el, () => leave(() => app.goHub()));
   if (rm) skip();
 
   return {

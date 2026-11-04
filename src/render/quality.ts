@@ -2,7 +2,13 @@
  * Quality tiers + automatic quality controller (DESIGN 8.3).
  *
  *   const auto = new AutoQuality("mid", (tier) => applyQuality(tier));
- *   loop: auto.sample(realDt * 1000, cpuMsOfThisFrame)
+ *   loop: auto.sample(loop.rawDt * 1000, cpuMsOfThisFrame)
+ *
+ * Feed it the REAL frame interval (Loop.rawDt), not the sim's clamped dt: a
+ * 200 ms frame must count as 200 ms, or a 5 fps phone looks like 20 fps and
+ * its windows stretch to 8 s of wall time. Windows and cooldowns are wall-clock
+ * time; a single frame counts at most MAX_SAMPLE_MS (a tab switch / GC hitch is
+ * one bad frame, not a whole window).
  *
  * The controller judges 2 s windows against the display's own refresh
  * interval (estimated as the window's median frame time, never slower than
@@ -34,7 +40,8 @@ export interface QualitySettings {
  * neighbour composite, so even "low" keeps phone screens crisp (DPR 2).
  */
 export const QUALITY: Record<QualityTier, QualitySettings> = {
-  low: { dprCap: 2, glowScale: 0.5, bloom: true, particles: 1500, maxEnemies: 150 },
+  // (low is meant to be clearly cheaper: a quarter-res glow buffer and half the particles of mid)
+  low: { dprCap: 2, glowScale: 0.25, bloom: true, particles: 800, maxEnemies: 150 },
   mid: { dprCap: 2.5, glowScale: 0.5, bloom: true, particles: 3000, maxEnemies: 250 },
   high: { dprCap: 3, glowScale: 1, bloom: true, particles: 5000, maxEnemies: 350 },
 };
@@ -50,6 +57,8 @@ const WINDOW_S = 2;
 const MAX_REFRESH_MS = 1000 / 60;
 /** Frame-time buffer capacity: a 2 s window at up to 256 Hz. */
 const CAP = 512;
+/** One frame never counts for more than this (ms): a hitch, a tab switch or a debugger pause. */
+const MAX_SAMPLE_MS = 250;
 
 export class AutoQuality {
   tier: QualityTier;
@@ -89,12 +98,14 @@ export class AutoQuality {
    */
   sample(frameMs: number, cpuMs = 0): void {
     if (!this.enabled || !(frameMs > 0)) return;
+    if (frameMs > MAX_SAMPLE_MS) frameMs = MAX_SAMPLE_MS;
     const s = frameMs / 1000;
     this.cooldown -= s;
     if (this.n < CAP) this.frames[this.n++] = frameMs;
     this.cpuSum += cpuMs > 0 ? cpuMs : 0;
     this.window += s;
-    if (this.window < WINDOW_S) return;
+    // (epsilon: ten 200 ms frames must make a 2 s window despite float sums)
+    if (this.window < WINDOW_S - 1e-6) return;
     this.judge();
   }
 

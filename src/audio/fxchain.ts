@@ -68,10 +68,19 @@ export interface Reverb {
   output: GainNode;
 }
 
+/** Run `fn` when the main thread is idle (at most `timeout` ms later), or in a plain macrotask. */
+function whenIdle(fn: () => void, timeout: number): void {
+  const ric = (globalThis as { requestIdleCallback?: (cb: () => void, o?: { timeout: number }) => number }).requestIdleCallback;
+  if (ric) ric(fn, { timeout });
+  else setTimeout(fn, 0);
+}
+
 /**
- * Convolution reverb. `lazyMs` >= 0 (realtime contexts) builds the impulse in a
- * later macrotask, so the unlock gesture handler only creates nodes; the
- * convolver is silent until then. Offline renders pass -1 (built now).
+ * Convolution reverb. `lazyMs` >= 0 (realtime contexts) builds the impulse
+ * `lazyMs` later, in an idle slot (each reverb its own task), so neither the
+ * unlock gesture nor the screen transition that follows it (the hub slide-in)
+ * pays for it; the convolver is silent until then. Offline renders pass -1
+ * (built now).
  */
 export function makeReverb(ctx: BaseAudioContext, dest: AudioNode, seconds: number, decay: number, wet: number, bright = 0.6, seed = 1, lazyMs = -1): Reverb {
   const input = ctx.createGain();
@@ -88,7 +97,7 @@ export function makeReverb(ctx: BaseAudioContext, dest: AudioNode, seconds: numb
       console.warn("[audio] reverb impulse failed", e);
     }
   };
-  if (lazyMs >= 0) setTimeout(build, lazyMs);
+  if (lazyMs >= 0) setTimeout(() => whenIdle(build, 1000), lazyMs);
   else build();
   const output = ctx.createGain();
   output.gain.value = wet;

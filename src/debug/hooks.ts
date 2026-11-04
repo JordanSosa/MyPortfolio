@@ -21,10 +21,12 @@
  *   __kk.endless()             start the Filler Arc now (as if the final boss had just died in an endless run)
  *   __kk.stageFx(kind, value, seconds?, id?)   a sim stageFx directive (grade / renderScale / animFps / speedLines / still / reset)
  *   __kk.runStats()            the RunStats collected so far
+ *   __kk.prewarm()             UI sprite prewarm progress { done, total } (it waits out runs / modals / overlays)
  *   (run configs from the URL: ?stage= ?endless=1 ?twists= ?relics= ?talents= ?cons= ?flags= ... see params.ts)
  */
 import { time } from "../core/time";
 import type { App } from "../ui/app";
+import { prewarmState } from "../ui/dom";
 import { simulate, Bot } from "./bot";
 import { PASSIVE_BY_ID } from "../game/passives";
 import { BOSSES, RELICS, TWISTS, WEAPONS } from "../game/registry";
@@ -171,6 +173,9 @@ export function installHooks(app: App): void {
     },
     runStats() {
       return world()?.summary().stats ?? null;
+    },
+    prewarm() {
+      return { done: prewarmState.done, total: prewarmState.total };
     },
     setSpeed(x: number) {
       time.speed = x;

@@ -165,7 +165,8 @@ src/
   ui/                  DOM: app state machine, HUD, the Season 2 hub, screens, modals, save (section 10)
     app.ts             App: loop, screens (splash / hub / game / results), modals, level-up / chest / game-over flow,
                        settings, account runs (save.runPlan -> RunConfig) + bankRun, episode card + READY? / GO!,
-                       in-run Plot Point toasts, Back-gesture history guard, AutoQuality feed, WebGL draw throttle
+                       in-run Plot Point toasts, Back-gesture history guard, AutoQuality feed, WebGL draw rules,
+                       run-in-progress stash, save warnings / other-window reloads (section 10.1)
     session.ts         Session = World + WorldView + Feedback (real run or attract mode)
     hud.ts             HUD (XP, level, timer, kills/coins, icons, combo, boss bar, banners + boss letterbox,
                        onboarding hint / bubbles, READY?/GO! stamp); diffed, quantised, WAAPI juice (see 2.1);
@@ -173,11 +174,13 @@ src/
     cutin.ts           ultimate anime cut-in overlay (ended by the sim / App only: no wall-clock timer)
     tutorial.ts        first-runs onboarding (move hint until moved, DASH bubble until the first dash,
                        OVERDRIVE-ready bubble x2, "fills as you fight" once per run)
-    wake.ts            Screen Wake Lock during runs (re-acquired when the page is visible again)
+    wake.ts            Screen Wake Lock during unpaused runs (released by the pause menu, re-acquired on resume /
+                       when the page is visible again and no modal is open)
     nav.ts             keyboard / gamepad menu navigation (spatial focus; `refocus` after in-place re-renders)
-    save.ts            THE storage boundary: save v2 (kko.save.v2 Profile), v1 migration, repair, export / import,
-                       runPlan / recordRun, v1-shaped `save.data` view for the pre-hub screens (docs/META.md §2)
-    dom.ts             tiny DOM helpers (atlas sprite -> <img>, sprite pre-decode, `Bump` WAAPI one-shots, fmtNum)
+    save.ts            THE storage boundary: save v2 (kko.save.v2 Profile), v1 migration (gift paid once), repair,
+                       export / import, runPlan / recordRun, the run-in-progress stash, the revision guard between
+                       windows, write-failure tracking, v1-shaped `save.data` view (docs/META.md §2, section 10.1)
+    dom.ts             tiny DOM helpers (atlas sprite -> <img>, idle-time sprite prewarm, `Bump` WAAPI one-shots, fmtNum)
     styles.css         HUD / in-run modal styles (palette CSS variables)
     stinger.ts         run-start "EPISODE N" title card, the TO BE CONTINUED -> arrow banner
     kit/               hub UI kit: currency bar, buttons, tabs, cards, rows, badges, rarity frames, progress bars,
@@ -237,10 +240,14 @@ Loop(dt) -> App.frame
   game frame: input -> world.input (or the bot), pause, touch meters,
               level-up intro (time eases to 0.2x, then modal), chest modal, game over
   session.tick(time.dt, dt): substep(1/60) world.step(); camera.follow; feedback.frame()
-  r.beginFrame -> view.draw -> fx.update/draw -> r.endFrame   (at most 30x/s while a modal or Results is up;
-                                                              fx.update still runs every frame)
+  r.beginFrame -> view.draw -> fx.update/draw -> r.endFrame   (at most 30x/s while an in-run modal is up; NOT AT ALL
+                                                              behind an opaque hub page or a full-screen hub overlay -
+                                                              the attract game does not even step - and once (again on
+                                                              resize / context restore) for the frozen run behind
+                                                              Results; fx.update still runs every frame)
   hud.update(world)
-  auto.sample(frameMs, cpuMs)   (skipped while paused / a modal / settings / Results, and 1 s after a screen change)
+  auto.sample(loop.rawDt * 1000, cpuMs)   (the REAL frame interval, not the 1/20-clamped dt; skipped while paused /
+                                          a modal / settings / Results / a covered hub, and 1 s after a screen change)
 ```
 
 Modals set `time.paused` (the sim stops, ambient fx keep animating), hide the
@@ -262,7 +269,9 @@ Flow rules around the cut-in and modals (`App.gameFrame`):
   level-up / chest is queued, so the cut-in never starts under a modal;
 - `pause()` during the cut-in or the run-start READY? sets `pausePending`, and
   the pause opens on the first frame after it (blur / visibility / gamepad
-  disconnect / WebGL context loss all go through `pause()`);
+  disconnect / WebGL context loss all go through `pause()`); Esc / gamepad
+  START pressed during the episode card, READY? or the cut-in is remembered
+  the same way (its edge is never dropped);
 - on the frame a modal closed, gameplay edges (dash / ult / pause) are dropped,
   and a nav "back" consumes back + pause + ult + dash + confirm, so the gamepad B
   that resumes never casts and Enter never re-clicks the pause button (which is
@@ -290,8 +299,11 @@ Menus over the attract game (`App.frame`, `Session.camOffX/Y`): the camera is
 offset so the bot's hero runs in open meadow, never under the menu. The hub
 home reports the free window between its profile card and PLAY (portrait) or
 between its columns (landscape) through `HubPage.camAnchor()`; opaque pages
-(everything but home) cover the scene and throttle its redraw like a modal;
-the splash keeps the old rules (right of the key art in compact landscape).
+(everything but home) and the full-screen hub overlays (unlock celebrations,
+the Merch Machine pull: `App.syncCover` on overlay open / close) hide the scene
+completely, so the attract game neither steps nor draws behind them; the first
+uncovered frame draws fresh (after a rotation or a context restore too); the
+splash keeps the old rules (right of the key art in compact landscape).
 
 Small-screen layout rules (styles.css): the touch OVERDRIVE button reaches
 ~210 px above the bottom edge, so in touch portrait the onboarding pill sits
@@ -317,7 +329,11 @@ Star Pouch fallbacks remain), so it is never spent or tapped for nothing.
   replays, no forced reflow. `replay()` is for one-off non-HUD screens only.
 - Weapon / passive slots are reused nodes; `.xpbar .combo .stats .bossbar .card`
   carry `contain: layout style`, modals `contain: strict`.
-- UI sprites are encoded and decoded (`img.decode()`) at idle after boot.
+- UI sprites are encoded and decoded (`img.decode()`) in real idle time only
+  (`requestIdleCallback` without a timeout, slices of at most 8 ms), hub icons
+  first, then portraits and hero idles; the queue waits (coarse 500 ms timer,
+  no per-frame polling) during a run, a modal, settings, an overlay and for 1 s
+  after a screen change (`__kk.prewarm()` reports its progress).
 
 ### Quality tiers (render/quality.ts)
 
@@ -326,9 +342,13 @@ judges 2 s windows against the display's own refresh interval (median frame
 time, never slower than 60 Hz): more than 10 % of frames over 1.3x refresh, or
 average JS time above 0.75x refresh, steps down (4 s cooldown); 8 s without a
 bad window with JS under 0.4x refresh steps up (cooldown 8 s + 12 s per earlier
-down-step). DPR caps are 2 / 2.5 / 3 (the scene renders at art resolution, only
-the nearest-neighbour composite scales; the canvas is `image-rendering:
-pixelated`); each step down also lowers the enemy cap and particle budget.
+down-step). It is fed the real, unclamped frame interval (`Loop.rawDt`, one
+frame counting at most 250 ms), so windows and cooldowns are wall-clock time
+and a 5 fps phone steps down within 4 s. DPR caps are 2 / 2.5 / 3 (the scene
+renders at art resolution, only the nearest-neighbour composite scales; the
+canvas is `image-rendering: pixelated`); each step down also lowers the enemy
+cap and particle budget, and `low` is clearly cheaper than `mid` (glow buffer
+at 1/4 resolution, 800 particles; bloom stays on).
 
 ### Music per state
 
@@ -1176,6 +1196,11 @@ UI flow / platform regression scripts (Playwright, scratch, `shots/fix-b/`):
 `death-check.mjs`, `intro-check.mjs`, `results-shots.mjs`, `anims.mjs` (running CSS
 animations during play), `perf-*.mjs` (production build in `shots/fix-b/dist`).
 
+Debug params that bend a run (`?god=1`, `?skip=`, `?speed=`) turn even a hub START EPISODE
+into a **practice run** (never banked, never stashed; Results says PRACTICE RUN · NOT SAVED);
+`?seed=` is allowed on account runs. The `__kk` hooks (`__kk.god()`, `__kk.skipTo()` ...) do
+not change that: scripts use them to fast-forward real account runs.
+
 Handy URLs: hub deep links `/?screen=hub|stages|loadout|board|heroes|gacha|wiki|settings`,
 `/?screen=hero&hero=rin&tab=talents`, `/?screen=gacha&tab=exchange`, `/?screen=wiki&tab=plot`; `/?autoplay=1&skip=185&god=1`
 (boss), `/?fps=1`, `/?seed=42&hero=mochi`. Console: `__kk.levelUp()`,
@@ -1263,8 +1288,14 @@ splash -> Hub [home] -> stages -> loadout -> START EPISODE -> run -> TO BE CONTI
   exactly once (`save.recordRun` -> `RunReport`): as soon as its outcome is final
   (the TO BE CONTINUED modal with no revive left, the victory modal; closing the
   app there loses nothing), else from Results / the game-over RETRY; RETRY of an
-  account run re-plans (the profile just changed). **Practice runs** (deep links / `?autoplay` / `?screen=game`, which play the
-  debug RunConfig with every pool open) never touch the account: `App.practice`,
+  account run re-plans (the profile just changed). The game-over RETRY also
+  claims the run's Plot Point rewards and queues its unlocks
+  (`save.pendingUnlocks`): the next Results (or the hub home) celebrates them.
+  TO BE CONTINUED makes RESULTS the big default for episodes 1-3 (RETRY small),
+  RETRY from episode 4. A first clear points the loadout at the episode it
+  unlocked (PLAY reads "EP. N · Candy Kingdom"; the card says NEW EPISODE!).
+  **Practice runs** (deep links / `?autoplay` / `?screen=game` / `?god` /
+  `?skip` / `?speed`, which play the debug RunConfig) never touch the account: `App.practice`,
   `save.previewRun` (the report on a throwaway copy), a "PRACTICE RUN · NOT
   SAVED" tag on Results, no CLAIM ALL, no in-run Plot Point toasts, and the
   saved loadout's hero is left alone.
@@ -1275,14 +1306,34 @@ splash -> Hub [home] -> stages -> loadout -> START EPISODE -> run -> TO BE CONTI
   record chips, the NEW UNLOCK celebration per unlock, the narrator's "Next time
   on..." line, "You can afford: ...". Tapping the show skips to the end; reduced
   motion shows the end state at once. UPGRADE opens the board centred on the
-  cheapest affordable node. The NEW ... UNLOCKED! cards are never lost: a skip
-  (or reduced motion) shows them at once, and UPGRADE / RETRY / HUB / Back
-  pressed before their beat show them first, then act.
-- **Boot notices** (`hub/celebrate.ts bootNotices`, once per session, at home):
-  the WELCOME TO SEASON 2 dialog for a migrated v1 save (refund, 10-pull gift,
-  Rin + Mochi), a notice for a set-aside unreadable save, unlock celebrations
-  for content the boot reconciliation unlocked, and Plot Points the profile
-  already qualifies for (one toast pointing at the Wiki).
+  cheapest affordable node. Leaving by UPGRADE / RETRY / HUB / Back claims any
+  unclaimed gem / coin Plot Points (CLAIM ALL stays the juicy optional moment);
+  after a claim "You can afford" is recomputed (board nodes, a pull / a
+  10-pull). The NEW ... UNLOCKED! cards are never lost: a skip (or reduced
+  motion) shows them at once, unlocks a TBC RETRY skipped come first, and a
+  button pressed before their beat shows them first, then acts. A failed bank
+  (storage full / blocked) adds a "Saving failed" line under the currency bar.
+- **Unlock celebrations** (`celebrateUnlocks`): a kind unlocked 3+ times at once
+  is one card ("6 NEW PLOT TWISTS!": icon grid + a line per item, a twist's
+  rank-1 effect), a sequence is at most 4 cards (the last sums up the rest),
+  and every kind has its own narrator pool (satire.md §8). Opaque plum base
+  under the per-kind glow: nothing behind shows through.
+- **Boot notices** (`hub/celebrate.ts homeNotices / bootNotices`, once per
+  session and again after START OVER / IMPORT (`App.onProfileReplaced` ->
+  `resetBootNotices`), at home): a notice for a set-aside unreadable save (the
+  damaged copy stays; Settings -> SAVE DATA can copy / discard it), the WELCOME
+  TO SEASON 2 dialog for a first v1 migration (refund, 10-pull gift, Rin +
+  Mochi), "Episode N was interrupted" for a run banked at boot (on any hub
+  page), one celebration for boot-reconciliation unlocks + queued unlocks, and
+  Plot Points the profile already qualifies for (one toast pointing at the
+  Wiki). Later home visits celebrate unlocks queued since.
+- **Home guidance**: ONE spotlit tile gets the red badge + glow (never pulled
+  and can pull > affordable board node > free talent points > Wiki rewards >
+  another pull); other tiles with news get a quiet dot; before episode 1 only
+  PLAY glows. The narrator types a one-time coach line for the spotlit tile
+  (`profile.tutorial.flags.coach_<tile>`, set once it was read on screen). The
+  "Previously on..." recap is told by outcome (survived / walked off the set /
+  SAVED ... (first clear!) / the filler ran ...).
 - **Copy**: every satire line comes from the content bible through
   `hub/copy-data.ts` (episode titles, next-time lines, death lines, tips,
   taglines, grade comments, wiki blurbs, OC bios, gacha lines);
@@ -1296,7 +1347,7 @@ splash -> Hub [home] -> stages -> loadout -> START EPISODE -> run -> TO BE CONTI
 
 | Piece | API |
 | --- | --- |
-| Currency bar | `new CurrencyBar(ids?)`, `.set(c)` (jump), `.sync(c, pop)` (count-up + bump + "+120" pop below the pill) |
+| Currency bar | `new CurrencyBar(ids?)`, `.set(c)` (jump), `.sync(c, pop)` (count-up + bump + "+120" pop below the pill; gains on one pill within 600 ms merge into one pop) |
 | Buttons / chips | `btn(label, { cls: gold\|violet\|cyan\|red\|ghost\|small\|wide, act, icon, sub, badge, def })`, `iconBtn`, `.chip` |
 | Tabs | `new TabBar(tabs, initial, onChange)`, `.select(id)`, `.setBadge(id, html)` (scrolls the active tab into view) |
 | Cards / rows | `card({ art, kicker, title, body, rarity, act })`, `row({ icon, title, sub, right, act })`, `sectionTitle`, `tag` |
@@ -1305,7 +1356,7 @@ splash -> Hub [home] -> stages -> loadout -> START EPISODE -> run -> TO BE CONTI
 | Progress | `pbar(frac, label, colour)`, `setBar(el, frac)` (transform: scaleX only) |
 | Detail sheet | `openSheet(host, { title, kicker, icon, html, foot })` -> `{ body, update(), close() }`: bottom sheet (drag to dismiss) on portrait, side panel in landscape / desktop |
 | Confirm | `await confirmDialog(host, { title, body, ok, cancel, danger, okCls })` (default focus = Cancel) |
-| Toasts | `toast(host, msg, { kind: info\|good\|bad\|ach\|gacha, kicker, sub, reward, icon, inRun })`: queued, two at once, duplicates within 1.2 s dropped; `inRun` = the bottom strip, clear of the hero and the touch buttons |
+| Toasts | `toast(host, msg, { kind: info\|good\|bad\|ach\|gacha, kicker, sub, reward, icon, inRun })`: queued, two at once, duplicates within 1.2 s dropped; `inRun` = the bottom strip, clear of the hero and the touch buttons; hub toasts wait while `host.holdToasts()` (the settings panel: `suspendToasts` / `resumeToasts`) |
 | Pan / zoom | `new PanZoom(host, content, { bounds, minZoom, maxZoom, far, near, active })`, `.update(dt)` per frame, `go / zoomBy / ensureVisible / fitZoom`: one-finger drag with inertia, pinch, wheel (zoom at the cursor), + / - keys, gamepad right stick + LB / RB; a drag never clicks |
 | Ticker | `animate(obj)` / `kitTick(dt)` (App.frame) for number animations; `reducedMotion()` |
 
@@ -1318,6 +1369,20 @@ pops / shakes, no forced reflow); pages and cards carry `contain`; every
 safe-area insets pad the header, pages, sticky footers and sheets. Screenshot
 sweep (desktop, iPhone SE, iPhone 13 portrait + landscape, every hub page):
 `node shots/hub-ui/shots.mjs [--only se,i13] [--scenes home,board]`.
+
+### 10.1 Save safety (`ui/save.ts`, `ui/app.ts`)
+
+| Risk | What happens |
+| --- | --- |
+| Reload / OS tab discard / app kill mid-run, or on TO BE CONTINUED with a revive left | `save.stashRun(world.runStats())` writes `kko.run.pending` `{ v, at, runsAtStart, stats }` for account runs on page hide / pagehide / blur, every 15 s of unpaused play and when TBC offers a revive; `bankRun` clears it. The next boot banks a stash whose `runsAtStart` still equals `lifetime.runs` as DROPPED (or the death it was) -> `save.interrupted` -> "Episode N was interrupted" toast; its unlocks are queued. A window playing an account run holds the shared Web Lock `kko.run.live`: a window booting meanwhile leaves that stash alone (no double bank). |
+| Two tabs / windows | Every successful write bumps `kko.save.v2.rev`. A `storage` event reloads `save.profile` (`onExternalChange`: the hub re-renders its page and toasts "Your save changed in another window. Reloaded!"; mid-run nothing changes). A `save()` that finds a newer revision it missed (frozen tab) never overwrites it: it reloads and returns false (`save.conflicted`); `recordRun` re-applies the run to the reloaded profile, so a banked run is never dropped. START OVER / IMPORT always win. |
+| Storage full / blocked (shared GitHub Pages quota) | `save()` frees the reset / import backup and retries once (never the damaged-save copy); `writeOk` false -> one console warning + a sticky hub banner "Progress can't be saved on this device..." and a "Saving failed" line on Results; cleared by the next good write. After the first banked account run the app asks `navigator.storage.persist()` once (answer in `profile.flags.persist`). |
+| Unreadable v2 save | Raw text kept in `kko.save.v2.corrupt` (never deleted by the game; Settings -> SAVE DATA: COPY / DISCARD). v1 present: re-migrated WITHOUT a second 1,600-gem gift or WELCOME (the `kko.save.v1.migrated` marker, or a damaged v2 over v1, means it was paid). |
+
+Regression tests: `tests/meta.save.test.ts` (stash banked once / discarded, lock deferral,
+revision conflict + re-applied run, writeOk, backup freed on quota, one-time gift). Browser
+repros: `shots/qa2-fix-b-app-loop-save-safety-hub-flow-results-celebrations-mobile-input-and-settings/`
+(`bugs-reload.mjs`, `bugs-flows.mjs --only twotabs`, `bugs-quota.mjs`, `bugs-corrupt.mjs`, `mob-lifecycle.mjs`).
 
 ---
 

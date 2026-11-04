@@ -139,3 +139,32 @@ describe("particles", () => {
     expect(ps.count).toBe(200);
   });
 });
+
+describe("storage text helpers", () => {
+  test("loadText / saveText never throw and report failures", async () => {
+    const { loadText, saveText } = await import("../src/core/storage");
+    const g = globalThis as { localStorage?: unknown };
+    const map = new Map<string, string>();
+    let full = false;
+    g.localStorage = {
+      getItem: (k: string) => map.get(k) ?? null,
+      setItem: (k: string, v: string) => {
+        if (full) throw new Error("QuotaExceededError");
+        map.set(k, v);
+      },
+      removeItem: (k: string) => map.delete(k),
+    };
+    try {
+      expect(saveText("a", "1")).toBe(true);
+      expect(loadText("a")).toBe("1");
+      full = true;
+      expect(saveText("a", "2")).toBe(false);
+      expect(loadText("a")).toBe("1");
+      delete g.localStorage;
+      expect(saveText("a", "3")).toBe(false);
+      expect(loadText("a")).toBeNull();
+    } finally {
+      delete g.localStorage;
+    }
+  });
+});

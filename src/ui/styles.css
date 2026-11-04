@@ -1325,13 +1325,20 @@ img.px,
   display: block;
   animation: scr-in 0.4s cubic-bezier(0.2, 1.6, 0.4, 1);
 }
-.bossbar .bn {
+/* (not ".bn": the Training Arc's board.css styles .bn as an absolutely positioned node button) */
+.bossbar .bb-name {
   font-family: var(--font);
   font-weight: 700;
   font-size: 1.05em;
+  line-height: 1.15;
   color: var(--pinkl);
   text-shadow: var(--ol);
   letter-spacing: 0.08em;
+  overflow-wrap: anywhere;
+}
+.bossbar .bb-name.long {
+  font-size: 0.9em;
+  letter-spacing: 0.03em;
 }
 .bossbar .track {
   position: relative;
@@ -2630,7 +2637,8 @@ img.px,
   border: 0;
   background: none;
   cursor: pointer;
-  touch-action: none;
+  /* vertical swipes starting on a slider scroll the panel; settings.ts drags only on a sideways move */
+  touch-action: pan-y;
   padding: 0;
 }
 .slider::before {
@@ -3355,6 +3363,17 @@ img.px,
   .pause-panel .h1 {
     font-size: 1.8em;
     margin: 0;
+  }
+}
+/* very short landscape (iPhone 13 at 750x342 and below): DONE stays on screen, the rows scroll under it */
+@media (orientation: landscape) and (max-height: 400px) {
+  .settings-panel > .btn-row {
+    position: sticky;
+    bottom: 0;
+    z-index: 2;
+    margin-top: 0 !important;
+    padding: 0.3em 0 0.1em;
+    background: linear-gradient(180deg, rgba(45, 27, 69, 0), rgba(45, 27, 69, 0.97) 35%);
   }
 }
 .warn-border {

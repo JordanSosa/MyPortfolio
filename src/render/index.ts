@@ -7,3 +7,4 @@ export * from "./layers";
 export * from "./post";
 export * from "./quality";
 export * from "./text";
+export * from "./atlas-source";

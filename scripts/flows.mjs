@@ -372,9 +372,14 @@ for (const dev of DEVICES) {
         let bought = "";
         let boughtStat = "";
         await step("UPGRADE -> Training Arc -> buy the cheapest node", async () => {
+          const gemsBefore = (await profile()).currencies.gems;
           await tap('.results [data-act="upgrade"]', 10000, true);
           await waitPage("board");
           await sleep(900);
+          // leaving Results claims the run's Plot Point rewards (the Pilot Episode gems pay the first pull)
+          const pc = await profile();
+          check(pc.achievements.claimed.includes("pilot_episode") && pc.currencies.gems > gemsBefore, `Plot Points claimed on the way out (gems ${gemsBefore} -> ${pc.currencies.gems})`);
+          coinsAfter1 = pc.currencies.coins;
           const afford = await page.evaluate(() => [...document.querySelectorAll(".bn.s-afford")].map((b) => b.dataset.id));
           check(afford.length > 0, "something affordable after run 1 (EXPANSION §1: fail forward)");
           rec.notes.push(`affordable after run 1: ${afford.join(", ")}`);
@@ -753,9 +758,15 @@ for (const dev of DEVICES) {
         });
         await step("game over -> RESULTS -> UPGRADE -> Training Arc -> Escape home, by keys", async () => {
           await fightAndDie(20);
-          await expectFocus("retry", "game over");
+          // (episodes 1-3: RESULTS is the default and RETRY the small secondary button; from episode 4 RETRY leads)
+          const ep = await page.evaluate(() => window.__kk.app.currentEpisode.n);
+          const first = ep <= 3 ? "results" : "retry";
+          const second = first === "results" ? "retry" : "results";
+          await expectFocus(first, `game over (episode ${ep})`);
           await key("ArrowRight");
-          check((await focused()) === "results", `RESULTS reachable (focus "${await focused()}")`);
+          check((await focused()) === second, `${second.toUpperCase()} reachable (focus "${await focused()}")`);
+          if (first === "results") await key("ArrowLeft");
+          check((await focused()) === "results", `RESULTS focused before Enter (focus "${await focused()}")`);
           await key("Enter", 800);
           await waitFor(page, () => window.__kk.screen === "results", null, 15000, "results");
           await sleep(600);

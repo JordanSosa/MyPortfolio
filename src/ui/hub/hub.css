@@ -97,6 +97,31 @@
   flex: 1 1 auto;
   min-height: 0;
 }
+/* the save can't be written (Hub.setSaveWarn): in the layout under the header, never over a page or a sheet */
+.hub-savewarn {
+  position: relative;
+  z-index: 3;
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  margin: 0.2em calc(10px + var(--sar)) 0.25em calc(10px + var(--sal));
+  padding: 0.35em 0.7em;
+  border-radius: 12px;
+  background: rgba(173, 29, 74, 0.94);
+  border: 2px solid var(--white);
+  box-shadow: 0 0 0 2px var(--outline);
+  font-family: var(--mono);
+  font-size: max(9px, 0.72em);
+  line-height: 1.3;
+  color: var(--white);
+  text-shadow: var(--ol1);
+}
+.hub-savewarn b {
+  flex: none;
+  font-size: 1.4em;
+  color: var(--yellow);
+}
 .hpage {
   position: absolute;
   inset: 0;
@@ -573,6 +598,60 @@
 .ht-bdg .bdg {
   right: -0.45em;
   top: -0.55em;
+}
+/* home guidance: ONE spotlit tile (red badge + glow pulse); other tiles with news get a quiet dot */
+.ht-bdg .bdg.dot {
+  min-width: 0;
+  width: 0.85em;
+  height: 0.85em;
+  padding: 0;
+  right: -0.2em;
+  top: -0.25em;
+  background: var(--lav);
+  box-shadow: 0 0 0 2px var(--outline);
+  font-size: 0;
+  animation: none;
+}
+/* (a glow ring behind the tile: opacity only) */
+.htile.spot::before {
+  content: "";
+  position: absolute;
+  inset: -7px;
+  z-index: -1;
+  border-radius: 20px;
+  background: radial-gradient(closest-side, rgba(255, 225, 77, 0.85), rgba(255, 225, 77, 0) 100%);
+  pointer-events: none;
+  animation: spot-glow 1.6s ease-in-out infinite;
+}
+/* before the first episode only PLAY glows (a ring behind it: the button itself never moves) */
+.play-wrap {
+  position: relative;
+}
+.play-wrap.spot::before {
+  content: "";
+  position: absolute;
+  inset: -8px -6px -11px;
+  z-index: -1;
+  border-radius: 999px;
+  background: radial-gradient(closest-side, rgba(255, 225, 77, 0.9), rgba(255, 225, 77, 0) 100%);
+  pointer-events: none;
+  animation: spot-glow 1.6s ease-in-out infinite;
+}
+@keyframes spot-glow {
+  0%,
+  100% {
+    opacity: 0.15;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .htile.spot::before,
+  .play-wrap.spot::before {
+    animation: none;
+    opacity: 0.7;
+  }
 }
 /* tile emblems (CSS, until the hub art lands) */
 .emb {
@@ -1066,6 +1145,24 @@
   border-color: var(--lime);
   color: var(--lime);
 }
+/* an unlocked episode never played: NEW! until it airs once */
+.ep-new {
+  position: absolute;
+  left: 0.6em;
+  bottom: 0.5em;
+  padding: 0.1em 0.55em 0.18em;
+  border-radius: 999px;
+  background: linear-gradient(180deg, #fff7b0, #ffe14d 60%, #e0a020);
+  border: 2px solid var(--white);
+  box-shadow: 0 0 0 2px var(--outline), 0 0 10px rgba(255, 225, 77, 0.7);
+  font-family: var(--mono);
+  font-size: max(9px, 0.75em);
+  color: var(--outline);
+  animation: bdg-pulse 1.4s ease-in-out infinite;
+}
+.rchip.new-ep {
+  color: var(--yellow);
+}
 .ep-prod {
   left: 50%;
   right: auto;
@@ -1153,7 +1250,10 @@
     align-items: stretch;
     overflow-x: auto;
     overflow-y: hidden;
-    touch-action: pan-x;
+    /* vertical swipes on the strip scroll the page; sideways overscroll stays in the strip */
+    touch-action: pan-x pan-y;
+    overscroll-behavior-x: contain;
+    overscroll-behavior-y: auto;
     gap: 1.1em;
     padding: 0.3em calc(16px + var(--sar)) 0.8em calc(16px + var(--sal));
   }
@@ -1745,6 +1845,8 @@
 .btn.go {
   flex: none;
   min-width: 0;
+  /* a 44 px touch target on every layout (compact landscape shrinks the font) */
+  min-height: 44px;
   font-size: 1.25em;
 }
 /* relic picker sheet */

@@ -7,7 +7,9 @@
  *    are saved when the finger lifts.
  *  - SAVE DATA (docs/EXPANSION.md §14): export the profile as a text string
  *    (copied with a button, also shown selectable), import one (pasted, with a
- *    confirm; the replaced profile is kept as a backup), start over. Hub only:
+ *    confirm; the replaced profile is kept as a backup), start over, and - when
+ *    an unreadable save was set aside at boot - COPY / DISCARD for that damaged
+ *    copy (the game never deletes it on its own). Hub only:
  *    from the pause menu the run in progress would bank into the new profile.
  * Works with touch, mouse, keys (left/right adjusts the focused slider /
  * segment) and gamepad.
@@ -67,6 +69,12 @@ export function openSettings(app: App, onClose: () => void): UiScreen {
         <textarea class="ss-text" data-ta="import" placeholder="KKO2.…" aria-label="Paste a save string"></textarea>
         <div class="ss-row"><button class="btn small violet" data-nav data-act="import">⇩ IMPORT SAVE</button><span class="ss-msg" data-msg="import"></span></div>
         <div class="ss-info"></div>
+        ${
+          save.corruptCopy() != null
+            ? `<div class="ss-damaged"><p class="ss-note">Damaged save kept on this device (it couldn't be read). Copy it for a bug report, or throw it away.</p>
+        <div class="ss-row"><button class="btn small cyan" data-nav data-act="dmg-copy">⧉ COPY</button><button class="btn small ghost" data-nav data-act="dmg-discard">✕ DISCARD</button><span class="ss-msg" data-msg="dmg"></span></div></div>`
+            : ""
+        }
         <div class="ss-row"><button class="btn small red" data-nav data-act="reset">✕ START OVER</button></div>
       </div>
       <div class="btn-row" style="margin-top:.6em"><button class="btn small" data-nav data-nav-default data-act="done">✓ DONE</button></div>
@@ -95,34 +103,73 @@ export function openSettings(app: App, onClose: () => void): UiScreen {
   };
   refresh();
 
-  // sliders: drag / tap position
+  // sliders: a horizontal drag or a tap sets the value; a vertical swipe that starts on one scrolls the panel
+  // (touch-action: pan-y; nothing is applied on pointerdown, a touch drag starts only once it is clearly sideways)
   for (const b of el.querySelectorAll<HTMLElement>(".slider")) {
     const k = b.dataset.k as Key;
-    const apply = (e: PointerEvent) => {
+    const apply = (x: number) => {
       const r = b.getBoundingClientRect();
-      const v = Math.round(Math.max(0, Math.min(1, (e.clientX - r.left) / r.width)) * 20) / 20;
+      const v = Math.round(Math.max(0, Math.min(1, (x - r.left) / r.width)) * 20) / 20;
       if (v !== s[k]) set(k, v, false);
     };
+    let id = -1;
+    let x0 = 0;
+    let y0 = 0;
     let drag = false;
+    let moved = false;
     const endDrag = () => {
       if (!drag) return;
       drag = false;
       save.save();
       app.sfx("uiMove");
     };
-    b.addEventListener("pointerdown", (e) => {
-      drag = true;
+    const capture = (e: PointerEvent) => {
       try {
         b.setPointerCapture(e.pointerId);
       } catch {
         /* ignore */
       }
-      apply(e);
+    };
+    b.addEventListener("pointerdown", (e) => {
+      id = e.pointerId;
+      x0 = e.clientX;
+      y0 = e.clientY;
+      moved = false;
+      // a mouse / pen drags at once (no page scroll to protect); a finger waits for a sideways move
+      drag = e.pointerType !== "touch";
+      if (drag) {
+        capture(e);
+        apply(e.clientX);
+      }
     });
-    b.addEventListener("pointermove", (e) => drag && apply(e));
-    b.addEventListener("pointerup", endDrag);
-    // the OS took the touch (scroll, system gesture): stop dragging, keep what was set
-    b.addEventListener("pointercancel", endDrag);
+    b.addEventListener("pointermove", (e) => {
+      if (e.pointerId !== id) return;
+      if (!drag) {
+        const dx = Math.abs(e.clientX - x0);
+        const dy = Math.abs(e.clientY - y0);
+        if (dx > 6 || dy > 6) moved = true;
+        if (dx <= 6 || dx <= dy) return;
+        drag = true;
+        capture(e);
+      }
+      apply(e.clientX);
+    });
+    b.addEventListener("pointerup", (e) => {
+      if (e.pointerId !== id) return;
+      id = -1;
+      // a tap (no movement) sets the value where it landed
+      if (!drag && !moved && e.pointerType === "touch") {
+        apply(e.clientX);
+        save.save();
+        app.sfx("uiMove");
+      }
+      endDrag();
+    });
+    // the OS took the touch (the panel scrolled, a system gesture): stop, keep what was set
+    b.addEventListener("pointercancel", () => {
+      id = -1;
+      endDrag();
+    });
     b.addEventListener("lostpointercapture", endDrag);
     b.addEventListener("click", (e) => {
       e.stopPropagation();
@@ -218,6 +265,8 @@ export function openSettings(app: App, onClose: () => void): UiScreen {
     if (r.ok) {
       app.sfx("unlockFanfare");
       ta.value = "";
+      // (the old profile's recap and notices go; the new one's unlocks / Plot Points greet it at home)
+      app.onProfileReplaced();
       s = save.data.settings;
       app.applySettings();
       refresh();
@@ -230,10 +279,32 @@ export function openSettings(app: App, onClose: () => void): UiScreen {
     const b = await confirmDialog(app, { title: "Really really?", body: "Episode 1 again. The plushies will be thrilled.", ok: "YES, RESET", cancel: "No, I'm invested", danger: true });
     if (!b) return;
     save.reset();
+    app.onProfileReplaced();
     s = save.data.settings;
     app.sfx("reroll");
     msg("import", "Fresh profile. Welcome to Episode 1!");
     info();
+  });
+
+  onTap(el.querySelector('[data-act="dmg-copy"]'), async () => {
+    const text = save.corruptCopy() ?? "";
+    let copied = false;
+    try {
+      await navigator.clipboard?.writeText(text);
+      copied = !!navigator.clipboard;
+    } catch {
+      copied = false;
+    }
+    app.sfx(copied ? "uiConfirm" : "uiDeny");
+    msg("dmg", copied ? `Copied (${fmtInt(text.length)} characters).` : "Copying isn't allowed here.", copied);
+  });
+  onTap(el.querySelector('[data-act="dmg-discard"]'), async () => {
+    const ok = await confirmDialog(app, { title: "Discard the damaged save?", body: "The unreadable copy is deleted from this device. Your current profile is not touched.", ok: "DISCARD", danger: true });
+    if (!ok) return;
+    save.discardCorruptCopy();
+    app.sfx("reroll");
+    el.querySelector(".ss-damaged")?.remove();
+    app.nav.refocus(L);
   });
 
   const close = () => {

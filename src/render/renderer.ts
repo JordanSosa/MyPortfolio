@@ -2,6 +2,7 @@
  * Renderer facade: canvas + WebGL2 context, atlas, sprite batch, bitmap text,
  * camera, post FX. See docs/ENGINE.md.
  *
+ *   await preloadAtlas();                 // once, before the first Renderer (atlas-source.ts)
  *   const r = new Renderer({ parent: document.body });
  *   // per frame:
  *   r.beginFrame(realDt);                 // resize, camera shake/zoom, post timers
@@ -9,8 +10,8 @@
  *   r.endFrame();                         // scene -> glow -> bloom -> composite
  */
 import { clamp } from "../core/math";
-import type { SpriteDef } from "../art/format";
-import { animFrame, Atlas, type Anim } from "./atlas";
+import { animFrame, type Atlas, type Anim } from "./atlas";
+import { takeAtlas } from "./atlas-source";
 import { SpriteBatch } from "./batch";
 import { Camera } from "./camera";
 import type { GL } from "./gl";
@@ -26,8 +27,11 @@ export interface RendererOptions {
   quality?: Partial<QualitySettings>;
   /** Scene clear colour 0xRRGGBB (visible only where no ground is drawn). */
   clearColor?: number;
-  /** Extra sprite defs to pack into the atlas. */
-  extraSprites?: SpriteDef[];
+  /**
+   * The atlas to draw with (default: the one preloadAtlas() loaded; extra stand-in sprite defs are
+   * passed to preloadAtlas, see atlas-source.ts).
+   */
+  atlas?: Atlas;
   /** Override the pixel-scale rule: returns css px per art px. */
   pixelScale?: (cssW: number, cssH: number) => number;
 }
@@ -138,7 +142,7 @@ export class Renderer {
 
     const gl = this.createContext();
     this.gl = gl;
-    this.atlas = new Atlas({ extraSprites: opts.extraSprites });
+    this.atlas = opts.atlas ?? takeAtlas();
     this.batch = new SpriteBatch(this.atlas);
     this.text = new BitmapText(this.atlas, this.batch);
     const a = this.atlas;

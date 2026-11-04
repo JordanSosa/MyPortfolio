@@ -10,8 +10,11 @@
  * - The unlock gesture stays short on a phone CPU: it only creates + resumes the
  *   context and plays the 1-sample kick. The node graph (Engine) is built one
  *   macrotask later, the reverb impulses in later macrotasks still (fxchain
- *   makeReverb), the noise buffers on first use (synth kitFor), and a music() call
- *   within MUSIC_DEFER_MS of the unlock compiles its song one macrotask later.
+ *   makeReverb: ~0.9 / 1.3 s later, idle slots), the noise buffers on first use
+ *   (synth kitFor), and a music() call within FIRST_MUSIC_MS of the unlock starts
+ *   (compiles + schedules its song) FIRST_MUSIC_MS after it: past the ~300 ms
+ *   screen transition the tap starts (splash -> hub slide-in); its fade-in hides
+ *   the wait.
  */
 import type { AudioAPI, MusicTrack, SfxId, SfxOpts } from "./api";
 import { Engine } from "./engine";
@@ -19,8 +22,8 @@ import { Engine } from "./engine";
 export type { AudioAPI, MusicTrack, SfxId, SfxOpts } from "./api";
 
 const TICK_MS = 25;
-/** music() this soon after the context was created (the unlock gesture) is deferred one macrotask. */
-const MUSIC_DEFER_MS = 50;
+/** The first music after the context was created (the unlock gesture) starts no sooner than this. */
+const FIRST_MUSIC_MS = 750;
 const GESTURES = ["pointerup", "touchend", "click", "keydown", "mousedown"] as const;
 
 type Ctor = new (opts?: AudioContextOptions) => AudioContext;
@@ -183,15 +186,17 @@ class RealtimeAudio implements AudioAPI {
     if (this.engine) this.startMusic(fade);
   }
 
-  /** Switch the engine to this.track; right after the unlock gesture the song compile waits a macrotask. */
+  /** Switch the engine to this.track; right after the unlock gesture the song waits until FIRST_MUSIC_MS. */
   private startMusic(fade: number): void {
     this.musicFade = fade;
-    if (now() - this.createdAt < MUSIC_DEFER_MS) {
+    const wait = this.createdAt + FIRST_MUSIC_MS - now();
+    if (wait > 0) {
+      // (a later music() call inside the wait just changes this.track: the timer plays the latest one)
       if (!this.musicTimer)
         this.musicTimer = setTimeout(() => {
           this.musicTimer = null;
           this.playTrack(this.musicFade);
-        }, 0);
+        }, wait);
       return;
     }
     if (this.musicTimer) {

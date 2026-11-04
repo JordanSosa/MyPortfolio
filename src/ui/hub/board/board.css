@@ -179,6 +179,24 @@
 .bd-gate[hidden] {
   display: none;
 }
+/* the gate chip shows its "REQUIRES" line; the single teaser on the ring after it, "MORE SEASONS TBA" */
+.bd-gate .g-tba,
+.bd-gate.tba .g-req {
+  display: none;
+}
+.bd-gate.tba .g-tba {
+  display: flex;
+}
+.bd-gate.tba {
+  opacity: 0.6;
+}
+/* under a HUD control (top bar, zoom, minimap, AUTO-PATH / RESPEC): out of the way */
+.bd-gate {
+  transition: opacity 0.25s ease;
+}
+.bd-gate.under {
+  opacity: 0.12;
+}
 .bd-gate .lock-i {
   margin-top: 0.3em;
 }

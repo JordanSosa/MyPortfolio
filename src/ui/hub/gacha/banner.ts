@@ -139,13 +139,15 @@ export function pityHtml(v: BannerView, prev: { ur: number; spark: number } | nu
       ? `<div class="ribbon gold-rb">${esc(C.guaranteeLine(f.rarity))}</div>`
       : `<div class="pb-5050"><i aria-hidden="true">◐</i>NEXT ${esc(f.rarity)}: 50/50 FOR ${esc(f.name.toUpperCase())}</div>`
     : "";
+  // (the rates at a glance come first: the headline "MYTHIC 0.0069%" chip must never sit under the
+  // sticky pull dock, whatever the phone's height)
   return `<section class="pity-box">
+    <button class="pb-rates" data-nav data-act="fine" aria-label="Rates and fine print">${RARITIES.map((r) => `<span class="pr r-${RARITY_CLS[r]}">${rarityBadge(r)}<small>${g.rates[r]}%</small></span>`).join("")}</button>
     <div class="pb-row ur"><span class="pb-l">UR</span>${pbar(ur / g.urPity, `${fmtInt(v.pityUR)} / ${fmtInt(g.urPity)}`, "cyan")}</div>
     <small class="pb-note">${esc(C.urLine(v.pityUR, g.urPity))}</small>
     <div class="pb-row spark${v.sparkReady ? " ready" : ""}"><span class="pb-l">SPARK</span>${pbar(Math.min(1, sp / g.spark), `${fmtInt(Math.min(v.spark, g.spark))} / ${fmtInt(g.spark)}`, v.sparkReady ? "rainbow" : "gold")}${v.sparkReady ? `<button class="btn small gold spk-claim" data-nav data-act="spark">CHOOSE!</button>` : ""}</div>
     <small class="pb-note${v.sparkReady ? " ready" : ""}">${esc(v.sparkReady ? C.SPARK_READY : C.sparkLine(v.spark, g.spark))}</small>
     ${fifty}
-    <button class="pb-rates" data-nav data-act="fine" aria-label="Rates and fine print">${RARITIES.map((r) => `<span class="pr r-${RARITY_CLS[r]}">${rarityBadge(r)}<small>${g.rates[r]}%</small></span>`).join("")}</button>
   </section>`;
 }
 

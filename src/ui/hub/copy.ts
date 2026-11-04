@@ -103,6 +103,29 @@ export const SEASON: readonly { order: number; id: string; name: string }[] = [
   { order: 5, id: "final_arc", name: "The Final Arc" },
 ];
 
+/** Narrator line of an unlock card, from that kind's own pool (satire.md §8; never the hero line on a twist card). */
+export function unlockNarration(cardKind: string, itemKind: string): string {
+  const pool = cardKind === "mixed" ? "unlockMany" : `unlock${itemKind.charAt(0).toUpperCase()}${itemKind.slice(1)}`;
+  return narratorLine(NARRATOR[pool] ? pool : "unlockMany", {}) || "New merchandise has been approved!";
+}
+
+/** Title of a card celebrating several unlocks of one kind ("6 NEW PLOT TWISTS!") or the rest of a long list. */
+export function unlockGroupTitle(kind: string, n: number): string {
+  const t = UNLOCK_GROUP_TITLE[kind] ?? UNLOCK_GROUP_TITLE.mixed;
+  return t.replace("{n}", String(n));
+}
+
+/** Group unlock card titles (satire.md §8). */
+export const UNLOCK_GROUP_TITLE: Readonly<Record<string, string>> = {
+  hero: "{n} NEW CAST MEMBERS!",
+  weapon: "{n} NEW WEAPONS!",
+  passive: "{n} NEW PASSIVES!",
+  stage: "{n} NEW EPISODES!",
+  twist: "{n} NEW PLOT TWISTS!",
+  relic: "{n} NEW MERCH ITEMS!",
+  mixed: "{n} MORE UNLOCKS!",
+};
+
 /** Satire unlock celebration titles (satire.md §8). */
 export const UNLOCK_TITLE: Readonly<Record<string, string>> = {
   hero: "NEW HERO JOINS THE CAST!",

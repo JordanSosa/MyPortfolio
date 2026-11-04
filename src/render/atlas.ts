@@ -1,7 +1,7 @@
 /**
- * Texture atlas. Rasterises every registered sprite + font (src/art), shelf-
- * packs them into one RGBA texture (premultiplied alpha, nearest sampling)
- * with a 1px edge extrusion + 1px transparent gutter around every frame.
+ * Texture atlas. Rasterises sprite + font defs (src/art), shelf-packs them
+ * into one RGBA texture (premultiplied alpha, nearest sampling) with a 1px
+ * edge extrusion + 1px transparent gutter around every frame.
  *
  * Every frame gets a numeric *handle*; a sprite's frames are consecutive
  * handles (info.first .. info.first + info.count - 1). Hot code should resolve
@@ -10,12 +10,62 @@
  * Manifest ids that are not registered yet get a clearly visible placeholder
  * (pink checker + outline) of the right size and frame count; a single
  * console warning lists them.
+ *
+ * Two ways to get one (docs/ENGINE.md "Boot path"): `new Atlas({ sprites,
+ * fonts })` paints and packs at runtime (dev, tests, tools), and
+ * `Atlas.fromBaked(meta, pixels)` wraps the atlas the production build baked
+ * (tools/bake-atlas.ts: `toBaked()` + `buildPixels()` of a runtime atlas), so
+ * the game never evaluates the sprite modules on a phone. This module never
+ * imports the sprite registry: src/render/atlas-source.ts picks the source.
  */
 import { rasterizeFont, rasterizeSprite, type FontDef, type RasterSprite, type SpriteDef } from "../art/format";
 import { FONT_MANIFEST, MANIFEST } from "../art/manifest";
-import { ALL_FONTS, ALL_SPRITES } from "../art/sprites/index";
 import { FALLBACK_FONT } from "./fallback-font";
 import type { GL } from "./gl";
+
+/** Serializable font table of a baked atlas (FontInfo with plain arrays). */
+export interface BakedFont {
+  id: string;
+  h: number;
+  handle: number[];
+  advance: number[];
+  width: number[];
+  spaceAdvance: number;
+  placeholder: boolean;
+}
+
+/** Everything but the pixels of a packed atlas (the build's atlas.json). */
+export interface BakedAtlasMeta {
+  version: 1;
+  width: number;
+  height: number;
+  /**
+   * The distinct premultiplied RGBA texels, 4 bytes each (most frequent first). atlas.png stores a
+   * 16-bit index into this list per texel (render/atlas-source.ts decodes it).
+   */
+  palette: number[];
+  /** FNV-1a over the texels as little-endian u32 (checks a decode that went through a canvas). */
+  hash: number;
+  fx: number[];
+  fy: number[];
+  fw: number[];
+  fh: number[];
+  fox: number[];
+  foy: number[];
+  /** Sprite infos in handle order (the "__missing" placeholder included). */
+  sprites: SpriteInfo[];
+  fonts: BakedFont[];
+  missing: string[];
+}
+
+export interface AtlasOptions {
+  /** Sprite defs (the registry, src/art/sprites/index.ts ALL_SPRITES). */
+  sprites: readonly SpriteDef[];
+  /** Font defs (ALL_FONTS). */
+  fonts: readonly FontDef[];
+  /** More defs after `sprites` (registered ids win; tools/engine-test stand-ins). */
+  extraSprites?: readonly SpriteDef[];
+}
 
 export interface SpriteInfo {
   id: string;
@@ -80,11 +130,74 @@ export class Atlas {
   private items: PackItem[] = [];
   private warned = new Set<string>();
   private urlCache = new Map<string, string>();
+  /** Baked atlas: the premultiplied texture bytes (uploaded as they are; DOM rasters are cut from them). */
+  private baked: Uint8Array | null = null;
   texture: WebGLTexture | null = null;
 
-  constructor(opts: { sprites?: SpriteDef[]; fonts?: FontDef[]; extraSprites?: SpriteDef[] } = {}) {
-    const defs = [...(opts.sprites ?? ALL_SPRITES), ...(opts.extraSprites ?? [])];
-    const fonts = opts.fonts ?? ALL_FONTS;
+  /** A baked atlas (tools/bake-atlas.ts): `pixels` = the exact premultiplied RGBA its runtime twin uploads. */
+  static fromBaked(meta: BakedAtlasMeta, pixels: Uint8Array): Atlas {
+    if (meta.version !== 1) throw new Error(`[atlas] unknown baked atlas version ${meta.version}`);
+    if (pixels.length !== meta.width * meta.height * 4) throw new Error(`[atlas] baked pixels are ${pixels.length} bytes, want ${meta.width * meta.height * 4}`);
+    const a = new Atlas(null);
+    a.width = meta.width;
+    a.height = meta.height;
+    a.frameCount = meta.fx.length;
+    a.fx = Uint16Array.from(meta.fx);
+    a.fy = Uint16Array.from(meta.fy);
+    a.fw = Uint16Array.from(meta.fw);
+    a.fh = Uint16Array.from(meta.fh);
+    a.fox = Float32Array.from(meta.fox);
+    a.foy = Float32Array.from(meta.foy);
+    for (const s of meta.sprites) a.sprites.set(s.id, { ...s });
+    for (const f of meta.fonts)
+      a.fonts.set(f.id, {
+        id: f.id,
+        h: f.h,
+        handle: Int32Array.from(f.handle),
+        advance: Uint8Array.from(f.advance),
+        width: Uint8Array.from(f.width),
+        spaceAdvance: f.spaceAdvance,
+        placeholder: f.placeholder,
+      });
+    a.missing.push(...meta.missing);
+    a.missingInfo = a.sprites.get("__missing") as SpriteInfo;
+    a.baked = pixels;
+    return a;
+  }
+
+  /** The serializable tables of this atlas (the build bakes them next to `buildPixels()`; palette / hash by the bake). */
+  toBaked(palette: number[] = [], hash = 0): BakedAtlasMeta {
+    return {
+      version: 1,
+      width: this.width,
+      height: this.height,
+      palette,
+      hash,
+      fx: [...this.fx],
+      fy: [...this.fy],
+      fw: [...this.fw],
+      fh: [...this.fh],
+      fox: [...this.fox],
+      foy: [...this.foy],
+      sprites: [...this.sprites.values()].sort((a, b) => a.first - b.first).map((s) => ({ ...s })),
+      fonts: [...this.fonts.values()].map((f) => ({
+        id: f.id,
+        h: f.h,
+        handle: [...f.handle],
+        advance: [...f.advance],
+        width: [...f.width],
+        spaceAdvance: f.spaceAdvance,
+        placeholder: f.placeholder,
+      })),
+      missing: [...this.missing],
+    };
+  }
+
+  /** Paint + pack sprite / font defs at runtime (`null`: an empty shell for fromBaked). */
+  constructor(opts: AtlasOptions | null) {
+    if (!opts) return;
+    const defs = [...opts.sprites, ...(opts.extraSprites ?? [])];
+    const fonts = opts.fonts;
     const tables: { x: number[]; y: number[]; w: number[]; h: number[]; ox: number[]; oy: number[] } = { x: [], y: [], w: [], h: [], ox: [], oy: [] };
     let handle = 0;
     const addRaster = (r: RasterSprite, placeholder: boolean) => {
@@ -231,8 +344,9 @@ export class Atlas {
     return Math.ceil(H / 4) * 4;
   }
 
-  /** Build the premultiplied RGBA pixel buffer. */
+  /** The premultiplied RGBA pixel buffer (a baked atlas: the baked bytes as they are). */
   buildPixels(): Uint8Array {
+    if (this.baked) return this.baked;
     const W = this.width;
     const out = new Uint8Array(W * this.height * 4);
     for (const it of this.items) {
@@ -312,14 +426,59 @@ export class Atlas {
     return f as FontInfo;
   }
 
-  /** Raw straight-alpha frame pixels (for CPU use). */
+  /**
+   * Raw straight-alpha frame pixels (for CPU use). A baked atlas cuts them out of the premultiplied
+   * texture on first use (cached): opaque and clear pixels are exact; a partly transparent pixel gets
+   * the colour that premultiplies back to the same texel (DOM canvases store premultiplied colour, so
+   * icons drawn from it come out the same as from the painted raster).
+   */
   raster(id: string): RasterSprite | undefined {
-    return this.rasters.get(id);
+    const r = this.rasters.get(id);
+    if (r || !this.baked) return r;
+    const s = this.sprites.get(id);
+    if (!s) return undefined;
+    const out = this.cut(s);
+    this.rasters.set(id, out);
+    return out;
+  }
+
+  private cut(s: SpriteInfo): RasterSprite {
+    const px = this.baked as Uint8Array;
+    const W = this.width;
+    const frames: Uint8ClampedArray[] = [];
+    for (let f = 0; f < s.count; f++) {
+      const hd = s.first + f;
+      const x0 = this.fx[hd];
+      const y0 = this.fy[hd];
+      const w = s.w;
+      const h = s.h;
+      const fr = new Uint8ClampedArray(w * h * 4);
+      for (let y = 0; y < h; y++) {
+        let si = ((y0 + y) * W + x0) * 4;
+        let di = y * w * 4;
+        for (let x = 0; x < w; x++, si += 4, di += 4) {
+          const a = px[si + 3];
+          if (a === 0) continue;
+          if (a === 255) {
+            fr[di] = px[si];
+            fr[di + 1] = px[si + 1];
+            fr[di + 2] = px[si + 2];
+          } else {
+            fr[di] = Math.round((px[si] * 255) / a);
+            fr[di + 1] = Math.round((px[si + 1] * 255) / a);
+            fr[di + 2] = Math.round((px[si + 2] * 255) / a);
+          }
+          fr[di + 3] = a;
+        }
+      }
+      frames.push(fr);
+    }
+    return { id: s.id, w: s.w, h: s.h, ox: s.ox, oy: s.oy, fps: s.fps, frames };
   }
 
   /** A canvas with the frame drawn at integer `scale` (nearest). */
   canvas(id: string, frame = 0, scale = 1): HTMLCanvasElement {
-    const r = this.rasters.get(id) ?? this.rasters.get("__missing")!;
+    const r = this.raster(id) ?? this.raster("__missing")!;
     const f = r.frames[((frame % r.frames.length) + r.frames.length) % r.frames.length];
     const src = document.createElement("canvas");
     src.width = r.w;

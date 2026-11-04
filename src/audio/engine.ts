@@ -27,6 +27,9 @@ import { SONGS } from "./music/songs";
 import { SFX } from "./sfx";
 import { kitFor, semis, Voice, type Kit } from "./synth";
 
+/** Realtime reverb impulses are built this long after the engine (the unlock gesture), sfx then music. */
+export const SFX_REV_MS = 900;
+export const MUSIC_REV_MS = 1300;
 export const MAX_VOICES = 24;
 /** Global budget for new low-priority voices: per 1/60 s window, and a token bucket per second. */
 export const LOW_PER_FRAME = 3;
@@ -143,8 +146,9 @@ export class Engine {
     this.sfxVol.connect(this.masterGain);
     this.sfxIn = ctx.createGain();
     this.sfxIn.connect(this.sfxVol);
-    // (realtime: the impulses are built in later macrotasks, so the unlock gesture stays short)
-    this.sfxRev = makeReverb(ctx, this.sfxVol, 1.1, 2.2, 0.55, 0.7, 7, this.realtime ? 30 : -1);
+    // (realtime: the impulses are built well after the unlock gesture, in separate idle tasks, past the
+    // ~300 ms screen transition the tap starts and the first music compile: SFX_REV_MS / MUSIC_REV_MS)
+    this.sfxRev = makeReverb(ctx, this.sfxVol, 1.1, 2.2, 0.55, 0.7, 7, this.realtime ? SFX_REV_MS : -1);
 
     this.duckGain = ctx.createGain();
     this.duckGain.connect(this.masterGain);
@@ -158,7 +162,7 @@ export class Engine {
     this.musicVol.connect(this.musicLP);
     this.musicIn = ctx.createGain();
     this.musicIn.connect(this.musicVol);
-    this.musicRev = makeReverb(ctx, this.musicIn, 1.8, 2.4, MUSIC_REV_WET, 0.55, 3, this.realtime ? 60 : -1);
+    this.musicRev = makeReverb(ctx, this.musicIn, 1.8, 2.4, MUSIC_REV_WET, 0.55, 3, this.realtime ? MUSIC_REV_MS : -1);
     this.musicDly = makeDelay(ctx, this.musicIn, 0.3, 0.38, MUSIC_DLY_WET);
   }
 

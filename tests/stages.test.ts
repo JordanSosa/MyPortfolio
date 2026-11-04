@@ -8,7 +8,7 @@
 import { describe, expect, test } from "vitest";
 import { Bot, simulate } from "../src/debug/bot";
 import { defaultRunConfig } from "../src/game/run-config";
-import { DEFAULT_STAGE, STAGES, registerStage, stageDef, stageInfos } from "../src/game/registry";
+import { DEFAULT_STAGE, ENEMIES, STAGES, registerStage, stageDef, stageInfos } from "../src/game/registry";
 import { finalBossAt, stageBosses, stageEnemies, stageInfo, stagePhaseAt, type StageDef } from "../src/game/stage";
 import { dreamMeadow, EVENTS, PHASES } from "../src/game/stages/dream-meadow";
 import { phaseAt } from "../src/game/director/timeline";
@@ -271,4 +271,49 @@ describe("a second stage (registered by this test only)", () => {
     expect(ids[0]).toBe("dream_meadow");
     expect(ids[ids.length - 1]).toBe("test_candy");
   });
+});
+
+describe("the device enemy ceiling (World.enemyCeiling)", () => {
+  test("scripted spawns stop at maxEnemies x 1.25; bosses and props always spawn", () => {
+    const w = new World({ hero: "hoshi", seed: 3, maxEnemies: 40 });
+    expect(w.enemyCeiling).toBe(50);
+    const p = w.player;
+    let n = 0;
+    for (let i = 0; i < 200; i++) if (w.spawnEnemy("puff", p.x + 200 + (i % 20) * 9, p.y + 200 + Math.floor(i / 20) * 9)) n++;
+    expect(n).toBe(50);
+    expect(w.enemyCount).toBe(50);
+    // a plain enemy (and an elite) past the ceiling: null, nothing changed
+    expect(w.spawnEnemy("puff", p.x + 300, p.y)).toBeNull();
+    expect(w.spawnEnemy("puff", p.x + 300, p.y, true)).toBeNull();
+    expect(w.enemyCount).toBe(50);
+    // a boss still spawns (and counts), a prop still spawns
+    const boss = w.spawnEnemy("king_puff", p.x, p.y - 200);
+    expect(boss).not.toBeNull();
+    expect(boss!.def.boss).toBeTruthy();
+    expect(w.enemyCount).toBe(51);
+    const prop = [...ENEMIES.values()].find((d) => d.prop);
+    expect(prop).toBeDefined();
+    expect(w.spawnEnemy(prop!, p.x - 200, p.y)).not.toBeNull();
+    // (the boss counts toward the ceiling too) two deaths free a slot for the next plain spawn
+    w.despawn(boss!);
+    expect(w.spawnEnemy("puff", p.x + 300, p.y)).toBeNull();
+    w.despawn(w.enemies.items.slice(0, w.enemies.count).find((e) => !e.dead && e.def.id === "puff")!);
+    expect(w.spawnEnemy("puff", p.x + 300, p.y)).not.toBeNull();
+  });
+
+  test("the Final Arc and the Beach Episode at the low tier stay under the ceiling and their events still finish", () => {
+    for (const stage of ["final_arc", "beach_episode"]) {
+      const w = new World({ hero: "rin", seed: 11, god: true, maxEnemies: 150, run: { ...defaultRunConfig(), stage } });
+      let peakPlain = 0;
+      simulate(w, 1260, DT, new Bot(11), (ww) => {
+        let bosses = 0;
+        for (let i = 0; i < ww.enemies.count; i++) if (!ww.enemies.items[i].dead && ww.enemies.items[i].def.boss) bosses++;
+        peakPlain = Math.max(peakPlain, ww.enemyCount - bosses);
+      });
+      expect(peakPlain, stage).toBeLessThanOrEqual(w.enemyCeiling);
+      // the run reached its end (no scripted event stalled waiting on a spawn that never happened)
+      expect(["victory", "play"]).toContain(w.phase);
+      expect(w.t, stage).toBeGreaterThan(stageDef(stage)!.duration - 5);
+    }
+  }, 240_000);
 });

@@ -214,6 +214,8 @@ export type Phase = "play" | "dead" | "victory";
 
 /** Homing projectiles look for a new target within this radius (px). */
 const HOMING_RANGE = 140;
+/** World.enemyCeiling = maxEnemies x this (events / summons / death spawns may overshoot the cap this far). */
+export const ENEMY_CEILING = 1.25;
 
 /** True if projectile `p` (hitEvery 0) already hit the enemy with this uid. */
 function hasHit(p: Projectile, uid: number): boolean {
@@ -1174,10 +1176,23 @@ export class World {
   }
 
   // ================================================================ enemies
-  /** Spawn an enemy by def at feet position (x, y). */
+  /**
+   * Hard ceiling on living (non-prop) enemies: the director's continuous spawns keep to `maxEnemies`
+   * (the device tier's cap); scripted events, summons and death spawns may overshoot it by a quarter,
+   * never more, so a low-tier phone is never asked to run 2.5x its budget.
+   */
+  get enemyCeiling(): number {
+    return Math.ceil(this.maxEnemies * ENEMY_CEILING);
+  }
+
+  /**
+   * Spawn an enemy by def at feet position (x, y). Null for an unknown def, or for a plain enemy
+   * once `enemyCeiling` enemies are alive (bosses and props always spawn): every caller copes.
+   */
   spawnEnemy(def: EnemyDef | string, x: number, y: number, elite = false): Enemy | null {
     const d = typeof def === "string" ? enemyDef(def) : def;
     if (!d) return null;
+    if (!d.boss && !d.prop && this.enemyCount >= this.enemyCeiling) return null;
     const e = this.enemies.spawn();
     e.uid = this.uidSeq++;
     e.def = d;

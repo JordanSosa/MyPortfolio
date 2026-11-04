@@ -26,8 +26,16 @@
  *  - a history entry guards everything but the hub's home page (and the
  *    splash): Android Back / the edge-swipe gesture closes an overlay, pops a
  *    hub page, pauses or steps back instead of leaving; at home it leaves;
- *  - while a modal or the Results screen is up, the WebGL scene redraws at
- *    most 30x per second (the DOM on top keeps full rate).
+ *  - while an in-run modal is up the WebGL scene redraws at most 30x per
+ *    second (the DOM on top keeps full rate); behind an opaque hub page or a
+ *    full-screen hub overlay (unlock celebration, Merch Machine pull) the
+ *    attract game neither steps nor draws, and the frozen run behind Episode
+ *    Results is drawn once (again on resize / WebGL context restore);
+ *  - an account run in progress is stashed (save.stashRun: page hidden / left,
+ *    every STASH_EVERY s of play, TO BE CONTINUED with a revive left) and the
+ *    stash cleared when it banks, so a reload / OS tab kill banks it as DROPPED
+ *    at the next boot. Debug URL params (?god ?skip ?speed) make a run a
+ *    practice run (never banked, never stashed).
  */
 import { audio, type MusicTrack, type SfxId } from "../audio";
 import { Input } from "../core/input";
@@ -61,11 +69,14 @@ import { ScreenWake } from "./wake";
 import { Hub, type PageId, type PageOpts } from "./hub/hub";
 import { episodeTitle } from "./hub/copy";
 import { clearRunToasts, kitTick, overlaysOpen, toast, trophyIcon, type KitHost, type ToastOpts } from "./kit";
+import { resumeToasts, suspendToasts } from "./kit/overlay";
 import { money } from "./kit/art";
 import { showEpisodeCard, type EpisodeCard } from "./stinger";
 import { RunNarrator } from "./narrator";
 import { PlotToasts } from "./plot-toast";
-import { AchievementWatch } from "../meta/achievements/engine";
+import { AchievementWatch, claimAllAchievements } from "../meta/achievements/engine";
+import { setLoadout } from "../meta/loadout";
+import { interruptedNotice, resetBootNotices } from "./hub/celebrate";
 import type { RunReport } from "../meta/rewards";
 import { fmtInt } from "./dom";
 import type { RunConfig } from "../game/run-config";
@@ -92,6 +103,12 @@ const INTRO_END = 1.25;
 const INTRO_CARD = 1.35;
 /** In-run Plot Point check interval (real s; each poll refreshes the live RunStats and evaluates the pending Plot Points). */
 const ACH_POLL = 1;
+/** An account run's live stats are stashed this often (real s of unpaused play) besides on hide / leave. */
+const STASH_EVERY = 15;
+/** The sprite prewarm waits this long after a screen change (ms). */
+const PREWARM_SETTLE_MS = 1000;
+/** Full-screen hub overlays that hide the attract game completely. */
+const COVER_OVERLAYS = ".kover.unlock-cele:not(.out), .kover.reveal:not(.out)";
 
 export interface UiScreen {
   el: HTMLElement;
@@ -165,6 +182,14 @@ export class App implements KitHost {
   private touchShown = false;
   /** history.back() calls of our own still to arrive as popstate events. */
   private selfPops = 0;
+  /** Real s of unpaused play since the last run stash. */
+  private stashT = 0;
+  /** A full-screen hub overlay (unlock celebration, pull) hides the attract game. */
+  private overlayCover = false;
+  /** The scene behind Results / a covered hub needs one fresh draw (entry, resize, context restore). */
+  private redraw = true;
+  /** performance.now() of the last screen / modal change (the sprite prewarm waits for things to settle). */
+  private changedAt = 0;
 
   constructor(readonly params: DebugParams) {
     const s = save.data.settings;
@@ -193,13 +218,27 @@ export class App implements KitHost {
     this.loop.onVisibility = (hidden) => {
       if (hidden) {
         if (this.screen === "game" && !this.modal) this.pause();
+        // (also on pagehide / blur: the OS may kill a hidden tab without another event)
+        this.stashRun();
         audio.suspend();
       } else {
         if (this.unlocked) audio.resume();
-        // the browser drops the wake lock while the page is hidden
-        if (this.screen === "game") this.wake.acquire();
+        // the browser drops the wake lock while the page is hidden (a paused run keeps the screen free to sleep)
+        if (this.screen === "game" && !this.modal) this.wake.acquire();
       }
     };
+    // the scene behind Results / covered hub pages is redrawn only when it can have changed
+    window.addEventListener("resize", () => (this.redraw = true));
+    // save safety (src/ui/save.ts): another window changed the save, writes failing, a run banked after boot
+    save.onExternalChange = () => this.onExternalSave();
+    save.onWriteFail = () => this.syncSaveWarn();
+    save.onWriteOk = () => this.syncSaveWarn();
+    // (the stash check waits for the Web Locks query: the hub may be up already)
+    save.onInterrupted = (r) => {
+      this.report ??= r;
+      if (this.hub) interruptedNotice(this.hub);
+    };
+    this.report = save.interrupted;
     // any pointer use hides the keyboard focus ring
     window.addEventListener("pointerdown", () => this.nav.pointerUsed(), { capture: true });
     // first gesture anywhere unlocks audio (splash, or deep-linked screens)
@@ -212,7 +251,10 @@ export class App implements KitHost {
     window.addEventListener("gamepaddisconnected", () => {
       if (this.screen === "game" && !this.modal) this.pause();
     });
-    this.r.onRestore = () => this.hud.refreshIcons();
+    this.r.onRestore = () => {
+      this.hud.refreshIcons();
+      this.redraw = true;
+    };
   }
 
   get settings(): Settings {
@@ -220,14 +262,18 @@ export class App implements KitHost {
   }
 
   start(): void {
-    // icons / portraits / chest / hero idles used by the DOM UI
-    const warm: [string, number][] = [];
+    // icons / chest first (hub tiles, cards, level-up), then portraits, then hero idles; only in real idle time on
+    // a settled hub (never during a run, a modal, an overlay or a screen change)
+    const icons: [string, number][] = [];
+    const portraits: [string, number][] = [];
+    const idles: [string, number][] = [];
     for (const m of MANIFEST) {
-      if (m.id.startsWith("icon_") || m.id === "chest") for (let f = 0; f < m.frames; f++) warm.push([m.id, f]);
-      else if (m.id.startsWith("portrait_")) warm.push([m.id, 0], [m.id, 1]);
-      else if (m.id.endsWith("_idle")) for (let f = 0; f < m.frames; f++) warm.push([m.id, f]);
+      if (m.id.startsWith("icon_") || m.id === "chest") for (let f = 0; f < m.frames; f++) icons.push([m.id, f]);
+      else if (m.id.startsWith("portrait_")) portraits.push([m.id, 0], [m.id, 1]);
+      else if (m.id.endsWith("_idle")) for (let f = 0; f < m.frames; f++) idles.push([m.id, f]);
     }
-    prewarmSprites(warm);
+    prewarmSprites([...icons, ...portraits, ...idles], () => this.screen !== "game" && !this.modal && !this.sub && overlaysOpen() === 0 && performance.now() - this.changedAt > PREWARM_SETTLE_MS);
+    this.syncSaveWarn();
     this.startAttract();
     const sc = this.params.screen;
     // deep links: ?screen=hub|title (home) | stages | select / loadout | board / shop | heroes | hero | gacha | wiki | settings
@@ -312,9 +358,24 @@ export class App implements KitHost {
   /** KitHost: a sheet / dialog / reveal opened or closed. */
   overlayOpened(): void {
     this.syncHistory();
+    this.syncCover();
   }
   overlayClosed(): void {
     this.syncHistory();
+    this.syncCover();
+  }
+
+  /** KitHost: hub toasts wait while the settings panel is open (they would cover its rows). */
+  holdToasts(): boolean {
+    return !!this.sub;
+  }
+
+  /** A full-screen hub overlay hides the attract game (checked on overlay open / close only). */
+  private syncCover(): void {
+    const was = this.overlayCover;
+    this.overlayCover = !!this.ui.querySelector(COVER_OVERLAYS);
+    this.changedAt = performance.now();
+    if (was && !this.overlayCover) this.redraw = true;
   }
 
   private guardHistory(): void {
@@ -372,6 +433,8 @@ export class App implements KitHost {
     this.endCutin();
     this.screen = id;
     this.current = scr;
+    this.redraw = true;
+    this.changedAt = performance.now();
     markBorn();
     if (scr?.layer) this.nav.push(scr.layer);
     this.hud.show(id === "game");
@@ -412,7 +475,8 @@ export class App implements KitHost {
   startRun(hero: string, intro = false, run?: RunConfig, opts: { account?: boolean } = {}): void {
     // Season 2: the account loadout (src/meta buildRunConfig) arrives as `run` with opts.account; RETRY rebuilds it,
     // debug URLs (?stage= ?relics= ?endless=1 ...) build one, else the World's default (Dream Meadow)
-    this.account = !!opts.account && !!run;
+    // (debug params that bend the run - ?god, ?skip, ?speed - make it a practice run: never banked, never stashed)
+    this.account = !!opts.account && !!run && !this.params.god && this.params.skip <= 0 && this.params.speed === 1;
     this.runConfig = run ?? debugRunConfig(this.params);
     this.hero = heroDef(hero).id;
     // (a debug run's ?hero= may be locked on this account: only account runs touch the saved loadout)
@@ -442,7 +506,10 @@ export class App implements KitHost {
     });
     this.ended = false;
     this.banked = false;
+    this.stashT = 0;
     this.endT = 0;
+    // a window booting while this one plays must leave this run's stash alone (src/ui/save.ts RUN_LOCK)
+    if (this.account) save.holdRunLock();
     this.lvIntro = -1;
     this.pausePending = false;
     this.skipEdges = false;
@@ -520,6 +587,9 @@ export class App implements KitHost {
     this.disposeRunSatire();
     this.pausePending = false;
     if (this.game) {
+      // (a run is always banked before it is disposed; a stash left by one that somehow was not means nothing now)
+      if (this.account && !this.banked) save.clearStash();
+      save.releaseRunLock();
       this.game.dispose();
       this.game = null;
     }
@@ -539,9 +609,32 @@ export class App implements KitHost {
     if (this.banked && this.report) return this.report;
     this.lastSummary = g.world.summary();
     // debug / deep-link runs (every pool open, ?god ...) only preview their payout: the account never sees them
-    this.report = this.account ? save.recordRun(this.lastSummary) : save.previewRun(this.lastSummary);
+    const report = this.account ? save.recordRun(this.lastSummary) : save.previewRun(this.lastSummary);
+    // banked: the stash of this run is spent (the next boot must not bank it again); a practice run never wrote
+    // one (and must not clear another window's)
+    if (this.account) save.clearStash();
+    save.releaseRunLock();
+    this.report = report;
     this.banked = true;
-    return this.report;
+    if (this.account) {
+      // a first clear opened the next episode: PLAY points at it ("EP. N · Candy Kingdom")
+      const next = report.records.firstClear ? report.unlocks.find((u) => u.kind === "stage" && !u.start) : undefined;
+      if (next) {
+        setLoadout(save.profile, { stage: next.id });
+        save.save();
+      }
+      // keep this origin's storage from being evicted (once, after the first banked run)
+      save.requestPersist();
+    }
+    return report;
+  }
+
+  /** Stash the live stats of an account run not banked yet (see src/ui/save.ts). */
+  private stashRun(): void {
+    const g = this.game;
+    if (!g || !this.account || this.banked || this.screen !== "game") return;
+    this.stashT = 0;
+    save.stashRun(g.world.runStats());
   }
 
   /** The current / last run is a debug or deep-link run (nothing is banked). */
@@ -576,12 +669,38 @@ export class App implements KitHost {
     else this.startRun(this.hero, false, this.runConfig);
   }
 
-  /** Game over RETRY: bank the run, say what it paid, go again. */
+  /**
+   * Game over RETRY: bank the run, claim its Plot Point rewards (as leaving Results does), queue its unlocks
+   * for the next Results / the hub (they are never lost), say what it paid, go again.
+   */
   retryFromGameOver(): void {
     const r = this.bankRun();
     const practice = this.practice;
+    let coins = r?.coins.total ?? 0;
+    let gems = r?.gems.total ?? 0;
+    let queued = 0;
+    if (r && !practice) {
+      for (const u of r.unlocks)
+        if (!u.start) {
+          save.pendingUnlocks.push(u);
+          queued++;
+        }
+      const c = claimAllAchievements(save.profile);
+      if (c.count) {
+        save.save();
+        coins += c.coins;
+        gems += c.gems;
+      }
+    }
     this.retry();
-    if (r && !practice) this.toast(`Episode ${fmtInt(r.episode)} banked!`, { kind: "good", reward: `${money("coins", `+${fmtInt(r.coins.total)}`)}${r.gems.total ? money("gems", `+${fmtInt(r.gems.total)}`) : ""}`, inRun: true, ms: 2600 });
+    if (r && !practice)
+      this.toast(`Episode ${fmtInt(r.episode)} banked!`, {
+        kind: "good",
+        reward: `${money("coins", `+${fmtInt(coins)}`)}${gems ? money("gems", `+${fmtInt(gems)}`) : ""}`,
+        sub: queued ? `${queued} new unlock${queued === 1 ? "" : "s"} waiting on Episode Results!` : undefined,
+        inRun: true,
+        ms: 2600,
+      });
   }
 
   // ================================================================ run-start stinger
@@ -651,8 +770,11 @@ export class App implements KitHost {
     this.touchShown = false;
     this.input.markTouchesStale();
     this.hud.setModalOpen(true);
+    this.changedAt = performance.now();
     // pause / level-up / chest muffle the battle music; the game-over / victory jingles stay clear
     if (this.screen === "game" && kind !== "over") audio.setMuffled(true);
+    // a paused run lets the screen sleep (closeModal takes the wake lock again)
+    if (kind === "pause") this.wake.release();
   }
 
   closeModal(): void {
@@ -668,6 +790,7 @@ export class App implements KitHost {
     this.hud.setModalOpen(false);
     this.skipEdges = true;
     this.aqHold = 0.5;
+    this.changedAt = performance.now();
     if (this.screen === "game") this.wake.acquire();
   }
 
@@ -704,8 +827,12 @@ export class App implements KitHost {
       this.syncHistory();
       // an import / reset may have replaced the profile: the hub re-reads it
       this.hub?.refreshTop();
+      // hub toasts held while the panel was open
+      resumeToasts(this);
     });
     this.sub = m;
+    // hub toasts never cover the panel: the ones on screen come back after DONE
+    suspendToasts();
     markBorn();
     if (m.layer) this.nav.push(m.layer);
   }
@@ -756,28 +883,48 @@ export class App implements KitHost {
     }
     // results: the finished run stays on screen, frozen
     const s = this.screen === "game" || this.screen === "results" ? g : this.attract;
-    if (s && this.screen !== "results") s.tick(time.dt, dt);
     const r = this.r;
-    // a modal / Results covers the scene: redraw it at most 30x per second (input, HUD and modals stay full rate)
+    // an opaque hub page / a full-screen hub overlay hides the attract game: it neither steps nor draws
+    const hidden = this.screen === "hub" && (!!this.hub?.coversScene || this.overlayCover);
+    if (s && this.screen !== "results" && !hidden) s.tick(time.dt, dt);
     this.drawAcc += dt;
     this.drawSimAcc += time.dt;
-    // (hub pages that cover the attract game count too)
-    const throttled = !!this.modal || this.screen === "results" || (this.screen === "hub" && !!this.hub?.coversScene);
-    if (!throttled || this.drawAcc >= THROTTLED_DRAW) {
-      r.beginFrame(this.drawAcc);
-      if (s) s.draw(r.time, this.drawSimAcc, this.drawAcc);
+    if (hidden) {
+      // (the scene shows again on the first uncovered frame, drawn fresh: no stale / black frame)
       this.fx.update(time.dt, dt);
-      this.fx.draw();
-      r.endFrame();
       this.drawAcc = this.drawSimAcc = 0;
-    } else this.fx.update(time.dt, dt);
+      this.redraw = true;
+    } else if (this.screen === "results") {
+      // the frozen run behind Episode Results: drawn on entry, then only after a resize / context restore
+      if (this.redraw && !r.contextLost) {
+        this.redraw = false;
+        r.beginFrame(this.drawAcc);
+        if (s) s.draw(r.time, 0, this.drawAcc);
+        this.fx.draw();
+        r.endFrame();
+      }
+      this.drawAcc = this.drawSimAcc = 0;
+    } else {
+      // an in-run modal covers the scene: redraw it at most 30x per second (input, HUD and modals stay full rate)
+      const throttled = !!this.modal && !this.redraw;
+      if (!throttled || this.drawAcc >= THROTTLED_DRAW) {
+        this.redraw = false;
+        r.beginFrame(this.drawAcc);
+        if (s) s.draw(r.time, this.drawSimAcc, this.drawAcc);
+        this.fx.update(time.dt, dt);
+        this.fx.draw();
+        r.endFrame();
+        this.drawAcc = this.drawSimAcc = 0;
+      } else this.fx.update(time.dt, dt);
+    }
     if (g && this.screen === "game") this.hud.update(g.world, dt);
     const cpu = performance.now() - t0;
     this.fpsMeter.frame(dt, cpu, s && this.fpsMeter.visible ? `en ${s.world.enemyCount} p ${this.fx.ps.count} pr ${s.world.projectiles.count} q ${this.tier}` : "");
     // quality: judge only live gameplay / attract frames (not paused, modal, settings or a fresh screen)
     if (this.aqHold > 0) this.aqHold -= dt;
-    if (time.paused || this.modal || this.sub || this.aqHold > 0 || this.screen === "results") this.auto.resetWindow();
-    else this.auto.sample(dt * 1000, cpu);
+    if (time.paused || this.modal || this.sub || this.aqHold > 0 || this.screen === "results" || hidden) this.auto.resetWindow();
+    // (the REAL frame interval: the loop clamps dt to 1/20 s, which would hide a 5 fps phone)
+    else this.auto.sample(this.loop.rawDt * 1000, cpu);
   }
 
   private gameFrame(g: Session, dt: number): void {
@@ -794,6 +941,11 @@ export class App implements KitHost {
     const hold = this.introHold;
     const skipEdges = this.skipEdges;
     this.skipEdges = false;
+    // Esc / START during the episode card, READY? or the cut-in: remembered, the pause opens right after GO / the cut-in
+    if ((hold || cut) && !this.modal && inp.pressed("pause")) {
+      inp.consume("pause");
+      this.pausePending = true;
+    }
     if (!this.modal && !hold) {
       if (!this.params.autoplay) {
         w.input.mx = inp.move.x;
@@ -862,8 +1014,10 @@ export class App implements KitHost {
         this.openModal("over", openGameOver(this, w, false));
         this.music("gameover", 0.8);
         // nothing can change this run any more (no revive left): bank it now, so closing the app on the
-        // TO BE CONTINUED screen never loses it (Results / RETRY reuse the same report)
+        // TO BE CONTINUED screen never loses it (Results / RETRY reuse the same report); with a revive
+        // offered, stash it (a reload there banks the death)
         if (w.revivesLeft <= 0) this.bankRun();
+        else this.stashRun();
       } else if (w.phase === "victory" && this.endT > 7.2 && !this.modal) {
         // after the dawn celebration (view/bestiary-fx.ts: explosions -> flash at 1.7 s -> sunrise + fireworks)
         this.ended = true;
@@ -874,6 +1028,10 @@ export class App implements KitHost {
     if (!this.modal && w.phase === "play") {
       this.tut?.frame(dt);
       this.pollPlotPoints(w, dt);
+      if (!time.paused && this.account) {
+        this.stashT += dt;
+        if (this.stashT >= STASH_EVERY) this.stashRun();
+      }
     }
   }
 
@@ -912,6 +1070,29 @@ export class App implements KitHost {
   /** A toast (kit: queued, rate-limited; `inRun` = the bottom strip, clear of the hero). */
   toast(msg: string, o: ToastOpts = {}): void {
     toast(this, msg, o);
+  }
+
+  /**
+   * Settings START OVER / IMPORT replaced the profile: forget the old profile's last run ("Previously on…"),
+   * and let the next home visit run the boot notices for the new one (its unlocks, Plot Points ready).
+   */
+  onProfileReplaced(): void {
+    this.report = null;
+    this.lastSummary = null;
+    resetBootNotices();
+    this.syncSaveWarn();
+  }
+
+  /** Another window saved: the hub shows the reloaded profile; mid-run nothing changes (banking applies to it). */
+  private onExternalSave(): void {
+    if (this.screen !== "hub" || !this.hub) return;
+    this.hub.refreshTop();
+    this.toast("Your save changed in another window. Reloaded!", { kind: "info", ms: 3200 });
+  }
+
+  /** The sticky "can't save" banner (in the hub, under its header) follows save.writeOk; Results has its own line. */
+  private syncSaveWarn(): void {
+    this.hub?.setSaveWarn(!save.writeOk);
   }
 
   get lastRun(): RunSummary | null {

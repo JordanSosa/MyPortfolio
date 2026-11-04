@@ -75,7 +75,23 @@ describe("payout", () => {
     const zero = pay({ time: 0, coins: 0, killsByEnemy: {}, eliteKills: 0 });
     sums(zero);
     expect(zero.coins.total).toBe(0);
-    expect(zero.gems.total).toBe(TUNING.payout.gemsPerRun);
+    // the flat stipend is earned over the first minute: a zero-time run pays nothing
+    expect(zero.gems.total).toBe(0);
+  });
+
+  test("quit-farming: a 2 s quit pays <= 1 gem on every stage at max heat and curse; a 1:41 death pays the full stipend", () => {
+    for (const stage of STAGES) {
+      const s = runStats({ stage: stage.id, time: 2, coins: 0, killsByEnemy: { puff: 3 }, heat: 60, curse: 3, gemFind: 2 });
+      const p = computePayout({ stats: s, stage, grade: gradeRun(s), firstClear: false, firstBossKills: [], newHeatBadges: [] });
+      sums(p);
+      expect(p.gems.total, stage.id).toBeLessThanOrEqual(1);
+    }
+    const P = TUNING.payout;
+    const death = computePayout({ stats: runStats({ time: 101 }), stage: DM, grade: "C", firstClear: false, firstBossKills: [], newHeatBadges: [] });
+    expect(death.gems.lines.find((l) => l.id === "trickle")!.amount).toBe(Math.round(P.gemsPerRun + (101 / 60) * P.gemsPerMinute));
+    // the stipend ramps in over the first minute (never more for quitting early)
+    const at = (t: number) => computePayout({ stats: runStats({ time: t }), stage: DM, grade: "C", firstClear: false, firstBossKills: [], newHeatBadges: [] }).gems.total;
+    for (let t = 0; t < 180; t += 5) expect(at(t + 5)).toBeGreaterThanOrEqual(at(t));
   });
 
   test("fail forward: a 2:30 first death pays for 2-4 cheap ring-1 board nodes (EXPANSION §2)", () => {

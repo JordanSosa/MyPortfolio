@@ -35,8 +35,9 @@ export const TUNING = {
     heatGemPer: 0.06,
     /** Curse ("more enemies, more rewards"): coins and run gems x (1 + curse x this). */
     curseRewardPer: 0.5,
-    /** Gems every run ("small per-run trickle"). */
+    /** Gems every run ("small per-run trickle"), earned over the first `stipendSeconds` played (an instant quit pays ~0). */
     gemsPerRun: 4,
+    stipendSeconds: 60,
     /** Gems per minute survived. */
     gemsPerMinute: 1.5,
     /** Endless gems per minute after the final boss. */
@@ -140,7 +141,8 @@ export const TUNING = {
   relics: { baseSlots: 1, maxSlots: 4, maxStars: 6 },
 
   /** Banner rotation (§9): featured banners change every N runs. */
-  rotation: { runsPerBanner: 3 },
+  /** Banners rotate every `runsPerBanner` runs that lasted `minRunSeconds` (or cleared): instant quits never spin them. */
+  rotation: { runsPerBanner: 3, minRunSeconds: 60 },
 
   /** The Merch Machine (§9). */
   gacha: {

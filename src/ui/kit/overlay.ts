@@ -22,6 +22,8 @@ export interface KitHost {
   /** An overlay opened / closed (history guard, Back routing). */
   overlayOpened(): void;
   overlayClosed(): void;
+  /** Hub (not in-run) toasts wait while this says so (the settings panel is open); resumeToasts() shows them. */
+  holdToasts?(): boolean;
 }
 
 // ------------------------------------------------------------------ detail sheet
@@ -270,6 +272,8 @@ let visible = 0;
 let visibleRun = 0;
 let lastMsg = "";
 let lastAt = 0;
+/** Hub toasts on screen and their hide timers (suspendToasts puts them back in the queue). */
+const shownHub = new Map<HTMLElement, { t: QueuedToast; timer: ReturnType<typeof setTimeout> }>();
 
 function container(host: KitHost, inRun: boolean): HTMLElement {
   if (inRun) {
@@ -299,15 +303,36 @@ export function toast(host: KitHost, msg: string, o: ToastOpts = {}): void {
 }
 
 function pump(host: KitHost): void {
+  const hold = !!host.holdToasts?.();
   for (let i = 0; i < queue.length && visible < MAX_VISIBLE; ) {
     const t = queue[i];
-    if (t.o.inRun && visibleRun >= MAX_VISIBLE_RUN) {
+    if ((t.o.inRun && visibleRun >= MAX_VISIBLE_RUN) || (hold && !t.o.inRun)) {
       i++;
       continue;
     }
     queue.splice(i, 1);
     show(host, t);
   }
+}
+
+/** A panel that hub toasts must not cover opened: the visible ones go back to the front of the queue (shown again in full later). */
+export function suspendToasts(): void {
+  const back: QueuedToast[] = [];
+  for (const [el, v] of shownHub) {
+    clearTimeout(v.timer);
+    if (el.isConnected) {
+      el.remove();
+      visible = Math.max(0, visible - 1);
+    }
+    back.push(v.t);
+  }
+  shownHub.clear();
+  queue.unshift(...back);
+}
+
+/** Show the hub toasts held while holdToasts() was true. */
+export function resumeToasts(host: KitHost): void {
+  pump(host);
 }
 
 function show(host: KitHost, t: QueuedToast): void {
@@ -319,7 +344,8 @@ function show(host: KitHost, t: QueuedToast): void {
   visible++;
   if (o.inRun) visibleRun++;
   const ms = o.ms ?? (kind === "ach" ? 3400 : 2300);
-  setTimeout(() => {
+  const timer = setTimeout(() => {
+    shownHub.delete(el);
     el.classList.add("out");
     setTimeout(() => {
       // (clearRunToasts may have dropped it already)
@@ -331,6 +357,7 @@ function show(host: KitHost, t: QueuedToast): void {
       pump(host);
     }, 260);
   }, ms);
+  if (!o.inRun) shownHub.set(el, { t, timer });
 }
 
 /** Drop queued in-run toasts and clear the in-run strip (run ended). */

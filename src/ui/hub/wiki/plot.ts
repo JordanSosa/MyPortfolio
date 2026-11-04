@@ -54,41 +54,89 @@ export function plotRow(v: AchievementView, i: number): string {
     </div>`;
 }
 
-/** The whole tab body. */
-export function plotHtml(p: Profile, ctx: MetaContent, st: PlotState): string {
-  const all = achievementViews(p, ctx);
-  const done = all.filter((v) => v.done).length;
+/** What the tab head shows (recomputed in place after a claim: no list re-render). */
+export interface PlotSummary {
+  done: number;
+  total: number;
+  /** Claimable rewards. */
+  ready: number;
+  gems: number;
+  coins: number;
+  /** Claimable per category. */
+  claimByCat: Record<string, number>;
+}
+
+export function plotSummary(p: Profile, ctx: MetaContent, all: AchievementView[] = achievementViews(p, ctx)): PlotSummary {
   const ready = all.filter(claimable);
-  const gems = ready.reduce((a, v) => a + (v.def.reward.gems ?? 0), 0);
-  const coins = ready.reduce((a, v) => a + (v.def.reward.coins ?? 0), 0);
+  const claimByCat: Record<string, number> = {};
+  for (const v of ready) claimByCat[v.def.category] = (claimByCat[v.def.category] ?? 0) + 1;
+  return {
+    done: all.filter((v) => v.done).length,
+    total: all.length,
+    ready: ready.length,
+    gems: ready.reduce((a, v) => a + (v.def.reward.gems ?? 0), 0),
+    coins: ready.reduce((a, v) => a + (v.def.reward.coins ?? 0), 0),
+    claimByCat,
+  };
+}
+
+/** The reward preview next to CLAIM ALL. */
+export const claimPreHtml = (s: PlotSummary): string => `${s.gems ? money("gems", `+${fmtInt(s.gems)}`) : ""}${s.coins ? money("coins", `+${fmtInt(s.coins)}`) : ""}`;
+export const claimAllLabel = (s: PlotSummary): string => `CLAIM ALL (${s.ready})`;
+
+/** The CLAIM ALL block (inside .pp-ready). */
+export function claimAllHtml(s: PlotSummary): string {
+  return s.ready
+    ? `<div class="pp-claimall"><span class="pp-pre">${claimPreHtml(s)}</span>${btn(claimAllLabel(s), { cls: "gold small pulse", act: "claimall" })}</div>`
+    : `<p class="pp-none">All rewards claimed. Go make some plot.</p>`;
+}
+
+/** The CLAIMABLE filter chip's label. */
+export const claimChipHtml = (n: number): string => `CLAIMABLE${n ? ` <b>${n}</b>` : ""}`;
+
+/** Message of an empty list for a filter. */
+export function emptyPlotHtml(f: PlotFilter): string {
+  const msg = f === "claim" ? "Nothing to claim. The narrator suggests: playing an episode." : f === "done" ? "Nothing done here yet. Every legend starts somewhere." : "Everything here is done. The fans are speechless.";
+  return `<p class="wk-empty">${esc(msg)}</p>`;
+}
+
+/**
+ * The tab, in parts: `head` (summary, CLAIM ALL, categories, filters) and the
+ * row markup in display order. The page puts `head` + the first rows in the
+ * DOM at once and appends the rest over the next frames (wiki.ts), so opening
+ * the tab never parses 171 rows in one task.
+ */
+export function plotParts(p: Profile, ctx: MetaContent, st: PlotState): { head: string; rows: string[] } {
+  const all = achievementViews(p, ctx);
+  const sum = plotSummary(p, ctx, all);
   const inCat = st.cat === "all" ? all : all.filter((v) => v.def.category === st.cat);
   const views = inCat.filter((v) => (st.filter === "claim" ? claimable(v) : st.filter === "todo" ? !v.done : st.filter === "done" ? v.done : true));
   const order = [...views].sort((a, b) => Number(claimable(b)) - Number(claimable(a)) || Number(a.done) - Number(b.done) || Number(a.secret) - Number(b.secret) || b.progress / b.target - a.progress / a.target);
   const cats = [
-    `<button class="pp-cat${st.cat === "all" ? " on" : ""}" data-nav data-act="cat" data-id="all"><b>ALL</b><small>${done}/${all.length}</small><i style="--f:${all.length ? done / all.length : 0}"></i></button>`,
+    `<button class="pp-cat${st.cat === "all" ? " on" : ""}" data-nav data-act="cat" data-id="all"><b>ALL</b><small>${sum.done}/${all.length}</small><i style="--f:${all.length ? sum.done / all.length : 0}"></i></button>`,
     ...ACHIEVEMENT_CATEGORIES.map((c) => {
       const list = all.filter((v) => v.def.category === c);
       const d = list.filter((v) => v.done).length;
-      const n = list.filter(claimable).length;
+      const n = sum.claimByCat[c] ?? 0;
       return `<button class="pp-cat${st.cat === c ? " on" : ""}" data-nav data-act="cat" data-id="${c}"><b>${esc(CATEGORY_NAMES[c].toUpperCase())}</b><small>${d}/${list.length}</small><i style="--f:${list.length ? d / list.length : 0}"></i>${n ? `<span class="bdg">${n}</span>` : ""}</button>`;
     }),
   ].join("");
-  const filters = FILTERS.map((f) => `<button class="wk-chip${st.filter === f.id ? " on" : ""}" data-nav data-act="pfilter" data-id="${f.id}">${f.label}${f.id === "claim" && ready.length ? ` <b>${ready.length}</b>` : ""}</button>`).join("");
-  const empty =
-    st.filter === "claim" ? "Nothing to claim. The narrator suggests: playing an episode." : st.filter === "done" ? "Nothing done here yet. Every legend starts somewhere." : "Everything here is done. The fans are speechless.";
-  return `
+  const filters = FILTERS.map((f) => `<button class="wk-chip${st.filter === f.id ? " on" : ""}" data-nav data-act="pfilter" data-id="${f.id}">${f.id === "claim" ? claimChipHtml(sum.ready) : f.label}</button>`).join("");
+  const head = `
     <section class="pp-head">
       <div class="pp-sum">
-        <span class="pp-big">${trophyIcon("pp-tro")}<b>${done}</b><small>/ ${all.length}</small></span>
-        <span class="pp-bar">${pbar(all.length ? done / all.length : 0, `${Math.round((all.length ? done / all.length : 0) * 100)}% of the plot`, "gold")}</span>
+        <span class="pp-big">${trophyIcon("pp-tro")}<b>${sum.done}</b><small>/ ${all.length}</small></span>
+        <span class="pp-bar">${pbar(all.length ? sum.done / all.length : 0, `${Math.round((all.length ? sum.done / all.length : 0) * 100)}% of the plot`, "gold")}</span>
       </div>
-      ${
-        ready.length
-          ? `<div class="pp-claimall"><span class="pp-pre">${gems ? money("gems", `+${fmtInt(gems)}`) : ""}${coins ? money("coins", `+${fmtInt(coins)}`) : ""}</span>${btn(`CLAIM ALL (${ready.length})`, { cls: "gold small pulse", act: "claimall" })}</div>`
-          : `<p class="pp-none">All rewards claimed. Go make some plot.</p>`
-      }
+      <div class="pp-ready">${claimAllHtml(sum)}</div>
     </section>
     <div class="pp-cats kscroll-x">${cats}</div>
-    <div class="wk-chips">${filters}</div>
-    <div class="pp-list">${order.length ? order.map(plotRow).join("") : `<p class="wk-empty">${esc(empty)}</p>`}</div>`;
+    <div class="wk-chips">${filters}</div>`;
+  return { head, rows: order.map(plotRow) };
+}
+
+/** The whole tab body in one string (search previews / tools; the page streams it: plotParts). */
+export function plotHtml(p: Profile, ctx: MetaContent, st: PlotState): string {
+  const { head, rows } = plotParts(p, ctx, st);
+  return `${head}<div class="pp-list">${rows.length ? rows.join("") : emptyPlotHtml(st.filter)}</div>`;
 }

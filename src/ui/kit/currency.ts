@@ -1,9 +1,11 @@
 /**
  * Currency bar: ★ Star Coins, ♦ Dream Gems, Copium. Each pill counts up / down
  * to a new balance (ease-out, ~0.5-1.1 s depending on the jump), bumps, and
- * floats a "+120" gain pop. Text is written only when the shown integer
- * changes; the bump / pop are one-shot WAAPI animations (no class replays, no
- * forced reflow). `sync()` after any purchase / payout; `set()` jumps.
+ * floats a "+120" gain pop (gains landing on the same pill within GAIN_MERGE_MS
+ * merge into one pop: "+33", never "+28" over "+5"). Text is written only when
+ * the shown integer changes; the bump / pop are one-shot WAAPI animations (no
+ * class replays, no forced reflow). `sync()` after any purchase / payout;
+ * `set()` jumps.
  */
 import type { Currencies } from "../../meta/profile";
 import { Bump, fmtInt, h } from "../dom";
@@ -26,6 +28,9 @@ const K_GAIN: Keyframe[] = [
   { transform: "translate(-50%, 1.4em) scale(0.9)", opacity: 0 },
 ];
 
+/** A gain arriving this soon after the pill's last pop adds to that pop (restarted) instead of stacking a second one. */
+const GAIN_MERGE_MS = 600;
+
 class Pill implements Tickable {
   readonly el: HTMLElement;
   private readonly val: HTMLElement;
@@ -37,6 +42,11 @@ class Pill implements Tickable {
   private dur = 0;
   /** Value currently displayed (mid count-up included). */
   cur = 0;
+  /** The live gain pop (merge target), its total and start time. */
+  private pop: HTMLElement | null = null;
+  private popAnim: Animation | null = null;
+  private popDelta = 0;
+  private popAt = -1e9;
 
   constructor(readonly id: CurrencyId) {
     this.el = h("div", `cpill c-${id}`);
@@ -70,13 +80,39 @@ class Pill implements Tickable {
   }
 
   private gain(delta: number): void {
+    const now = performance.now();
+    const label = (d: number) => `${d > 0 ? "+" : "−"}${fmtInt(Math.abs(d))}`;
+    const old = this.pop;
+    if (old?.isConnected && now - this.popAt < GAIN_MERGE_MS && Math.sign(delta) === Math.sign(this.popDelta)) {
+      // one pop per pill: the earlier gain's pop shows the sum and starts over
+      this.popDelta += delta;
+      old.textContent = label(this.popDelta);
+      this.popAt = now;
+      if (this.popAnim) {
+        this.popAnim.currentTime = 0;
+        this.popAnim.play();
+      }
+      return;
+    }
     this.bump.play(true);
-    const g = h("span", `cgain ${delta > 0 ? "up" : "down"}`, `${delta > 0 ? "+" : "−"}${fmtInt(Math.abs(delta))}`);
+    const g = h("span", `cgain ${delta > 0 ? "up" : "down"}`, label(delta));
     this.el.appendChild(g);
+    this.pop = g;
+    this.popDelta = delta;
+    this.popAt = now;
+    this.popAnim = null;
     if (typeof g.animate === "function" && !reducedMotion()) {
       const a = g.animate(K_GAIN, { duration: 1100, fill: "forwards" });
-      a.onfinish = () => g.remove();
-    } else setTimeout(() => g.remove(), 900);
+      this.popAnim = a;
+      a.onfinish = () => {
+        g.remove();
+        if (this.pop === g) this.pop = this.popAnim = null;
+      };
+    } else
+      setTimeout(() => {
+        g.remove();
+        if (this.pop === g) this.pop = null;
+      }, 900);
   }
 
   tick(dt: number): boolean {

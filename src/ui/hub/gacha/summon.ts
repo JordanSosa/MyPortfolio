@@ -106,6 +106,9 @@ export class Summon implements Tickable {
   private musicCut = false;
   private toastsShown = new Set<string>();
   private flipped = new Set<number>();
+  /** Layout caches (centre(), the dealt card rects for the flip bursts): no layout read after a write. */
+  private ctr: { x: number; y: number; d: number } | null = null;
+  private cardRects: DOMRect[] | null = null;
   private summaryReady = false;
   private readonly cards: HTMLElement[] = [];
   /** Meteor flight (JS-driven so the trail follows the head). */
@@ -137,7 +140,7 @@ export class Summon implements Tickable {
           <i class="sm-beams"></i>
           <div class="sm-cap-in">${hasArt("ui_gacha_capsule") ? `${img("ui_gacha_capsule", "px cpf whole", mf)}${img("ui_gacha_capsule", "px cpf cracked", CAPSULE_CRACKED)}` : `<i class="css-cap whole"></i><i class="css-cap cracked"></i>`}</div>
         </div>
-        <div class="sm-cards" role="list">${this.results.map((r, i) => cardHtml(r.item, i, resultChip(r), r.lost5050 ? "lost" : "", n === 1 ? pick(`rs:${r.rarity}`, RARITY_SUBTITLES[r.rarity] ?? []) : "")).join("")}</div>
+        <div class="sm-cards" role="list">${this.results.map((r, i) => cardHtml(r.item, i, resultChip(r) + (this.isEquipped(r, i) ? tag(C.EQUIPPED_CHIP, "green") : ""), r.lost5050 ? "lost" : "", n === 1 ? pick(`rs:${r.rarity}`, RARITY_SUBTITLES[r.rarity] ?? []) : "")).join("")}</div>
       </div>
       <i class="sm-flash" aria-hidden="true"></i>
       <p class="sm-line" aria-live="polite"></p>
@@ -166,6 +169,7 @@ export class Summon implements Tickable {
     onTap(this.q('[data-act="ok"]'), () => this.close());
     if (o.again) onTap(this.q('[data-act="again"]'), () => this.again());
     this.el.addEventListener("pointerdown", (e) => this.onTap(e));
+    window.addEventListener("resize", this.onResize);
     for (const c of this.cards) c.addEventListener("click", () => this.inspect(Number(c.dataset.i)));
     animate(this);
     setDebugStepper((dt) => this.advance(dt * this.rate));
@@ -284,11 +288,19 @@ export class Summon implements Tickable {
     f.animate([{ opacity: 0 }, { opacity: p, offset: 0.18 }, { opacity: 0 }], { duration: d, easing: "ease-out" });
   }
 
-  /** Circle centre in px (portrait: 40 % of the height). */
+  /** Circle centre in px (portrait: 40 % of the height); measured once, again only after a resize. */
   private centre(): { x: number; y: number; d: number } {
+    if (this.ctr) return this.ctr;
     const r = this.q(".sm-circle").getBoundingClientRect();
-    return { x: r.left + r.width / 2, y: r.top + r.height / 2, d: r.width };
+    this.ctr = { x: r.left + r.width / 2, y: r.top + r.height / 2, d: r.width };
+    return this.ctr;
   }
+
+  /** A resize / rotation: the cached circle centre and card rects are stale. */
+  private readonly onResize = (): void => {
+    this.ctr = null;
+    this.cardRects = null;
+  };
 
   private colors(r: Rarity = this.best): readonly string[] {
     return RARITY_HEX[r];
@@ -457,6 +469,8 @@ export class Summon implements Tickable {
     const cx = cr.left + cr.width / 2;
     const cy = cr.top + cr.height / 2;
     const rects = this.cards.map((c) => c.getBoundingClientRect());
+    // (the grid does not move after the deal: every flip burst reuses these, no read after the flip's writes)
+    this.cardRects = rects;
     this.cards.forEach((c, i) => {
       const r = rects[i];
       if (this.rm) {
@@ -515,7 +529,7 @@ export class Summon implements Tickable {
     if (r.result === "star" || r.result === "constellation") this.after(0.16, () => this.sfx("starUp", 0.7, r.level));
     else if (r.result === "copium") this.after(0.16, () => this.sfx("gachaDupe", 0.7));
     if (this.fx && !this.rm) {
-      const b = card.getBoundingClientRect();
+      const b = this.cardRects?.[i] ?? card.getBoundingClientRect();
       if (r.result === "star" || r.result === "constellation") this.fx.burst(b.left + b.width / 2, b.top + b.height * 0.3, 10, 160, ["#ffe14d", "#fff7b0"], 0.55);
       else if (rarityIdx(r.rarity) >= 2) this.fx.burst(b.left + b.width / 2, b.top + b.height / 2, 8, 140, this.colors(r.rarity), 0.5, true);
     }
@@ -787,7 +801,7 @@ export class Summon implements Tickable {
     if (this.summaryReady) return;
     this.summaryReady = true;
     const notes = this.results
-      .map((r) => noteFor(r, this.o.cones ?? 0))
+      .map((r, i) => (this.isEquipped(r, i) ? { ...C.equippedLine(r.item.name), pri: 10 } : noteFor(r, this.o.cones ?? 0)))
       .filter((x): x is Note => !!x)
       .sort((a, b) => b.pri - a.pri);
     const shown = notes.slice(0, this.results.length > 1 ? 2 : 2);
@@ -848,12 +862,21 @@ export class Summon implements Tickable {
     if (any) this.sfx("achievement", 0.8);
   }
 
+  /**
+   * The result whose copy was auto-equipped (meta autoEquipNewRelics): only the first card of that id
+   * (a 10-pull can hold the same new relic twice: the second copy is a star-up).
+   */
+  private isEquipped(r: PullResult, i: number): boolean {
+    const eq = this.out.equipped;
+    return !!eq?.length && r.item.kind === "relic" && r.result === "new" && eq.includes(r.item.id) && this.results.findIndex((x) => x.item.id === r.item.id) === i;
+  }
+
   /** Tap a summary card: its dupe line. */
   private inspect(i: number): void {
     if (!this.done || this.closed) return;
     const r = this.results[i];
     if (!r) return;
-    const n = noteFor(r, this.o.cones ?? 0);
+    const n = this.isEquipped(r, i) ? { ...C.equippedLine(r.item.name), pri: 10 } : noteFor(r, this.o.cones ?? 0);
     const line = n ?? { t: `${r.item.name} · ${r.rarity}`, s: pick(`rs:${r.rarity}`, RARITY_SUBTITLES[r.rarity] ?? []), pri: 0 };
     this.q(".sm-notes").innerHTML = `<p class="sm-note sel"><b>${esc(line.t)}</b>${line.s ? ` <small>${esc(line.s)}</small>` : ""}</p>`;
     this.sfx("uiMove", 0.6);
@@ -873,6 +896,7 @@ export class Summon implements Tickable {
     if (!this.done) this.summary();
     this.closed = true;
     this.cancel();
+    window.removeEventListener("resize", this.onResize);
     stopAnimating(this);
     setDebugStepper(null);
     this.fx?.dispose();

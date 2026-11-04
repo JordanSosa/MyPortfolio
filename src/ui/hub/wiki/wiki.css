@@ -330,7 +330,7 @@
 }
 .wk-chip {
   flex: none;
-  min-height: 34px;
+  min-height: 44px;
   padding: 0.15em 0.75em;
   border-radius: 999px;
   border: 2px solid rgba(221, 198, 255, 0.4);
@@ -419,8 +419,10 @@
 .wk-tile:active {
   transform: scale(0.95) rotate(-1deg);
 }
-.wk-body.anim .wk-tile {
-  animation: wk-pop 0.34s cubic-bezier(0.2, 1.6, 0.4, 1) both;
+/* (the entrance plays on what is on screen at first: the first tiles / rows only; "backwards" fill releases
+   each finished animation, so a long list does not keep 171 animations alive) */
+.wk-body.anim .wk-tile:nth-child(-n + 24) {
+  animation: wk-pop 0.34s cubic-bezier(0.2, 1.6, 0.4, 1) backwards;
   animation-delay: calc(var(--i) * 16ms);
 }
 @keyframes wk-pop {
@@ -751,8 +753,8 @@
   content-visibility: auto;
   contain-intrinsic-size: auto 4.6em;
 }
-.wk-body.anim .pp {
-  animation: wk-pop 0.3s cubic-bezier(0.2, 1.4, 0.4, 1) both;
+.wk-body.anim .pp:nth-child(-n + 12) {
+  animation: wk-pop 0.3s cubic-bezier(0.2, 1.4, 0.4, 1) backwards;
   animation-delay: calc(var(--i) * 14ms);
 }
 .pp.done {
@@ -911,7 +913,9 @@
   line-height: 1.15;
   color: #1b0f30;
 }
+/* "[edit]" and inline wiki links are small text: an invisible ring makes their hit area >= 44 px */
 .wkp-edit {
+  position: relative;
   flex: none;
   min-height: 30px;
   padding: 0 0.15em;
@@ -925,6 +929,11 @@
   min-height: 24px;
   color: var(--lblue);
 }
+.wkp-edit::before {
+  content: "";
+  position: absolute;
+  inset: -10px -6px;
+}
 .wkp-cn {
   margin-left: 0.15em;
   font-size: 0.7em;
@@ -933,6 +942,7 @@
   color: var(--link);
 }
 .wkl {
+  position: relative;
   display: inline;
   padding: 0;
   border: 0;
@@ -943,6 +953,15 @@
   text-decoration-thickness: 1px;
   text-underline-offset: 2px;
   cursor: pointer;
+}
+.wkl::before {
+  content: "";
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: max(calc(100% + 8px), 44px);
+  height: max(calc(100% + 28px), 44px);
+  transform: translate(-50%, -50%);
 }
 .wkl.red {
   color: var(--redlink, #d0315a);

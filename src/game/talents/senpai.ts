@@ -11,6 +11,7 @@ import type { Pickup } from "../types";
 import type { World } from "../world";
 import { charmRules } from "../weapons/_charm";
 import { HB, hfx } from "../weapons/_hb";
+import { dropSnack } from "../weapons/_heroes-a";
 import { glance } from "../weapons/notice-me-sparkles";
 import { byRank, node } from "./_node";
 
@@ -51,14 +52,13 @@ function installValentines(w: World, r: number): void {
     for (let i = 0; i < 12; i++) {
       const a = (i / 12) * Math.PI * 2 + w.rng.spread(0.2);
       const d = 22 + w.rng.next() * 30;
-      const k = w.dropPickup("snack", p.x + Math.cos(a) * d, p.y + Math.sin(a) * d * 0.7, 3);
-      k.sprite = CHOC_SPRITE;
-      k.tint = CHOC_TINT;
+      // (dropSnack: a censored coin under the Censored twist; it falls the same way)
+      const k = dropSnack(w, CHOC_SPRITE, p.x + Math.cos(a) * d, p.y + Math.sin(a) * d * 0.7, 3, CHOC_TINT);
       // they fall from the sky (staggered) instead of hopping out of the hero
       k.z = 70 + i * 9;
       k.vz = 0;
       k.vx = k.vy = 0;
-      live.push(k);
+      if (k.kind === "snack") live.push(k);
     }
     hfx(w, HB.VALENTINE, p.x, p.y - CFG.playerCy);
   });

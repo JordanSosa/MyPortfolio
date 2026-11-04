@@ -34,9 +34,9 @@ export function stageThumb(info: StageInfo | undefined, locked = false): string 
   </div>`;
 }
 
-/** Record chips of a stage. */
-export function stageRecords(rec: StageRecord | undefined, info: StageInfo | undefined): string {
-  if (!rec || rec.runs <= 0) return `<span class="rchip muted">NOT AIRED YET</span>`;
+/** Record chips of a stage. `open`: the stage is playable, so a stage never played reads "NEW EPISODE!" (else "NOT AIRED YET"). */
+export function stageRecords(rec: StageRecord | undefined, info: StageInfo | undefined, open = false): string {
+  if (!rec || rec.runs <= 0) return open ? `<span class="rchip gold new-ep">NEW EPISODE!</span>` : `<span class="rchip muted">NOT AIRED YET</span>`;
   const chips: string[] = [];
   chips.push(`<span class="rchip"><small>BEST</small>${fmtTime(rec.bestTime)}</span>`);
   if (rec.clears > 0) chips.push(`<span class="rchip gold"><small>CLEARS</small>${fmtInt(rec.clears)}</span>`);

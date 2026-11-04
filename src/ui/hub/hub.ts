@@ -25,7 +25,7 @@ import type { NavLayer } from "../nav";
 import { save } from "../save";
 import { markBorn, onTap, sparkles } from "../screens/common";
 import { boardPage } from "./board";
-import { bootNotices } from "./celebrate";
+import { homeNotices, interruptedNotice } from "./celebrate";
 import { gachaPage } from "./gacha";
 import { heroPage, heroesPage } from "./heroes";
 import { homePage } from "./home";
@@ -122,8 +122,12 @@ export class Hub implements UiScreen {
     if (ids[0] !== "home") ids.unshift("home");
     ids.forEach((id, i) => this.pushNow(PAGES[id](this, i === ids.length - 1 ? opts : {}), i === ids.length - 1));
     this.syncChrome();
-    // first time at home this session: welcome (v1 migration), recovered save, boot unlocks, Plot Points ready
-    if (this.stack.length === 1) bootNotices(this);
+    this.setSaveWarn(!save.writeOk);
+    // first time at home this session: welcome (v1 migration), recovered save, interrupted run, boot / queued
+    // unlocks, Plot Points ready (later home visits: queued unlocks only)
+    if (this.stack.length === 1) homeNotices(this);
+    // (a run interrupted last session is announced on any page; the rest waits for home)
+    else setTimeout(() => !this.closed && interruptedNotice(this), 450);
   }
 
   /** Stack depth (1 = home). */
@@ -249,6 +253,22 @@ export class Hub implements UiScreen {
 
   toast(msg: string, o: ToastOpts = {}): void {
     toast(this.app, msg, o);
+  }
+
+  /**
+   * The save can't be written (storage full / blocked): a sticky banner under the header, in the layout (it
+   * never covers a page's buttons or a sheet). Cleared by the next good write (App.syncSaveWarn).
+   */
+  setSaveWarn(on: boolean): void {
+    const cur = this.el.querySelector(".hub-savewarn");
+    if (!on) {
+      cur?.remove();
+      return;
+    }
+    if (cur) return;
+    const el = h("div", "hub-savewarn", "<b>⚠</b><span>Progress can't be saved on this device (storage full or blocked). Export your save in Settings → SAVE DATA.</span>");
+    el.setAttribute("role", "alert");
+    this.el.querySelector(".hub-top")?.after(el);
   }
 
   /** The visible page re-reads the profile (after import / external changes). */

@@ -106,20 +106,20 @@ export function nebulae(): string {
   return out.join("");
 }
 
+/** Where a ring's gate chip sits: the wedge border nearest the top of the ring (no star there). */
+export function gateAt(ring: number): [number, number] {
+  const a = ((ring % 2 === 0 ? -60 : -120) * Math.PI) / 180;
+  return [Math.cos(a) * RING_PX[ring], Math.sin(a) * RING_PX[ring]];
+}
+
 /**
- * "REQUIRES: EPISODE N CLEAR" chips on a locked ring: three per ring, on wedge
- * borders (where no star sits; the set alternates between rings), so one is on
- * screen wherever the camera is.
+ * The gate chip of a locked ring: one per ring, on its upper wedge border (gateAt). The page shows
+ * only the NEXT locked ring's "REQUIRES: EPISODE N CLEAR" and, on the ring after it, a single
+ * "MORE SEASONS TBA" teaser (`.tba`); rings further out stay quiet.
  */
 export function gateChips(ring: number, need: string, stageName: string): string {
-  const r = RING_PX[ring];
-  // alternate wedge borders ring by ring, so chips of neighbouring rings never sit side by side
-  return (ring % 2 === 0 ? [-60, 60, 180] : [-120, 0, 120])
-    .map((deg) => {
-      const a = (deg * Math.PI) / 180;
-      return `<span class="bd-gate" data-ring="${ring}" style="${at(Math.cos(a) * r, Math.sin(a) * r)}"><i class="lock-i"></i><span class="g-tx"><b>${esc(need)}</b><small>Ring ${ring} · ${esc(stageName)}</small></span></span>`;
-    })
-    .join("");
+  const [x, y] = gateAt(ring);
+  return `<span class="bd-gate" data-ring="${ring}" data-x="${x.toFixed(1)}" data-y="${y.toFixed(1)}" style="${at(x, y)}" hidden><i class="lock-i"></i><span class="g-tx g-req"><b>${esc(need)}</b><small>Ring ${ring} · ${esc(stageName)}</small></span><span class="g-tx g-tba"><b>MORE SEASONS TBA</b><small>Ring ${ring}+ · stay tuned</small></span></span>`;
 }
 
 /** One node button (state classes / frames are painted later). */

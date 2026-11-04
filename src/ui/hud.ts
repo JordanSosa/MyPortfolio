@@ -173,7 +173,7 @@ export class Hud implements FeedbackHooks {
           <div class="stat coin">${img("icon_coin")}<span>0</span></div>
         </div>
       </div>
-      <div class="bossbar"><div class="bn"></div><div class="track"><div class="ghost"></div><div class="fill"></div></div></div>
+      <div class="bossbar"><div class="bb-name"></div><div class="track"><div class="ghost"></div><div class="fill"></div></div></div>
       <div class="combo"><span class="rank"></span><span class="n">0</span><span class="lbl">COMBO</span><div class="bar"></div><span class="mult"></span></div>
       <div class="banner"></div>`;
     // the pause button never keeps keyboard focus (Enter / Space must reach the game, not re-click it)
@@ -206,7 +206,7 @@ export class Hud implements FeedbackHooks {
     this.boss = q(".bossbar");
     this.bossFill = q(".bossbar .fill");
     this.bossGhost = q(".bossbar .ghost");
-    this.bossName = q(".bossbar .bn");
+    this.bossName = q(".bossbar .bb-name");
     this.danger = q(".danger");
     this.sss = q(".sss-border");
     this.bannerEl = q(".banner");
@@ -620,6 +620,8 @@ export class Hud implements FeedbackHooks {
     this.boss.classList.toggle("on", !!e);
     if (e) {
       this.bossName.textContent = title;
+      // long titles ("THE BISHOUNEN WHO NEVER NOTICES YOU") set tighter so they stay on one line above the bar
+      this.bossName.classList.toggle("long", title.length > 24);
       this.bossFill.style.transform = SCALE[400];
       this.bossGhost.style.transform = SCALE[400];
       this.c.bossQ = this.c.ghostQ = 400;

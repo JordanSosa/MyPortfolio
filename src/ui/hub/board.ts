@@ -40,8 +40,8 @@ import { reducedMotion } from "../kit/ticker";
 import { PanZoom } from "../kit/viewport";
 import { save } from "../save";
 import { burstAt, centerIn, flyCoins, ignite, keystoneSplash, popEl, revealEl, rewind } from "./board/fx";
-import { effectGlyph, fillGlyphs, setGlyph } from "./board/glyph";
-import { boardSvg, BOUNDS, boxOf, EDGES_OF, gateChips, glyphTint, nebulae, nodeButtons, px, RING_PX, sectorColor, SIZE, type Look } from "./board/layout";
+import { effectGlyph, fillGlyphs, pretint, setGlyph } from "./board/glyph";
+import { boardSvg, BOUNDS, boxOf, EDGES_OF, gateChips, glyphTint, LOCK_TINT, nebulae, nodeButtons, OWN_TINT, px, RING_PX, sectorColor, SIZE, type Look } from "./board/layout";
 import { Minimap, type DotState } from "./board/minimap";
 import { gateInfo, gateLine, nodeSheet } from "./board/sheet";
 import { pageLayer, type Hub, type HubPage, type PageOpts } from "./hub";
@@ -49,6 +49,16 @@ import "./board/board.css";
 
 /** At most this many affordable stars pulse at once (the cheapest; the rest glow statically). */
 const MAX_PULSE = 24;
+
+// Every (glyph, tint) the map can show (sector colour, locked, owned), tinted in idle slices a little
+// after boot: the first Training Arc open finds them made instead of tinting ~100 frames in its own task.
+if (typeof window !== "undefined")
+  setTimeout(() => {
+    // (the sector colours first: the map's markup uses them; then locked / owned)
+    const stars = BOARD.nodes.filter((n) => n.kind !== "center");
+    pretint(stars.map((n) => [effectGlyph(n.effects), sectorColor(n)] as const));
+    pretint(stars.flatMap((n) => [[effectGlyph(n.effects), LOCK_TINT] as const, [effectGlyph(n.effects), OWN_TINT] as const]));
+  }, 1200);
 
 interface NodeState {
   cls: string;
@@ -117,6 +127,10 @@ export function boardPage(hub: Hub, o: PageOpts): HubPage {
   const core = [...el.querySelectorAll<SVGLineElement>(".ec")];
   const orbs = [...el.querySelectorAll<SVGCircleElement>(".orb[data-ring]")];
   const gateEls = [...el.querySelectorAll<HTMLElement>(".bd-gate")];
+  /** Gate chip HUD fade (fadeGates): camera version seen, HUD rects and chip sizes (measured once). */
+  let gateSeen = -1;
+  let hudRects: DOMRect[] | null = null;
+  const gateSize = new Map<HTMLElement, [number, number]>();
   // everything that animates on the map lives in one overlay above the stars (pulse rings, the selection
   // ring, ON AIR halos): nothing static is painted over an animated layer, so no star gets squashed into
   // extra compositor layers
@@ -285,18 +299,22 @@ export function boardPage(hub: Hub, o: PageOpts): HubPage {
       const cls = `orb ${full ? "done" : open ? "open" : "gated"}`;
       if (c && c.getAttribute("class") !== cls) c.setAttribute("class", cls);
     }
-    // the next ring to open shimmers; rings further out wait quietly
+    // one gate chip on screen at a time: the next ring to open (it shimmers), plus a single "more seasons
+    // TBA" teaser on the ring after it; rings further out wait quietly
     const nextGate = ringState.findIndex((st, r) => r > 0 && st === 0);
     for (const g of gateEls) {
       const r = Number(g.dataset.ring);
-      g.hidden = ringState[r] !== 0;
-      const next = r === nextGate;
+      const next = nextGate > 0 && r === nextGate;
+      const tba = nextGate > 0 && r === nextGate + 1 && ringState[r] === 0;
+      g.hidden = !next && !tba;
+      g.classList.toggle("tba", tba);
       if (next !== g.classList.contains("next")) {
         g.classList.toggle("next", next);
         if (next) g.insertAdjacentHTML("beforeend", `<i class="g-shine" aria-hidden="true"></i>`);
         else g.querySelector(".g-shine")?.remove();
       }
     }
+    gateSeen = -1;
     minimap.paint(dots, ringState);
     // HUD
     const pr = boardProgress(p);
@@ -587,6 +605,40 @@ export function boardPage(hub: Hub, o: PageOpts): HubPage {
     if (start) later(450, () => popEl(startEl?.querySelector(".bn-st") ?? null));
   };
 
+  // gate chips under the HUD (top bar, zoom buttons, minimap, AUTO-PATH / RESPEC) fade out: checked only
+  // when the camera moved, from the chips' map positions (no layout read; the HUD rects and chip sizes are
+  // measured once, again after a resize)
+  const onResize = () => {
+    hudRects = null;
+    gateSize.clear();
+    gateSeen = -1;
+  };
+  window.addEventListener("resize", onResize);
+  const fadeGates = () => {
+    if (vp.version === gateSeen) return;
+    gateSeen = vp.version;
+    const live = gateEls.filter((g) => !g.hidden);
+    if (!live.length) return;
+    // (in map-host coordinates: measured together, a page slide-in moves both alike)
+    if (!hudRects) {
+      const host = vpEl.getBoundingClientRect();
+      const head = document.querySelector<HTMLElement>(".hub-top");
+      hudRects = [...el.querySelectorAll<HTMLElement>(".bd-prog, .bd-intro, .bd-zoom, .bd-bar > *, .bd-mini"), ...(head ? [head] : [])]
+        .map((h) => h.getBoundingClientRect())
+        .filter((r) => r.width > 0)
+        .map((r) => new DOMRect(r.left - host.left, r.top - host.top, r.width, r.height));
+    }
+    for (const g of live) {
+      let sz = gateSize.get(g);
+      if (!sz) gateSize.set(g, (sz = [g.offsetWidth, g.offsetHeight]));
+      const [sx, sy] = vp.toScreen(Number(g.dataset.x), Number(g.dataset.y));
+      const w = (sz[0] * vp.z) / 2;
+      const hh = (sz[1] * vp.z) / 2;
+      const under = hudRects.some((r) => sx - w < r.right && sx + w > r.left && sy - hh < r.bottom && sy + hh > r.top);
+      if (under !== g.classList.contains("under")) g.classList.toggle("under", under);
+    }
+  };
+
   // sky parallax (a quarter of the map's speed) - written only when the camera moved
   let skySeen = -1;
   const followSky = () => {
@@ -611,6 +663,7 @@ export function boardPage(hub: Hub, o: PageOpts): HubPage {
       if (!placed) place();
       vp.update(dt);
       followSky();
+      fadeGates();
       minimap.follow(vp);
     },
     dispose() {
@@ -619,6 +672,7 @@ export function boardPage(hub: Hub, o: PageOpts): HubPage {
       timers.clear();
       sheet?.close();
       vp.dispose();
+      window.removeEventListener("resize", onResize);
       fxLayer.remove();
     },
   };

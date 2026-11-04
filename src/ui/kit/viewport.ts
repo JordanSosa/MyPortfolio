@@ -131,7 +131,12 @@ export class PanZoom {
     on("pointermove", (e) => this.move(e));
     on("pointerup", (e) => this.up(e));
     on("pointercancel", (e) => this.up(e, true));
-    on("lostpointercapture", (e) => this.up(e, true));
+    // only the host's own capture loss cancels: touch input starts with the browser's implicit capture on
+    // the touched child (.kvp-c / a node), and capture() moving it to the host fires lostpointercapture on
+    // that child, which bubbles here mid-drag
+    on("lostpointercapture", (e) => {
+      if (e.target === this.host) this.up(e, true);
+    });
     on("wheel", (e) => this.wheel(e), { passive: false });
     // a click that ends a drag must not press the node under the finger
     on(

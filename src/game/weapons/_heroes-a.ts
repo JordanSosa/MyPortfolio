@@ -93,8 +93,17 @@ export function slowEnemy(e: Enemy, k: number, t: number): void {
   if (t > e.slowT) e.slowT = t;
 }
 
-/** A food pickup with its own sprite (collected on touch, heals `heal` x healMul, counts as food). */
+/**
+ * A food pickup with its own sprite (collected on touch, heals `heal` x healMul, counts as food).
+ * THE gate for every hero-kit / talent / ult snack: under the Censored twist ("no food or heal
+ * pickups") it is a censored coin instead, exactly like World.dropPropLoot's censored props.
+ */
 export function dropSnack(w: World, sprite: string, x: number, y: number, heal: number, tint = 0xffffff): Pickup {
+  if (!w.difficulty.food) {
+    const c = w.dropPickup("coin", x, y, 1);
+    c.censored = true;
+    return c;
+  }
   const k = w.dropPickup("snack", x, y, heal);
   k.sprite = sprite;
   k.tint = tint;

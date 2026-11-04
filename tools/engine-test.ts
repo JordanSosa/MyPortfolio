@@ -22,6 +22,7 @@ import { time } from "../src/core/time";
 import { FpsMeter } from "../src/debug/fps";
 import { createFx, fxDash, fxEnemyDeath, fxExplosion, fxFirework, fxHit, fxLevelUp, P, TrailEmitter } from "../src/fx";
 import { animFrame, Flag, GRADES, Layer, QUALITY, Renderer, type QualityTier } from "../src/render";
+import { preloadAtlas } from "../src/render/atlas-source";
 import { STANDIN_SPRITES } from "./engine-test-art";
 
 const qs = new URLSearchParams(location.search);
@@ -32,7 +33,8 @@ const tier = (qs.get("quality") as QualityTier) || "high";
 const rng = new Rng(urlSeed());
 
 // ?standins=0 shows the raw placeholders for manifest ids that are not drawn yet
-const r = new Renderer({ clearColor: 0x6fbf73, quality: QUALITY[tier], extraSprites: qs.get("standins") === "0" ? [] : STANDIN_SPRITES });
+await preloadAtlas({ extraSprites: qs.get("standins") === "0" ? [] : STANDIN_SPRITES });
+const r = new Renderer({ clearColor: 0x6fbf73, quality: QUALITY[tier] });
 const fx = createFx(r, { particles: QUALITY[tier].particles });
 const input = new Input();
 input.showTouchControls(true);

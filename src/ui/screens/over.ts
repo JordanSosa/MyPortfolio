@@ -7,7 +7,8 @@
  * killing boss's own line, a speedrun line, or a generic one) types out under
  * it, the hero's portrait (greyed, tilted) drops in, a "so close" line (the
  * boss's HP left / the next boss's arrival / the gap to the best time), REVIVE
- * when owned, and RETRY next to RESULTS. The App banks the run as soon as this
+ * when owned, and RETRY next to RESULTS (RESULTS is the big default for the
+ * first three episodes, so new players see the payout and the meta). The App banks the run as soon as this
  * modal opens with no revive left (or on victory); RETRY / RESULTS otherwise
  * bank it (App.bankRun, exactly once) before moving on, so coins, bests and the
  * run counter are never lost.
@@ -24,6 +25,9 @@ import { reducedMotion } from "../kit/ticker";
 import { save } from "../save";
 import { tbcBanner } from "../stinger";
 import { layer, onTap, sparkles } from "./common";
+
+/** TO BE CONTINUED makes RESULTS the default button up to this episode (then RETRY). */
+const RESULTS_FIRST_EPISODES = 3;
 
 /** "m:ss" */
 function clock(t: number): string {
@@ -62,6 +66,9 @@ export function openGameOver(app: App, w: World, victory: boolean): UiScreen {
   const hd = heroDef(w.hero.id);
   const killer = BOSSES.get(w.killedBy);
   const sub = deathLine(w.t, killer?.name, { hero: hd.name, n: app.currentEpisode.n, time: fmtTime(w.t) });
+  // the first three episodes lead to Episode Results (the payout, unlocks and the meta live there); RETRY is the
+  // big button afterwards, once the player knows what they skip
+  const resultsFirst = app.currentEpisode.n <= RESULTS_FIRST_EPISODES;
   const vic = w.stage.victory;
   el.innerHTML = victory
     ? `
@@ -80,8 +87,13 @@ export function openGameOver(app: App, w: World, victory: boolean): UiScreen {
     <div class="over-s">EPISODE ${app.currentEpisode.n} · ${fmtTime(w.t)} · LV ${w.level} · ${w.kills} KO</div>
     <div class="btn-row">
       ${canRevive ? `<button class="btn gold" data-nav data-nav-default data-act="revive">${img("icon_hp_up")} REVIVE (${w.revivesLeft})</button>` : ""}
-      <button class="btn${canRevive ? " small" : ""}" data-nav ${canRevive ? "" : "data-nav-default"} data-act="retry">↻ RETRY</button>
-      <button class="btn ${canRevive ? "ghost" : "violet"} small" data-nav data-act="results">RESULTS ▶</button>
+      ${
+        resultsFirst
+          ? `<button class="btn ${canRevive ? "small" : "gold"}" data-nav ${canRevive ? "" : "data-nav-default"} data-act="results">RESULTS ▶</button>
+      <button class="btn ghost small" data-nav data-act="retry">↻ RETRY</button>`
+          : `<button class="btn${canRevive ? " small" : ""}" data-nav ${canRevive ? "" : "data-nav-default"} data-act="retry">↻ RETRY</button>
+      <button class="btn ${canRevive ? "ghost" : "violet"} small" data-nav data-act="results">RESULTS ▶</button>`
+      }
     </div>`;
   app.ui.appendChild(el);
   let t = 0;

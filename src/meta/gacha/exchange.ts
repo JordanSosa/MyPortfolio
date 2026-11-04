@@ -10,7 +10,8 @@ import { BANNER_KINDS, type BannerKind, type Profile } from "../profile";
 import { ROSTER } from "../roster";
 import { TUNING } from "../tuning";
 import { BANNER_BY_ID, heroItem, relicItem, type GachaItem } from "./banners";
-import { grantItem, type PullResult } from "./engine";
+import { afterGrant, grantItem, type PullResult } from "./engine";
+import type { UnlockEvent } from "../unlocks";
 
 export type OfferKind = "relic" | "hero" | "voucher" | "insurance";
 export type OfferBlock = "copium" | "maxed" | "notForSale" | "locked" | "pity";
@@ -83,6 +84,10 @@ export interface ExchangeResult {
   result?: PullResult;
   gems?: number;
   pity?: number;
+  /** Item grants: unlocks the new item completed right away (engine afterGrant). */
+  unlocks?: UnlockEvent[];
+  /** Item grants: a first-time relic put into a free relic slot. */
+  equipped?: string[];
 }
 
 /** Buy one offer by id. */
@@ -106,7 +111,7 @@ export function buyOffer(p: Profile, offerId: string, ctx: MetaContent = gameCon
   const item = offer.item!;
   const g = grantItem(p, item);
   const result: PullResult = { item, rarity: item.rarity, result: g.result, level: g.level, copium: g.copium, featured: false, lost5050: false, won5050: false, pity: "", pityCount: 0, codexGems: g.codexGems };
-  return { ok: true, offer, result };
+  return { ok: true, offer, result, ...afterGrant(p, [result], ctx) };
 }
 
 /** Joke Gem Exchange: convert whole batches of coins into gems at a terrible rate. */

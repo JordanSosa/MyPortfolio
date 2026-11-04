@@ -12,7 +12,7 @@ import { gameContent, type MetaContent } from "./content";
 import { discover } from "./codex";
 import { heroLevel, heroXpForLevel } from "./economy";
 import { repairTalents, talentPoints } from "./heroes";
-import { resolveLoadout } from "./loadout";
+import { storedLoadout } from "./loadout";
 import type { Profile } from "./profile";
 import { TUNING } from "./tuning";
 import { evaluateUnlocks, type UnlockEvent } from "./unlocks";
@@ -91,9 +91,10 @@ export function reconcileProfile(p: Profile, ctx: MetaContent = gameContent()): 
   // owned heroes are known to the wiki (no bounty: nothing on screen would explain the gems)
   for (const h of p.unlocks.heroes) if (ctx.heroById.has(h)) discover(p, "heroes", h, false);
 
-  // loadout -> something playable
-  const { loadout, issues } = resolveLoadout(p, {}, ctx);
-  report.loadoutFixes = issues.length;
+  // loadout -> something playable (twists / Filler Arc kept for a stage that is not cleared yet:
+  // they apply again once it is, and resolveLoadout drops them from any run before that)
+  const { loadout, issues } = storedLoadout(p, {}, ctx);
+  report.loadoutFixes = issues.filter((i) => i.reason !== "notCleared").length;
   p.loadout = loadout;
   return report;
 }

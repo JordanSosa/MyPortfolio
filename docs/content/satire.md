@@ -32,7 +32,7 @@ pattern's telegraph, max one line per 20 s in-run. A `narratorSting` plays.
 | Clear (victory) | "SERIES FINALE?! No — just the stage finale!" · "And so, {stage} is saved! Until the sequel!" · "The credits roll! Don't skip them! (You can skip them.)" |
 | Filler Arc start | "But wait — the network ordered more episodes!" · "TO BE CONTINUED... IN THE FILLER ARC!" |
 | Death | see §4 |
-| New unlock (results) | "A new character joins the cast! Ratings are up!" · "New merchandise has been approved!" |
+| New unlock (results) | per kind, see §8 "Unlock celebration narrator" (hero: "A new character joins the cast! Ratings are up!" · weapon: "New merchandise has been approved!" …) |
 | 100th run | "Episode 100! The show has outlived its source material!" |
 
 ---
@@ -389,8 +389,11 @@ bubbles on screen; a per-enemy-type cooldown of 8 s; no bubbles while more than
 
 | Where | Copy |
 | --- | --- |
-| Title screen tagline (rotates per boot) | "Now with 400% more episodes!" · "Season 2: Now With Merch" · "As seen on a screen near you!" · "Rated K for Kawaii" · "The plushies are back (they never left)" |
-| Hub header | "Previously on Kira Kira Overdrive…" with the last run's one-line recap: "{hero} survived {time} in {stage} and defeated {kills} plushies." |
+| Title screen tagline (rotates per boot; shown next to the SEASON 2 badge, so no line repeats it) | "Now with 400% more episodes!" · "Now With Merch!" · "As seen on a screen near you!" · "Rated K for Kawaii" · "The plushies are back (they never left)" |
+| Hub header | "Previously on Kira Kira Overdrive…" with the last run's one-line recap: death → "{hero} survived {time} in {stage} and defeated {kills} plushies." · drop → "{hero} walked off the set of {stage} after {time}. {kills} plushies were defeated (for now)." · clear → "{hero} SAVED {stage} in {time}! The plushies have filed a complaint." (first clear: "{hero} SAVED {stage} in {time} (first clear!). The plushies have filed a complaint.") · Filler Arc → "{hero} saved {stage}, then the filler ran {filler}. {kills} plushies were contractually obligated to appear." |
+| Interrupted episode (hub notice after a reload / the OS closing the tab mid-run) | "Episode {n} was interrupted." · BANKED AS DROPPED (or TO BE CONTINUED) · "The network aired what was filmed. (The rest is on the cutting room floor.)" |
+| Save can't be written (storage full / blocked) | hub banner: "Progress can't be saved on this device (storage full or blocked). Export your save in Settings → SAVE DATA." · Results: "Saving failed: this episode only lives in this window. Export your save in Settings → SAVE DATA." |
+| Save changed in another window | "Your save changed in another window. Reloaded!" |
 | Hub buttons | **PLAY** ("Next Episode!") · **TRAINING ARC** ("Get stronger. Montage optional.") · **HEROES** ("The cast (and their bios)") · **MERCH MACHINE** ("Totally normal shopping") · **KIRA KIRA WIKI** ("Fan-edited. Probably wrong.") · **PLOT POINTS** ("Achievements, but anime") · **SETTINGS** ("Behind-the-scenes") |
 | Training Arc (board) intro | "Welcome to the Training Arc! Every node is a montage. Every ring is a new season." |
 | Board: not enough coins | "Not enough Star Coins! Have you tried... playing an episode?" |
@@ -404,7 +407,9 @@ bubbles on screen; a per-enemy-type cooldown of 8 s; no bubbles while more than
 | Pause | "COMMERCIAL BREAK" · resume: "Back to the show!" · quit: "Drop the series?" → "Yes, drop it" / "No, I'm invested" |
 | Settings | "Behind the Scenes" · "Satire pops" toggle hint: "NANI?! and BAKA! pops. Turning them off is very mature of you." · "Reduce flashing": "Tones down the drama. The drama becomes internal." · export save: "Copy your save as text. Keep it somewhere safe. Somewhere SAFE." |
 | Results buttons | **Upgrade** ("Training Arc!") · **Retry** ("Same episode, new outcome!") · **Hub** ("Back to the studio") |
-| Unlock celebration | "NEW WEAPON UNLOCKED!" · "NEW HERO JOINS THE CAST!" · "NEW STAGE AIRING NOW!" · "NEW PASSIVE: <name>! (It's an accessory.)" |
+| Unlock celebration | "NEW WEAPON UNLOCKED!" · "NEW HERO JOINS THE CAST!" · "NEW STAGE AIRING NOW!" · "NEW PASSIVE: <name>! (It's an accessory.)" · "NEW PLOT TWIST!" · "NEW MERCH!" · three or more of one kind at once share one card: "{n} NEW PLOT TWISTS!" · "{n} NEW WEAPONS!" · "{n} NEW PASSIVES!" · "{n} NEW MERCH ITEMS!" · "{n} NEW CAST MEMBERS!" · "{n} NEW EPISODES!" · at most four cards in a row, the last one "{n} MORE UNLOCKS!" |
+| Unlock celebration narrator (one pool per kind; never the hero line on another kind) | hero: "A new character joins the cast! Ratings are up!" · "A new face in the opening credits! The fandom is already shipping them." — weapon: "New merchandise has been approved!" · "A new weapon! The toy line writes itself." · "The prop department has outdone itself. Again." — passive: "(It's an accessory.)" · "An accessory! Sold separately. (It's free.)" — relic: "New merch in the gift shop! Totally optional." · "Limited edition! (Unlimited copies available.)" — twist: "The network has notes. More heat, more rewards." · "A plot twist! The writers swear they planned this." — stage: "A new episode is airing! The network is thrilled!" · "New location! The background artists need a vacation." — several kinds: "That's a lot of plot for one episode." · "The season budget, spent in one go." |
+| Stage card of an unlocked episode never played | "NEW EPISODE!" |
 | Daily-anything | (There are none. If anyone asks: "No dailies. We respect your time. We respect nothing else.") |
 
 ---

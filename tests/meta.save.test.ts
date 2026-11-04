@@ -2,12 +2,15 @@
  * Save v2 storage boundary (src/ui/save.ts) against an in-memory
  * localStorage: fresh boot, v1 migration (once), corrupt / garbage v2 blobs,
  * broken storage, export / import, the v1-shaped view the pre-hub screens use,
- * and banking a run.
+ * and banking a run; QA2 batch B: the run-in-progress stash (banked once at
+ * boot, skipped while another window holds the live-run lock), the revision
+ * guard between windows, failed writes (writeOk, the backup freed on a full
+ * storage) and the one-time welcome gift.
  */
 import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import { simulate } from "../src/debug/bot";
 import { World } from "../src/game/world";
-import { BACKUP_KEY, CORRUPT_KEY, LEGACY_SAVE_KEY, SAVE_KEY, SaveStore } from "../src/ui/save";
+import { BACKUP_KEY, CORRUPT_KEY, LEGACY_SAVE_KEY, MIGRATED_KEY, PENDING_KEY, REV_KEY, RUN_LOCK, SAVE_KEY, SaveStore } from "../src/ui/save";
 import { encodeSaveString } from "../src/meta/transfer";
 import { TUNING } from "../src/meta/tuning";
 
@@ -180,5 +183,266 @@ describe("v1-shaped view (pre-hub screens) + banking runs", () => {
     s.reset();
     expect(s.profile.lifetime.runs).toBe(0);
     expect(JSON.parse(mem.map.get(BACKUP_KEY)!).lifetime.runs).toBe(1);
+  });
+});
+
+// ---------------------------------------------------------------- QA2 batch B: save safety
+
+/** A live account run of `seconds`, its RunStats (as App.stashRun writes them). */
+function liveStats(s: SaveStore, seconds = 40, seed = 8) {
+  const plan = s.runPlan();
+  const w = new World({ hero: plan.hero, seed, run: plan.config });
+  simulate(w, seconds);
+  return w.runStats();
+}
+
+describe("run in progress (kko.run.pending)", () => {
+  test("a stash nobody banked is banked once at the next boot (as DROPPED), then forgotten", () => {
+    const a = new SaveStore();
+    const stats = liveStats(a);
+    expect(a.stashRun(stats)).toBe(true);
+    expect(JSON.parse(mem.map.get(PENDING_KEY)!).runsAtStart).toBe(0);
+    // the tab dies; the next boot banks it
+    const b = new SaveStore();
+    expect(b.interrupted).not.toBeNull();
+    expect(b.interrupted!.outcome).toBe("quit");
+    expect(b.interrupted!.episode).toBe(1);
+    expect(b.profile.lifetime.runs).toBe(1);
+    expect(b.profile.lifetime.kills).toBeGreaterThan(0);
+    expect(b.profile.currencies.coins).toBe(b.interrupted!.balances.coins);
+    expect(b.profile.heroes.hoshi.xp).toBeGreaterThan(0);
+    expect(stored().lifetime.runs).toBe(1);
+    expect(mem.map.has(PENDING_KEY)).toBe(false);
+    // ...exactly once
+    const c = new SaveStore();
+    expect(c.interrupted).toBeNull();
+    expect(c.profile.lifetime.runs).toBe(1);
+  });
+
+  test("a stash of a death (TO BE CONTINUED with a revive left) banks as a death", () => {
+    const a = new SaveStore();
+    const stats = { ...liveStats(a), outcome: "dead" as const };
+    a.stashRun(stats);
+    const b = new SaveStore();
+    expect(b.interrupted!.outcome).toBe("death");
+    expect(b.profile.lifetime.deaths).toBe(1);
+  });
+
+  test("a stash whose runsAtStart no longer matches (the run was banked) is discarded", () => {
+    const a = new SaveStore();
+    const stats = liveStats(a);
+    a.stashRun(stats);
+    // Results banked it, then the window died before clearing the stash
+    const plan = a.runPlan();
+    const w = new World({ hero: plan.hero, seed: 8, run: plan.config });
+    simulate(w, 40);
+    a.recordRun(w.summary());
+    expect(stored().lifetime.runs).toBe(1);
+    const b = new SaveStore();
+    expect(b.interrupted).toBeNull();
+    expect(b.profile.lifetime.runs).toBe(1);
+    expect(mem.map.has(PENDING_KEY)).toBe(false);
+  });
+
+  test("banking clears it: a normal run never banks twice", () => {
+    const a = new SaveStore();
+    const plan = a.runPlan();
+    const w = new World({ hero: plan.hero, seed: 3, run: plan.config });
+    simulate(w, 30);
+    a.stashRun(w.runStats());
+    a.recordRun(w.summary());
+    a.clearStash();
+    const b = new SaveStore();
+    expect(b.interrupted).toBeNull();
+    expect(b.profile.lifetime.runs).toBe(1);
+  });
+
+  test("an unreadable stash is dropped, never fatal", () => {
+    mem.map.set(PENDING_KEY, "{oops");
+    const s = new SaveStore();
+    expect(s.interrupted).toBeNull();
+    expect(mem.map.has(PENDING_KEY)).toBe(false);
+  });
+
+  test("while another window holds the live-run lock its stash is left alone; once it is gone, the stash banks", async () => {
+    const a = new SaveStore();
+    a.stashRun(liveStats(a));
+    const nav = globalThis.navigator as unknown as Record<string, unknown>;
+    let held = true;
+    Object.defineProperty(nav, "locks", {
+      configurable: true,
+      value: { query: async () => ({ held: held ? [{ name: RUN_LOCK }] : [] }), request: async () => undefined },
+    });
+    try {
+      const b = new SaveStore();
+      await new Promise((r) => setTimeout(r, 0));
+      expect(b.interrupted).toBeNull();
+      expect(mem.map.has(PENDING_KEY)).toBe(true);
+      expect(b.profile.lifetime.runs).toBe(0);
+      held = false;
+      const c = new SaveStore();
+      let late = 0;
+      c.onInterrupted = () => late++;
+      await new Promise((r) => setTimeout(r, 0));
+      expect(late).toBe(1);
+      expect(c.interrupted!.episode).toBe(1);
+      expect(stored().lifetime.runs).toBe(1);
+    } finally {
+      delete nav.locks;
+    }
+  });
+});
+
+describe("several windows (kko.save.v2.rev)", () => {
+  test("every save bumps the revision", () => {
+    const s = new SaveStore();
+    const r0 = Number(mem.map.get(REV_KEY));
+    s.save();
+    expect(Number(mem.map.get(REV_KEY))).toBe(r0 + 1);
+    expect(s.rev).toBe(r0 + 1);
+  });
+
+  test("a stale window never overwrites a newer save: it reloads it and reports the conflict", () => {
+    const a = new SaveStore();
+    const b = new SaveStore(); // a second tab, same storage
+    a.profile.currencies.coins = 777;
+    expect(a.save()).toBe(true);
+    let changed = 0;
+    b.onExternalChange = () => changed++;
+    b.profile.loadout.hero = "hoshi";
+    b.profile.currencies.coins = 1; // stale in-memory state
+    expect(b.save()).toBe(false);
+    expect(b.conflicted).toBe(true);
+    expect(changed).toBe(1);
+    expect(b.profile.currencies.coins).toBe(777);
+    expect(stored().currencies.coins).toBe(777);
+    // now in sync: its next save goes through
+    b.profile.currencies.coins += 5;
+    expect(b.save()).toBe(true);
+    expect(stored().currencies.coins).toBe(782);
+  });
+
+  test("a 'storage' event from another window reloads the profile", () => {
+    const a = new SaveStore();
+    const b = new SaveStore();
+    let changed = 0;
+    b.onExternalChange = () => changed++;
+    a.profile.currencies.gems = 4242;
+    a.save();
+    b.onStorage();
+    expect(changed).toBe(1);
+    expect(b.profile.currencies.gems).toBe(4242);
+    b.onStorage(); // the second event of the same write (the revision key): nothing new
+    expect(changed).toBe(1);
+  });
+
+  test("recordRun in a stale window banks INTO the newer profile (a run is never dropped)", () => {
+    const a = new SaveStore();
+    const b = new SaveStore();
+    const plan = a.runPlan();
+    const wa = new World({ hero: plan.hero, seed: 5, run: plan.config });
+    simulate(wa, 40);
+    a.recordRun(wa.summary());
+    expect(stored().lifetime.runs).toBe(1);
+    const coinsA = stored().currencies.coins;
+    const wb = new World({ hero: plan.hero, seed: 6, run: plan.config });
+    simulate(wb, 40);
+    const rb = b.recordRun(wb.summary());
+    expect(rb.episode).toBe(2);
+    expect(stored().lifetime.runs).toBe(2);
+    expect(stored().currencies.coins).toBe(coinsA + rb.coins.total);
+  });
+
+  test("reset / import are the player's choice: they win over a newer revision", () => {
+    const a = new SaveStore();
+    const b = new SaveStore();
+    a.profile.currencies.coins = 50;
+    a.save();
+    b.reset();
+    expect(stored().currencies.coins).toBe(0);
+    expect(Number(mem.map.get(REV_KEY))).toBe(b.rev);
+  });
+});
+
+describe("failed writes (storage full / blocked)", () => {
+  test("writeOk goes false (one warning, onWriteFail) and back to true on the next good write", () => {
+    const s = new SaveStore();
+    let fail = 0;
+    let ok = 0;
+    s.onWriteFail = () => fail++;
+    s.onWriteOk = () => ok++;
+    mem.throwOn = "set";
+    expect(s.save()).toBe(false);
+    expect(s.save()).toBe(false);
+    expect(s.writeOk).toBe(false);
+    expect(fail).toBe(1);
+    mem.throwOn = "none";
+    expect(s.save()).toBe(true);
+    expect(s.writeOk).toBe(true);
+    expect(ok).toBe(1);
+  });
+
+  test("a full storage frees the reset / import backup and retries (never the damaged-save copy)", () => {
+    const s = new SaveStore();
+    mem.map.set(BACKUP_KEY, "x".repeat(5000));
+    mem.map.set(CORRUPT_KEY, "{broken");
+    const cap = [...mem.map.values()].reduce((n, v) => n + v.length, 0) + 200;
+    const set = mem.setItem.bind(mem);
+    mem.setItem = (k: string, v: string) => {
+      const used = [...mem.map.entries()].reduce((n, [kk, vv]) => n + (kk === k ? 0 : vv.length), 0);
+      if (used + v.length > cap) throw new Error("QuotaExceededError");
+      set(k, v);
+    };
+    s.profile.lifetime.runs = 3;
+    s.profile.flags.big = 1;
+    (s.profile as unknown as { pad: string }).pad = "y".repeat(1500);
+    expect(s.save()).toBe(true);
+    expect(mem.map.has(BACKUP_KEY)).toBe(false);
+    expect(mem.map.get(CORRUPT_KEY)).toBe("{broken");
+    expect(stored().lifetime.runs).toBe(3);
+  });
+
+  test("blocked storage at boot: writeOk is false before the UI even looks", () => {
+    mem.throwOn = "set";
+    const s = new SaveStore();
+    expect(s.writeOk).toBe(false);
+  });
+});
+
+describe("unreadable save + v1 (no second welcome gift)", () => {
+  const V1 = { coins: 120, meta: { might: 2 }, runs: 9, wins: 0, best: { time: 100, kills: 10, level: 5, combo: 10 }, lastHero: "hoshi", totalKills: 100, tut: { dash: true, ult: 1 } };
+
+  test("the first migration pays the gift and writes the marker", () => {
+    mem.map.set(LEGACY_SAVE_KEY, JSON.stringify(V1));
+    const s = new SaveStore();
+    expect(s.migration?.gift).toBe(TUNING.migration.welcomeGems);
+    expect(s.profile.currencies.gems).toBeGreaterThanOrEqual(TUNING.migration.welcomeGems);
+    expect(mem.map.has(MIGRATED_KEY)).toBe(true);
+  });
+
+  test("a damaged v2 with the marker re-migrates v1 WITHOUT the gift or the welcome; the damaged copy stays", () => {
+    mem.map.set(LEGACY_SAVE_KEY, JSON.stringify(V1));
+    mem.map.set(MIGRATED_KEY, "1");
+    mem.map.set(SAVE_KEY, '{"version":2,"currencies":{"coins":123456');
+    const s = new SaveStore();
+    expect(s.origin).toBe("recovered");
+    expect(s.recoveredFromV1).toBe(true);
+    expect(s.migration).toBeNull();
+    expect(s.profile.currencies.gems).toBe(0);
+    expect(s.profile.currencies.coins).toBeGreaterThanOrEqual(120);
+    expect(mem.map.get(CORRUPT_KEY)).toBe('{"version":2,"currencies":{"coins":123456');
+    // later boots and a START OVER never delete it (only Settings -> DISCARD does)
+    new SaveStore().reset();
+    expect(mem.map.get(CORRUPT_KEY)).toBe('{"version":2,"currencies":{"coins":123456');
+    s.discardCorruptCopy();
+    expect(mem.map.has(CORRUPT_KEY)).toBe(false);
+  });
+
+  test("a damaged v2 over a v1 save means the gift was paid already, even without the marker (saves from before it)", () => {
+    mem.map.set(LEGACY_SAVE_KEY, JSON.stringify(V1));
+    mem.map.set(SAVE_KEY, "{nope");
+    const s = new SaveStore();
+    expect(s.migration).toBeNull();
+    expect(s.profile.currencies.gems).toBe(0);
   });
 });

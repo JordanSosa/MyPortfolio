@@ -125,6 +125,9 @@ export const relicOverflow = (name: string, copium: number): { t: string; s: str
 export const heroOverflow = (name: string, copium: number): { t: string; s: string } => ({ t: `${name} C6 → +${fmtInt(copium)} Copium`, s: "They're flattered. Truly." });
 export const HERO_FINAL = { t: "FULLY AWAKENED (FINAL FORM)", s: "Until next season's final form." };
 export const newHero = (name: string): string => `NEW HERO! ${name} has joined the cast!`;
+/** A first relic went straight into a free relic slot (meta autoEquipNewRelics). */
+export const EQUIPPED_CHIP = "EQUIPPED!";
+export const equippedLine = (name: string): { t: string; s: string } => ({ t: `EQUIPPED! ${name} is in your relic slot.`, s: "(It's load-bearing merch.)" });
 export const consteLine = (c: number, starName: string): string => `C${c} UNLOCKED — ${starName}`;
 /** heroes.md §4: the subtitle on each star-up card. */
 export const CONSTE_SUB: readonly string[] = [

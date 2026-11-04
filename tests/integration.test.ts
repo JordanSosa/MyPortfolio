@@ -204,15 +204,21 @@ describe("unlock rules agree with the sim's content", () => {
 });
 
 describe("banking", () => {
-  test("every banked run advances the banner rotation once and evaluates Plot Points", () => {
+  test("every banked run that was really played advances the banner rotation once and evaluates Plot Points", () => {
     const p = fresh();
     const left = p.rotation.runsLeft;
+    // a 10 s run (a quick RETRY / quit) does not spin the banners
+    const w0 = startWorld(p);
+    simulate(w0, 10, DT, new Bot(1));
+    applyRunToProfile(p, w0.summary(), ctx);
+    expect(p.rotation.runsLeft).toBe(left);
+    expect(p.lifetime.runs).toBe(1);
     const w = startWorld(p);
-    simulate(w, 10, DT, new Bot(1));
+    simulate(w, TUNING.rotation.minRunSeconds + 1, DT, new Bot(1));
     const r = applyRunToProfile(p, w.summary(), ctx);
     expect(p.rotation.runsLeft).toBe(left - 1 > 0 ? left - 1 : TUNING.rotation.runsPerBanner);
     expect(r.banner.runsLeft).toBe(p.rotation.runsLeft);
-    expect(p.lifetime.runs).toBe(1);
+    expect(p.lifetime.runs).toBe(2);
     // Plot Points are evaluated against the banked lifetime (the stored progress moved)
     expect(Object.keys(p.achievements.progress).length + Object.keys(p.achievements.done).length).toBeGreaterThan(0);
   });

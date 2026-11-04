@@ -18,6 +18,7 @@ import { talentPoints } from "../../meta/heroes";
 import { defaultHeroProgress } from "../../meta/profile";
 import { unclaimedCount } from "../../meta/achievements/engine";
 import { esc, fmtInt, fmtTime, h, letters } from "../dom";
+import { homeNotices } from "./celebrate";
 import { art, portrait } from "../kit/art";
 import { badge, bindActs, pbar, pop } from "../kit/controls";
 import { save } from "../save";
@@ -36,6 +37,19 @@ export function bioBits(heroId: string, name: string): { header: string; lines: 
   return { header, lines };
 }
 
+type Tile = "board" | "heroes" | "gacha" | "wiki";
+const TILES: readonly Tile[] = ["board", "heroes", "gacha", "wiki"];
+
+/** One-time narrator nudge for the spotlit tile (profile.tutorial.flags coach_<tile>). */
+const COACH: Readonly<Partial<Record<Tile, string>>> = {
+  gacha: "Psst. The MERCH MACHINE has your name on it. Just one pull. Surely.",
+  board: "The TRAINING ARC is open! Every node is a montage. Buy one. Feel stronger. (Narratively.)",
+  heroes: "Someone has talent points to spend! Character development, at last!",
+};
+
+/** The tagline sits next to the SEASON 2 badge: never say it twice. */
+const SEASON_TAGLINE = TAGLINE.replace(/^\s*season\s*2\s*[:!\-–—]*\s*/i, "");
+
 export function homePage(hub: Hub): HubPage {
   const app = hub.app;
   const el = h("div", "home");
@@ -45,6 +59,9 @@ export function homePage(hub: Hub): HubPage {
   let typed = { text: "", shown: 0, t: 0 };
   let anchor: { x: number; y: number } | null = null;
   let anchorDirty = true;
+  /** The spotlit tile (refreshBadges; its one-time coach line goes before the recap) and a coach line being typed. */
+  let spot: Tile | null = null;
+  let coachTyping: Tile | null = null;
 
   let rendered = false;
   const render = () => {
@@ -71,7 +88,7 @@ export function homePage(hub: Hub): HubPage {
           <span class="l2">${letters("OVERDRIVE", "ltr", 0.07)}</span>
           <div class="shine"></div>
         </div>
-        <div class="season"><span class="s2">SEASON 2</span><span class="tagline">${esc(TAGLINE)}</span></div>
+        <div class="season"><span class="s2">SEASON 2</span><span class="tagline">${esc(SEASON_TAGLINE)}</span></div>
       </div>
       <button class="oc-card" data-nav data-act="hero" style="--hc:${app.heroColor(heroId)}" aria-label="${esc(hd.name)}: open the cast">
         <span class="oc-head"><b>${esc(bits.header)}</b><span class="oc-ep">EP. ${fmtInt(ep)}</span></span>
@@ -87,9 +104,9 @@ export function homePage(hub: Hub): HubPage {
       </button>
       <div class="home-gap" aria-hidden="true"></div>
       <div class="home-menu">
-        <button class="btn gold play two" data-nav data-nav-default data-act="play">
+        <div class="play-wrap${p.lifetime.runs === 0 ? " spot" : ""}"><button class="btn gold play two" data-nav data-nav-default data-act="play">
           <span class="play-ic">▶</span><span class="btxt"><span class="blab">PLAY</span><small class="bsub">${esc(MENU_SUB.play)} · EP. ${fmtInt(ep)}${stage ? ` · ${esc(stage.name)}` : ""}</small></span>
-        </button>
+        </button></div>
         <div class="home-tiles">
           ${tile("board", "TRAINING ARC", MENU_SUB.board, art("board_center", `<i class="emb emb-board"></i>`, "px emb-img"), "t-board")}
           ${tile("heroes", "HEROES", MENU_SUB.heroes, `<span class="emb emb-cast">${minis}</span>`, "t-heroes")}
@@ -123,21 +140,28 @@ export function homePage(hub: Hub): HubPage {
         nextLine();
       },
     });
-    narrN = 0;
-    nextLine();
     refreshBadges();
+    narrN = 0;
+    coachTyping = null;
+    nextLine();
     anchorDirty = true;
   };
 
   const tile = (act: string, label: string, sub: string, emblem: string, cls: string) =>
     `<button class="htile ${cls}" data-nav data-act="${act}"><span class="ht-emb">${emblem}</span><span class="ht-tx"><b>${label}</b><small>${esc(sub)}</small></span><span class="ht-bdg"></span></button>`;
 
-  /** The narrator's next line: the recap first (when there is one), then tips, with a teaser now and then. */
+  /** The narrator's next line: a one-time coach line for the spotlit tile, the recap (when there is one), then tips, with a teaser now and then. */
   const narrLine = (): { k: string; t: string } => {
+    const p = save.profile;
+    const coach = spot ? COACH[spot] : undefined;
+    if (narrN === 0 && coach && !coachTyping && !p.tutorial.flags[`coach_${spot}`]) {
+      // (once per profile: the flag is set once the line was typed out on screen, see update())
+      coachTyping = spot;
+      return { k: "NARRATOR", t: coach };
+    }
     const n = narrN++;
     const r = recap();
     if (n === 0 && r) return { k: "PREVIOUSLY ON…", t: r };
-    const p = save.profile;
     const f = { hero: heroDef(p.loadout.hero).name, stage: gameContent().stageById.get(p.loadout.stage)?.name ?? "", n: p.lifetime.runs + 1 };
     if (n === 0) return { k: "NARRATOR", t: narratorLine(p.lifetime.runs + 1 === 100 ? "run100" : "runStart", f) };
     if (n % 5 === 3) return { k: "NARRATOR", t: fill(n % 10 === 3 ? "No dailies. We respect your time. We respect nothing else." : "Episode {n}! Will {hero} finally make it to the end? (Statistically, no.)", f) };
@@ -159,25 +183,49 @@ export function homePage(hub: Hub): HubPage {
     pop(el.querySelector(".hn-av"), 1.12);
   };
 
+  /** "Previously on…": the last banked run, told by its outcome (satire.md §8 hub header). */
   const recap = (): string => {
     const r = app.lastReport;
     if (!r) return "";
-    return `${r.heroName} survived ${fmtTime(r.time)} in ${r.stageName} and defeated ${fmtInt(r.kills)} plushies.`;
+    const hero = r.heroName;
+    const stage = r.stageName;
+    if (r.outcome === "clear") {
+      const filler = r.endless ? (app.lastRun?.stats?.endlessTime ?? 0) : 0;
+      if (filler >= 1) return `${hero} saved ${stage}, then the filler ran ${fmtTime(filler)}. ${fmtInt(r.kills)} plushies were contractually obligated to appear.`;
+      return `${hero} SAVED ${stage} in ${fmtTime(r.time)}${r.records.firstClear ? " (first clear!)." : "!"} The plushies have filed a complaint.`;
+    }
+    if (r.outcome === "quit") return `${hero} walked off the set of ${stage} after ${fmtTime(r.time)}. ${fmtInt(r.kills)} plushies were defeated (for now).`;
+    return `${hero} survived ${fmtTime(r.time)} in ${stage} and defeated ${fmtInt(r.kills)} plushies.`;
   };
 
+  /**
+   * Tile badges with ONE spotlight: the most useful next step gets the red pulsing badge, other tiles with
+   * something new get a small neutral dot. Before the first episode only PLAY pulses (no tile badges).
+   */
   const refreshBadges = () => {
     const p = save.profile;
     const ctx = gameContent();
-    const set = (act: string, html: string) => {
-      const slot = el.querySelector(`[data-act="${act}"] .ht-bdg`);
+    const set = (act: string, html: string, on = false) => {
+      const b = el.querySelector(`[data-act="${act}"]`);
+      const slot = b?.querySelector(".ht-bdg");
       if (slot) slot.innerHTML = html;
+      b?.classList.toggle("spot", on);
     };
-    set("board", badge(affordableNodes(p, ctx).length > 0));
-    const freePts = HEROES.some((d) => p.unlocks.heroes.includes(d.id) && ctx.talents.has(d.id) && talentPoints(p.heroes[d.id] ?? defaultHeroProgress()).free > 0);
-    set("heroes", badge(freePts));
     const views = bannerViews(p, ctx);
-    set("gacha", badge(views.some((v) => v.canPull1 || v.sparkReady)));
-    set("wiki", badge(unclaimedCount(p)));
+    const canPull = views.some((v) => v.canPull1 || v.sparkReady);
+    const q: Record<Tile, boolean> = {
+      gacha: canPull,
+      board: affordableNodes(p, ctx).length > 0,
+      heroes: HEROES.some((d) => p.unlocks.heroes.includes(d.id) && ctx.talents.has(d.id) && talentPoints(p.heroes[d.id] ?? defaultHeroProgress()).free > 0),
+      wiki: unclaimedCount(p) > 0,
+    };
+    spot = null;
+    if (p.lifetime.runs > 0) {
+      // the first pull is the big moment; then upgrades, talents, Plot Point rewards, more pulls
+      const order: Tile[] = p.gacha.stats.pulls === 0 ? ["gacha", "board", "heroes", "wiki"] : ["board", "heroes", "wiki", "gacha"];
+      spot = order.find((t) => q[t]) ?? null;
+    }
+    for (const t of TILES) set(t, p.lifetime.runs === 0 || !q[t] ? "" : t === spot ? badge(true) : `<i class="bdg dot" aria-label="something new"></i>`, t === spot);
   };
 
   render();
@@ -202,6 +250,8 @@ export function homePage(hub: Hub): HubPage {
     show() {
       render();
       app.nav.refocus(layer);
+      // queued unlock celebrations (a TBC RETRY skipped Results), or the boot notices after a profile change
+      homeNotices(hub);
     },
     update(dt) {
       // typewriter (one small element; text changes only when a letter is added), then the next line after a read
@@ -215,6 +265,12 @@ export function homePage(hub: Hub): HubPage {
           if (n >= typed.text.length) el.querySelector(".home-narr")?.classList.remove("typing");
         }
         return;
+      }
+      if (coachTyping) {
+        // the coach line was read on screen: never again for this profile
+        save.profile.tutorial.flags[`coach_${coachTyping}`] = 1;
+        save.save();
+        coachTyping = null;
       }
       tipT += dt;
       if (tipT > 7 + typed.text.length * 0.03) nextLine();

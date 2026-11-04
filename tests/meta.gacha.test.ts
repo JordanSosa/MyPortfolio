@@ -12,7 +12,11 @@ import { advanceRotation, bannerPool, bannerTitleAt, bannerView, featuredAt, fea
 import { claimSpark, gachaStats, pull, pullHistory, sparkChoices } from "../src/meta/gacha/engine";
 import { buyOffer, exchangeCatalogue, exchangeCoinsForGems } from "../src/meta/gacha/exchange";
 import { consolidatedSsrPlus, R_SR, R_SSR, R_UR, rateTable, RarityRoller, WHY_FLOOR } from "../src/meta/gacha/rates";
-import type { Profile } from "../src/meta/profile";
+import { gameContent } from "../src/meta/content";
+import { buildRunConfig, relicSlots } from "../src/meta/loadout";
+import { defaultProfile, type Profile } from "../src/meta/profile";
+import { reconcileProfile } from "../src/meta/reconcile";
+import { evaluateUnlocks, isUnlocked } from "../src/meta/unlocks";
 import { TUNING } from "../src/meta/tuning";
 import { fixtureContent, freshProfile } from "./meta.fixtures";
 
@@ -344,5 +348,76 @@ describe("Copium Exchange", () => {
     p.currencies.coins = 2500;
     expect(exchangeCoinsForGems(p, 5)).toEqual({ ok: true, coins: 2000, gems: 2 * TUNING.gemExchange.gems });
     expect(exchangeCoinsForGems(p, 1).ok).toBe(false);
+  });
+});
+
+describe("after a grant (pull / exchange / spark): unlocks fire now, the first relic is equipped", () => {
+  const live = gameContent();
+  const start = (): Profile => {
+    const p = defaultProfile(1);
+    reconcileProfile(p, live);
+    return p;
+  };
+
+  test("a forced relic pull into an empty slot equips it (best rarity first); full slots stay as they are", () => {
+    const p = start();
+    p.currencies.gems = 1e6;
+    expect(p.loadout.relics).toEqual([]);
+    expect(relicSlots(p)).toBe(1);
+    // a 10-pull with a forced UR: several new relics, the best one takes the single slot
+    const out = pull(p, "permanent", 10, new Rng(11), live, { force: "UR" });
+    const fresh = out.results.filter((r) => r.item.kind === "relic" && r.result === "new");
+    expect(fresh.length).toBeGreaterThan(1);
+    expect(out.equipped).toHaveLength(1);
+    expect(p.loadout.relics).toEqual(out.equipped);
+    const best = Math.max(...fresh.map((r) => RARITIES.indexOf(r.rarity)));
+    expect(RARITIES.indexOf(live.relics.get(out.equipped[0])!.rarity)).toBe(best);
+    // the run plan carries it
+    expect(buildRunConfig(p, {}, live).config.relics?.map((r) => r.id)).toEqual(out.equipped);
+    // slots full: a later new relic is not swapped in
+    const before = [...p.loadout.relics];
+    const again = pull(p, "relic", 10, new Rng(12), live, { force: "SSR" });
+    expect(again.equipped).toEqual([]);
+    expect(p.loadout.relics).toEqual(before);
+  });
+
+  test("a single pull's first relic: loadout.relics = [id]", () => {
+    const p = start();
+    p.currencies.gems = 1e6;
+    let out = pull(p, "permanent", 1, new Rng(3), live, { force: "R" });
+    for (let s = 4; out.results[0].item.kind !== "relic" && s < 40; s++) out = pull(p, "permanent", 1, new Rng(s), live, { force: "R" });
+    const r = out.results[0];
+    expect(r.item.kind).toBe("relic");
+    expect(out.equipped).toEqual([r.item.id]);
+    expect(p.loadout.relics).toEqual([r.item.id]);
+  });
+
+  test("Copium Exchange: Senpai unlocks Notice Me Sparkles right away (and the next run's Results has no stray card)", () => {
+    const p = start();
+    p.currencies.copium = 5000;
+    expect(isUnlocked(p, "weapon", "notice_me_sparkles")).toBe(false);
+    const r = buyOffer(p, "hero:senpai", live);
+    expect(r.ok).toBe(true);
+    expect(isUnlocked(p, "weapon", "notice_me_sparkles")).toBe(true);
+    expect(r.unlocks?.map((u) => u.id)).toContain("notice_me_sparkles");
+    // nothing left over for the next run's Results to "discover"
+    expect(evaluateUnlocks(p, live).filter((u) => !u.start).map((u) => u.id)).not.toContain("notice_me_sparkles");
+  });
+
+  test("a 4th hero unlocks Friendship Bracelet right away; a relic bought on the exchange is equipped", () => {
+    const p = start();
+    p.unlocks.heroes.push("rin", "mochi");
+    reconcileProfile(p, live);
+    expect(isUnlocked(p, "passive", "friendship_bracelet")).toBe(false);
+    p.currencies.copium = 1e6;
+    const r = buyOffer(p, "hero:magical_girl_47", live);
+    expect(r.ok).toBe(true);
+    expect(p.unlocks.heroes.length).toBe(4);
+    expect(isUnlocked(p, "passive", "friendship_bracelet")).toBe(true);
+    expect(r.unlocks?.map((u) => u.id)).toContain("friendship_bracelet");
+    const relic = exchangeCatalogue(p, live).find((o) => o.kind === "relic" && !o.block)!;
+    const b = buyOffer(p, relic.id, live);
+    expect(b.equipped).toEqual([relic.item!.id]);
+    expect(p.loadout.relics).toEqual([relic.item!.id]);
   });
 });

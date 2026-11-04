@@ -75,6 +75,26 @@ describe("applyRunToProfile", () => {
     expect(p.rotation.cycle).toBe(1);
   });
 
+  test("quit-farming: a 2 s quit pays no stipend and does not advance the banner rotation; a real run does", () => {
+    const p = freshProfile(ctx);
+    applyRunToProfile(p, { stats: runStats() }, ctx); // codex bounties out of the way
+    const rot = { ...p.rotation };
+    const runs = p.lifetime.runs;
+    const quit = applyRunToProfile(p, { stats: runStats({ time: 2, outcome: "quit", killsByEnemy: { puff: 2 }, coins: 0 }) }, ctx);
+    expect(quit.gems.total).toBe(0);
+    expect(quit.banner.rotated).toBe(false);
+    expect(p.rotation).toEqual(rot);
+    // the run still counts (episode numbering)
+    expect(p.lifetime.runs).toBe(runs + 1);
+    expect(quit.episode).toBe(runs + 1);
+    // a 1:41 death counts toward the rotation; a clear always does
+    applyRunToProfile(p, { stats: runStats({ time: 101 }) }, ctx);
+    expect(p.rotation.runsLeft === rot.runsLeft - 1 || p.rotation.cycle === rot.cycle + 1).toBe(true);
+    const before = { ...p.rotation };
+    applyRunToProfile(p, { stats: runStats({ time: 30, stageCleared: true, outcome: "victory" }) }, ctx);
+    expect(p.rotation).not.toEqual(before);
+  });
+
   test("auto-claim (simulator) pays achievement gems in the same step", () => {
     const p = freshProfile(ctx);
     const r = applyRunToProfile(p, { stats: runStats() }, ctx, { autoClaim: true });

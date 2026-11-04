@@ -45,6 +45,22 @@ export function itemArt(it: GachaItem, cls = "gi", frame = 0): string {
   return relicIcon(it.id, it.rarity, cls);
 }
 
+/**
+ * Every atlas frame a pull of `it` can show (card, splash, summary: portrait frames 0 / 1 and the cast
+ * pose, or the relic icon), for warming the DOM icon cache before the storyboard opens.
+ */
+export function itemArtFrames(it: GachaItem): [string, number][] {
+  if (it.kind === "relic") return [[`icon_relic_${it.id}`, 0]];
+  const d = heroDef(it.id);
+  if (!d) return [];
+  const out: [string, number][] = [
+    [d.portrait, 0],
+    [d.portrait, 1],
+  ];
+  if (hasArt(`${d.sprite}_cast`)) out.push([`${d.sprite}_cast`, 0]);
+  return out;
+}
+
 /** The hero's cast pose (constellation star-up), else the portrait's shouting frame. */
 export function castPose(id: string, cls = "gi"): string {
   const d = heroDef(id);

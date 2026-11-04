@@ -41,6 +41,27 @@ export function saveRaw(key: string, value: unknown): boolean {
   }
 }
 
+/** Raw stored text (null if missing or storage is unavailable). */
+export function loadText(key: string): string | null {
+  try {
+    return ls()?.getItem(key) ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** Store raw text. False when storage is missing, full or refuses the write. */
+export function saveText(key: string, text: string): boolean {
+  try {
+    const s = ls();
+    if (!s) return false;
+    s.setItem(key, text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function removeKey(key: string): void {
   try {
     ls()?.removeItem(key);

@@ -1033,7 +1033,7 @@
 }
 .merch .mm-fine {
   display: block;
-  min-height: 40px;
+  min-height: 44px;
   margin: 0;
   padding: 0 0.6em;
   border: 0;
@@ -1070,10 +1070,15 @@
   text-shadow: var(--ol1);
   cursor: pointer;
 }
+/* (an invisible ring: the hit area is at least 44 x 44 whatever the pill's size) */
 .mm-gemx-plus::before {
   content: "";
   position: absolute;
-  inset: -12px;
+  left: 50%;
+  top: 50%;
+  width: max(calc(100% + 32px), 44px);
+  height: max(calc(100% + 32px), 44px);
+  transform: translate(-50%, -50%);
 }
 
 /* landscape / desktop: poster | pity + dock side by side, nothing below the fold */
@@ -1142,7 +1147,14 @@
     margin-top: 0;
   }
   .merch .mm-fine {
+    position: relative;
     min-height: 32px;
+  }
+  /* (the compact landscape dock keeps a 32 px row: an invisible ring keeps the hit area at 44 px) */
+  .merch .mm-fine::before {
+    content: "";
+    position: absolute;
+    inset: -6px 0;
   }
   .bnr-title {
     font-size: 1.4em;
@@ -2248,8 +2260,11 @@
 .s-cards .sm-cards {
   visibility: visible;
 }
+/* (100vh first for old engines; 100dvh = the visible height: the body is position: fixed, so mobile
+   browser toolbars never retract and 100vh would size the cards under the PULL AGAIN / Back buttons) */
 .summon.one .sm-cards {
   grid-template-columns: min(58vw, 15em, calc((100vh - var(--top) - var(--sumh) - 1em) * 0.75));
+  grid-template-columns: min(58vw, 15em, calc((100dvh - var(--top) - var(--sumh) - 1em) * 0.75));
   grid-template-rows: auto;
   justify-content: center;
 }
@@ -2264,6 +2279,7 @@
   /* two rows of 3:4 cards that fit between the top bar and the summary */
   .summon.ten .sm-cards {
     width: min(94vw, 56em, calc((100vh - var(--top) - var(--sumh) - 1.2em) * 1.875));
+    width: min(94vw, 56em, calc((100dvh - var(--top) - var(--sumh) - 1.2em) * 1.875));
     grid-template-columns: repeat(5, minmax(0, 1fr));
     grid-template-rows: auto auto;
     gap: 0.6em;
@@ -2273,6 +2289,7 @@
   }
   .summon.one .sm-cards {
     grid-template-columns: min(30vw, 15em, calc((100vh - var(--top) - var(--sumh) - 1em) * 0.75));
+    grid-template-columns: min(30vw, 15em, calc((100dvh - var(--top) - var(--sumh) - 1em) * 0.75));
   }
 }
 .gc-cd {
@@ -3354,7 +3371,7 @@
   transform: rotate(-8deg);
 }
 
-/* rates at a glance (tap = the fine print) */
+/* rates at a glance (tap = the fine print), at the top of the pity box: never under the sticky dock */
 .pb-rates {
   display: flex;
   flex-wrap: wrap;
@@ -3362,10 +3379,10 @@
   gap: 0.25em 0.55em;
   width: 100%;
   min-height: 44px;
-  margin-top: 0.45em;
-  padding: 0.35em 0.2em 0.1em;
+  margin-bottom: 0.45em;
+  padding: 0.1em 0.2em 0.35em;
   border: 0;
-  border-top: 1px dashed rgba(221, 198, 255, 0.25);
+  border-bottom: 1px dashed rgba(221, 198, 255, 0.25);
   background: none;
   color: inherit;
   cursor: pointer;

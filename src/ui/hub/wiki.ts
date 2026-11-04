@@ -38,7 +38,7 @@ import { pageLayer, type Hub, type HubPage, type PageOpts } from "./hub";
 import { articleFor, stubFor } from "./wiki/article";
 import { EDIT_DENIED, NOTICES, noResults, pickBy, TAB_INFO, TALK, WIKI_FROM, WIKI_TAGLINE, type WikiTab } from "./wiki/copy";
 import { tabEntries, type WikiEntry } from "./wiki/entries";
-import { plotHtml, plotRow, type PlotFilter, type PlotState } from "./wiki/plot";
+import { claimAllHtml, claimAllLabel, claimChipHtml, claimPreHtml, emptyPlotHtml, plotParts, plotRow, plotSummary, type PlotFilter, type PlotState } from "./wiki/plot";
 import "./wiki/wiki.css";
 
 type Tab = WikiTab;
@@ -188,6 +188,13 @@ export function wikiPage(hub: Hub, o: PageOpts): HubPage {
   });
 
   // ---------------------------------------------------------------- render
+  /** Plot rows put in the DOM with the page; the rest stream in, PLOT_CHUNK a frame (plotParts). */
+  const PLOT_FIRST = 16;
+  const PLOT_CHUNK = 24;
+  /** Bumped by every render: a pending row stream of an older render stops. */
+  let gen = 0;
+  let streamRaf = 0;
+
   const render = () => {
     // (the tab strip is built once: re-rendering it would drop the keyboard focus; only the badge changes)
     tabBar.select(tab);
@@ -195,17 +202,54 @@ export function wikiPage(hub: Hub, o: PageOpts): HubPage {
     el.dataset.tab = tab;
     const f = layer.focus && body.contains(layer.focus) ? { act: layer.focus.dataset.act, id: layer.focus.dataset.id } : null;
     body.classList.toggle("anim", animate && !reducedMotion());
+    gen++;
+    cancelAnimationFrame(streamRaf);
+    pending = [];
+    let rest: string[] = [];
     if (query) body.innerHTML = searchHtml(query);
-    else if (tab === "plot") body.innerHTML = listHead("plot") + plotHtml(save.profile, ctx, plot) + listFoot("plot");
-    else body.innerHTML = codexHtml(tab);
+    else if (tab === "plot") {
+      const { head, rows } = plotParts(save.profile, ctx, plot);
+      rest = rows.slice(PLOT_FIRST);
+      body.innerHTML = `${listHead("plot")}${head}<div class="pp-list">${rows.length ? rows.slice(0, PLOT_FIRST).join("") : emptyPlotHtml(plot.filter)}</div>${listFoot("plot")}`;
+    } else body.innerHTML = codexHtml(tab);
     animate = false;
-    bind();
+    bindActs(body, acts);
+    if (rest.length) streamRows(rest, gen);
     // keyboard / gamepad: keep the focus on the same control after an in-place refresh (filter chips, claims)
     if (f?.act) app.nav.refocus(layer, body.querySelector<HTMLElement>(`[data-act="${CSS.escape(f.act)}"]${f.id ? `[data-id="${CSS.escape(f.id)}"]` : ""}`));
   };
 
-  const bind = () => {
-    bindActs(body, {
+  /** Rows of the current render not in the DOM yet. */
+  let pending: string[] = [];
+  /** Append the remaining Plot rows a chunk per frame (bound as they land). */
+  const streamRows = (rows: string[], g: number) => {
+    pending = rows;
+    const step = () => {
+      streamRaf = 0;
+      if (g !== gen) return;
+      appendRows(PLOT_CHUNK);
+      if (pending.length) streamRaf = requestAnimationFrame(step);
+    };
+    streamRaf = requestAnimationFrame(step);
+  };
+  const appendRows = (n: number) => {
+    const list = body.querySelector(".pp-list");
+    const chunk = pending.slice(0, n);
+    pending = pending.slice(n);
+    if (!list || !chunk.length) return;
+    const box = document.createElement("div");
+    box.innerHTML = chunk.join("");
+    bindActs(box, acts);
+    list.append(...box.children);
+  };
+  /** Put every pending row in now (CLAIM ALL must stamp all of them). */
+  const flushRows = () => {
+    cancelAnimationFrame(streamRaf);
+    streamRaf = 0;
+    if (pending.length) appendRows(pending.length);
+  };
+
+  const acts: Record<string, (b: HTMLElement) => void> = {
       entry: (b) => openEntry(b.dataset.tab as CodexTab, b.dataset.id as string),
       filter: (b) => {
         app.sfx("uiMove");
@@ -234,7 +278,6 @@ export function wikiPage(hub: Hub, o: PageOpts): HubPage {
         animate = true;
         render();
       },
-    });
   };
 
   const notice = (t: Tab) => `<div class="wk-notice"><i class="wn-ic" aria-hidden="true">!</i><p>${esc(pickBy(NOTICES[t], `${t}:${save.profile.lifetime.runs}`))}</p></div>`;
@@ -362,6 +405,70 @@ export function wikiPage(hub: Hub, o: PageOpts): HubPage {
     if (coins) flyCurrency(ui, chipC, hub.cbar.pill("coins"), "coins", Math.min(8, 3 + Math.round(coins / 300)), land);
   };
 
+  /** Stamp a claimed row (it stops being claimable: no list re-render). */
+  const stamp = (row: HTMLElement) => {
+    row.classList.remove("can");
+    row.classList.add("claimed");
+    const st = row.querySelector(".pp-r");
+    if (st) st.innerHTML = `<span class="pp-stamp hit">✓ CLAIMED</span>`;
+  };
+
+  /**
+   * After a claim, in place: the CLAIM ALL block, the per-category claimable badges, the CLAIMABLE
+   * chip and the tab badge. Under the CLAIMABLE filter the claimed rows fold away once stamped.
+   */
+  const afterClaim = (rows: HTMLElement[]) => {
+    const sum = plotSummary(save.profile, ctx);
+    tabBar.setBadge("plot", badge(unclaimedCount(save.profile)));
+    const ready = body.querySelector(".pp-ready");
+    const lab = ready?.querySelector(".pp-claimall .blab");
+    const pre = ready?.querySelector(".pp-pre");
+    if (sum.ready && lab && pre) {
+      // (numbers only: the pulsing button stays, no new animation / style pass for it)
+      lab.textContent = claimAllLabel(sum);
+      pre.innerHTML = claimPreHtml(sum);
+    } else if (ready) {
+      ready.innerHTML = claimAllHtml(sum);
+      bindActs(ready, acts);
+    }
+    for (const c of body.querySelectorAll<HTMLElement>(".pp-cat[data-id]")) {
+      const n = c.dataset.id === "all" ? 0 : (sum.claimByCat[c.dataset.id as string] ?? 0);
+      const bd = c.querySelector(".bdg");
+      if (!n) bd?.remove();
+      else if (bd) bd.textContent = String(n);
+    }
+    const chip = body.querySelector('.wk-chip[data-act="pfilter"][data-id="claim"]');
+    if (chip) chip.innerHTML = claimChipHtml(sum.ready);
+    if (plot.filter === "claim" && !query && tab === "plot") fold(rows);
+  };
+
+  /** Fold claimed rows out of the CLAIMABLE list (after the stamp lands); the empty note when none is left. */
+  const fold = (rows: HTMLElement[]) => {
+    const g = gen;
+    const done = () => {
+      if (g !== gen) return;
+      for (const r of rows) r.remove();
+      const list = body.querySelector(".pp-list");
+      if (list && !list.querySelector(".pp")) list.innerHTML = emptyPlotHtml("claim");
+    };
+    if (reducedMotion() || !rows.length) return done();
+    setTimeout(() => {
+      if (g !== gen) return;
+      let left = rows.length;
+      for (const r of rows) {
+        if (!r.isConnected || typeof r.animate !== "function") {
+          if (--left === 0) done();
+          continue;
+        }
+        r.style.overflow = "hidden";
+        const a = r.animate([{ height: `${r.offsetHeight}px`, opacity: 1 }, { height: "0px", opacity: 0, paddingTop: "0px", paddingBottom: "0px", marginTop: "-0.45em", borderWidth: "0px" }], { duration: 260, easing: "cubic-bezier(0.4, 0, 0.6, 1)", fill: "forwards" });
+        a.onfinish = a.oncancel = () => {
+          if (--left === 0) done();
+        };
+      }
+    }, 700);
+  };
+
   const claimOne = (b: HTMLElement) => {
     const id = b.dataset.id as string;
     const rowEl = b.closest(".pp") as HTMLElement | null;
@@ -369,17 +476,12 @@ export function wikiPage(hub: Hub, o: PageOpts): HubPage {
     if (!r.ok) return;
     save.save();
     app.sfx("currencyGain");
-    rowEl?.classList.add("claimed");
     if (rowEl) {
-      const st = rowEl.querySelector(".pp-r");
-      if (st) st.innerHTML = `<span class="pp-stamp hit">✓ CLAIMED</span>`;
+      stamp(rowEl);
       pop(rowEl, 1.04);
     }
     flyRewards(rowEl?.querySelector(".pp-rw") ?? rowEl, r.reward?.gems ?? 0, r.reward?.coins ?? 0);
-    tabBar.setBadge("plot", badge(unclaimedCount(save.profile)));
-    setTimeout(() => {
-      if (!query && tab === "plot") render();
-    }, reducedMotion() ? 0 : 900);
+    afterClaim(rowEl ? [rowEl] : []);
   };
 
   const claimAll = (b: HTMLElement) => {
@@ -387,16 +489,12 @@ export function wikiPage(hub: Hub, o: PageOpts): HubPage {
     if (!r.count) return;
     save.save();
     app.sfx("achievement");
-    for (const row of body.querySelectorAll<HTMLElement>(".pp.can")) {
-      row.classList.add("claimed");
-      const st = row.querySelector(".pp-r");
-      if (st) st.innerHTML = `<span class="pp-stamp hit">✓ CLAIMED</span>`;
-    }
+    flushRows();
+    const rows = [...body.querySelectorAll<HTMLElement>(".pp.can")];
+    for (const row of rows) stamp(row);
     flyRewards(b.closest(".pp-claimall") ?? b, r.gems, r.coins);
     hub.toast(`${r.count} Plot Point reward${r.count === 1 ? "" : "s"} claimed!`, { kind: "good", reward: `${r.gems ? money("gems", `+${fmtInt(r.gems)}`) : ""}${r.coins ? money("coins", `+${fmtInt(r.coins)}`) : ""}` });
-    setTimeout(() => {
-      if (!query && tab === "plot") render();
-    }, reducedMotion() ? 0 : 1000);
+    afterClaim(rows);
   };
 
   // the search box is the nav item (Enter / A focuses the input); the clear button
@@ -427,6 +525,8 @@ export function wikiPage(hub: Hub, o: PageOpts): HubPage {
     },
     dispose() {
       clearTimeout(qTimer);
+      gen++;
+      cancelAnimationFrame(streamRaf);
       sheet?.close();
     },
   };

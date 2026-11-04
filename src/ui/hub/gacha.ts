@@ -22,22 +22,24 @@
 import { audio } from "../../audio";
 import { evaluateAchievements, type AchievementDone } from "../../meta/achievements/engine";
 import { gameContent } from "../../meta/content";
-import { bannerView } from "../../meta/gacha/banners";
+import { bannerPool, bannerView } from "../../meta/gacha/banners";
 import { claimSpark, pull, type PullOutcome } from "../../meta/gacha/engine";
 import { buyOffer, exchangeCatalogue } from "../../meta/gacha/exchange";
 import type { BannerKind } from "../../meta/profile";
 import { TUNING } from "../../meta/tuning";
-import { esc, fmtInt, h } from "../dom";
+import { evaluateUnlocks, type UnlockEvent } from "../../meta/unlocks";
+import { esc, fmtInt, h, prewarmSprites, sprite } from "../dom";
 import { money, trophyIcon } from "../kit/art";
 import { badge, bindActs, pop, setBar, shake, TabBar } from "../kit/controls";
 import { confirmDialog, openSheet, type SheetHandle } from "../kit/overlay";
 import { reducedMotion } from "../kit/ticker";
 import { save } from "../save";
 import { onTap } from "../screens/common";
-import { machineArt } from "./gacha/art";
+import { itemArtFrames, machineArt } from "./gacha/art";
 import { dockHtml, machineHtml, pityHtml, posterHtml, tabIcon } from "./gacha/banner";
 import * as C from "./gacha/copy";
 import { debugRng, installGachaDebug, takeDebug } from "./gacha/debug";
+import { celebrateUnlocks } from "./celebrate";
 import { exchangeHtml, gemExchange, historyHtml, openFinePrint, sparkHtml } from "./gacha/sheets";
 import { Summon, type SummonHost } from "./gacha/summon";
 import { choiceDialog, hideTip, showTip } from "./gacha/ui";
@@ -258,10 +260,31 @@ export function gachaPage(hub: Hub, o: PageOpts): HubPage {
   };
 
   // ---------------------------------------------------------------- pulls
+  /**
+   * Everything a grant unlocked right away: the item's own unlock rules (meta afterGrant: a new hero's
+   * signature weapon, hero-count passives), Plot Point rewards, and rules those Plot Points completed.
+   */
+  const unlocksOf = (base: readonly UnlockEvent[] | undefined, done: AchievementDone[]): UnlockEvent[] => {
+    const all = [...(base ?? []), ...done.flatMap((a) => (a.unlocked ? [a.unlocked] : [])), ...evaluateUnlocks(save.profile, ctx).filter((u) => !u.start)];
+    const seen = new Set<string>();
+    return all.filter((u) => {
+      const k = `${u.kind}:${u.id}`;
+      if (seen.has(k)) return false;
+      seen.add(k);
+      return true;
+    });
+  };
+
   const achieved = (list: AchievementDone[]) => {
     if (!list.length) return;
     app.sfx("achievement", 0.8);
     for (const a of list) hub.toast(a.def.name, { kind: "ach", kicker: "PLOT POINT UNLOCKED!", icon: trophyIcon("kt-img"), sub: a.def.desc });
+    // (a Plot Point that unlocks content: celebrated here too; saved again in case a rule it completed fired)
+    const unlocks = unlocksOf(undefined, list);
+    if (unlocks.length) {
+      hub.changed(false);
+      celebrateUnlocks(app, unlocks);
+    }
   };
 
   const poor = async (cost: number) => {
@@ -338,14 +361,20 @@ export function gachaPage(hub: Hub, o: PageOpts): HubPage {
         if (cones) p.flags.cones = Math.min(1e6, (p.flags.cones ?? 0) + cones);
       }
       const done = evaluateAchievements(p, null, ctx);
+      const unlocks = unlocksOf(out.unlocks, done);
       hub.changed();
-      openSummon(out, "pull", done, dbg.fakeout, n);
+      // the results' art (cards, splashes, summary) encoded now, so the storyboard builds from the icon
+      // cache; most of it is already warm (warmPool); the summon opens on the next frame, its own task
+      for (const r of out.results) for (const [id, f] of itemArtFrames(r.item)) sprite(id, f);
+      await new Promise<void>((res) => requestAnimationFrame(() => res()));
+      if (disposed) return;
+      openSummon(out, "pull", done, unlocks, dbg.fakeout, n);
     } finally {
       busy = false;
     }
   };
 
-  const openSummon = (out: PullOutcome, mode: "pull" | "shop" | "spark", done: AchievementDone[], fakeout?: boolean, n: 1 | 10 = 1) => {
+  const openSummon = (out: PullOutcome, mode: "pull" | "shop" | "spark", done: AchievementDone[], unlocks: UnlockEvent[], fakeout?: boolean, n: 1 | 10 = 1) => {
     const kind = isBanner(tab) ? tab : "permanent";
     const cost = n === 10 ? TUNING.gacha.tenPullCost : TUNING.gacha.pullCost;
     // the page under the (dimmed) summon stops its idle loops; the machine keeps cranking
@@ -379,6 +408,9 @@ export function gachaPage(hub: Hub, o: PageOpts): HubPage {
         tabs.render(tabDefs());
         render();
         if (mode === "spark") app.sfx("unlockFanfare", 0.6);
+        // what the new items unlocked (Senpai -> Notice Me Sparkles, a 4th hero -> Friendship Bracelet):
+        // celebrated now, not as a stray card at the next run's Results (already saved by hub.changed)
+        if (unlocks.length) celebrateUnlocks(app, unlocks);
       },
     });
   };
@@ -413,8 +445,9 @@ export function gachaPage(hub: Hub, o: PageOpts): HubPage {
         if (!r.ok || !r.result) return;
         s.close();
         const done = evaluateAchievements(save.profile, null, ctx);
+        const unlocks = unlocksOf(r.unlocks, done);
         hub.changed();
-        openSummon({ ok: true, banner: "mythic", results: [r.result], best: r.result.rarity, gemsSpent: 0, copium: r.result.copium, codexGems: r.result.codexGems, sparkReady: false }, "spark", done);
+        openSummon({ ok: true, banner: "mythic", results: [r.result], best: r.result.rarity, gemsSpent: 0, copium: r.result.copium, codexGems: r.result.codexGems, sparkReady: false, unlocks: r.unlocks ?? [], equipped: r.equipped ?? [] }, "spark", done, unlocks);
       },
     });
   };
@@ -442,8 +475,9 @@ export function gachaPage(hub: Hub, o: PageOpts): HubPage {
       return;
     }
     const done = evaluateAchievements(save.profile, null, ctx);
+    const unlocks = unlocksOf(r.unlocks, done);
     hub.changed();
-    if (r.result) openSummon({ ok: true, banner: "permanent", results: [r.result], best: r.result.rarity, gemsSpent: 0, copium: r.result.copium, codexGems: r.result.codexGems, sparkReady: false }, "shop", done);
+    if (r.result) openSummon({ ok: true, banner: "permanent", results: [r.result], best: r.result.rarity, gemsSpent: 0, copium: r.result.copium, codexGems: r.result.codexGems, sparkReady: false, unlocks: r.unlocks ?? [], equipped: r.equipped ?? [] }, "shop", done, unlocks);
     else {
       app.sfx("currencyGain");
       hub.toast(r.gems ? `+${r.gems} ♦` : `Pity ${r.pity ?? ""}`, { kind: "good", sub: offer.kind === "voucher" ? C.OFFER_COPY.voucher.line : C.OFFER_COPY.insurance.line });
@@ -470,8 +504,30 @@ export function gachaPage(hub: Hub, o: PageOpts): HubPage {
     body.scrollTop = y;
   };
 
+  /** Banners whose pool art is warm (or warming): every item a pull could show, encoded in idle slices. */
+  const warmed = new Set<BannerKind>();
+  /** The storyboard's own art: summoning circle, meteor / capsule colours, card corners, rarity badges. */
+  const STORY_ART: [string, number][] = [
+    ["ui_summon_circle", 0],
+    ...[0, 1, 2, 3, 4].map((f): [string, number] => ["ui_gacha_meteor", f]),
+    ...[0, 1, 2, 3, 4, 5].map((f): [string, number] => ["ui_gacha_capsule", f]),
+    ...[0, 1, 2, 3, 4, 5, 6].map((f): [string, number] => ["ui_card_corner", f]),
+    ...[0, 1, 2, 3, 4, 5, 6].map((f): [string, number] => ["ui_rarity_badge", f]),
+  ];
+  const warmPool = () => {
+    if (!warmed.size) prewarmSprites(STORY_ART, () => !summon && !disposed && !busy);
+    for (const b of BANNER_TABS) {
+      if (warmed.has(b) || !bannerView(save.profile, b, ctx).available) continue;
+      warmed.add(b);
+      const frames: [string, number][] = [];
+      for (const list of Object.values(bannerPool(save.profile, b, ctx))) for (const it of list) frames.push(...itemArtFrames(it));
+      prewarmSprites(frames, () => !summon && !disposed && !busy);
+    }
+  };
+
   render();
   mountPlus();
+  warmPool();
   return {
     id: "gacha",
     el,

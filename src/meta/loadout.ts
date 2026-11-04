@@ -10,6 +10,7 @@
  * Relic / talent / constellation STAT parts are applied by the sim from their
  * ids (RunConfig contract) and are never duplicated in `mods`. PURE.
  */
+import { RARITIES as RARITY_ORDER } from "../game/defs";
 import type { RunConfig } from "../game/run-config";
 import type { Stats, StatMod } from "../game/stats";
 import { applyBoard, type BoardEffects } from "./board/board";
@@ -243,9 +244,53 @@ export function buildRunConfig(p: Profile, choice: LoadoutChoice = {}, ctx: Meta
   return { hero: loadout.hero, config, loadout, issues, heat: twistHeat(loadout.twists, ctx), relicSlots: relicSlots(p, board), heroLevel: hp.level, board };
 }
 
-/** Save a (repaired) choice as the profile's loadout. Returns the issues found. */
+/**
+ * The loadout to STORE for a choice: the repaired loadout, except that Plot Twist ranks and the
+ * Filler Arc toggle dropped only because the chosen stage is not cleared yet are kept (peeking at an
+ * uncleared episode must not wipe the player's heat setup). Every other repair (unknown / locked
+ * ids, ranks over the max, a stage without a Filler Arc) is stored. RunConfigs and the loadout UI
+ * always go through resolveLoadout, so an uncleared stage still plays (and shows) at heat 0.
+ */
+export function storedLoadout(p: Profile, choice: LoadoutChoice = {}, ctx: MetaContent = gameContent(), board?: BoardEffects): { loadout: Loadout; issues: LoadoutIssue[] } {
+  const { loadout, issues } = resolveLoadout(p, choice, ctx, board);
+  const want = choice.twists ?? p.loadout.twists;
+  // (the Filler Arc toggle is kept only once some episode is cleared: before that it was never the player's)
+  const anyClear = Object.values(p.records).some((r) => r.clears > 0);
+  for (const i of issues) {
+    if (i.reason !== "notCleared") continue;
+    if (i.field === "endless") loadout.endless = anyClear;
+    else if (i.field === "twists" && i.id) {
+      const d = ctx.twists.get(i.id);
+      const r = Math.floor(want[i.id]);
+      if (d && r >= 1) loadout.twists[i.id] = Math.min(d.maxRank, r);
+    }
+  }
+  return { loadout, issues };
+}
+
+/**
+ * Equip relics the player just got for the first time (a pull, the exchange, the spark) into free
+ * relic slots, best rarity first, so a first relic never sits at "0 / 1 EQUIPPED". Never replaces an
+ * equipped relic. Returns the ids equipped.
+ */
+export function autoEquipNewRelics(p: Profile, ids: readonly string[], ctx: MetaContent = gameContent()): string[] {
+  const rank = (id: string) => RARITY_ORDER.indexOf(ctx.relics.get(id)?.rarity ?? "N");
+  const fresh = [...new Set(ids)].filter((id) => ctx.relics.has(id) && id in p.relics).sort((a, b) => rank(b) - rank(a));
+  if (!fresh.length) return [];
+  const slots = relicSlots(p);
+  const out: string[] = [];
+  for (const id of fresh) {
+    if (p.loadout.relics.length >= slots) break;
+    if (p.loadout.relics.includes(id)) continue;
+    setLoadout(p, { relics: [...p.loadout.relics, id] }, ctx);
+    if (p.loadout.relics.includes(id)) out.push(id);
+  }
+  return out;
+}
+
+/** Save a (repaired) choice as the profile's loadout (storedLoadout). Returns the issues found. */
 export function setLoadout(p: Profile, choice: LoadoutChoice, ctx: MetaContent = gameContent()): LoadoutIssue[] {
-  const { loadout, issues } = resolveLoadout(p, choice, ctx);
+  const { loadout, issues } = storedLoadout(p, choice, ctx);
   p.loadout = loadout;
   return issues;
 }

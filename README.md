@@ -100,8 +100,10 @@ Tooling:
 
 Debug URL parameters: `?autoplay=1` (a bot plays) · `?hero=hoshi|rin|mochi` ·
 `?skip=SECONDS` · `?god=1` · `?seed=N` · `?mute=1` · `?quality=low|high` ·
-`?screen=title|select|shop` · `?fps=1`. In the console, `window.__kk` exposes
-helpers such as `skipTo`, `spawn`, `boss`, `give`, `levelUp`, `chest` and `ult`.
+`?screen=title|select|shop` · `?fps=1`. `?god`, `?skip` and `?speed` turn any run,
+even one started from the hub, into a practice run that is never saved. In the
+console, `window.__kk` exposes helpers such as `skipTo`, `spawn`, `boss`, `give`,
+`levelUp`, `chest` and `ult`.
 
 ## Deployment
 

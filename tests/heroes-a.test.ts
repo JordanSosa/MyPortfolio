@@ -540,3 +540,34 @@ describe("Akane", () => {
     expect(dere.hp).toBeGreaterThan(10 + 100 * 0.25 - 1);
   });
 });
+
+describe("Censored (no food or heal pickups) covers every hero-kit snack", () => {
+  const eaten = (hero: string, run: Partial<RunConfig>, talents: Record<string, number> = {}) => {
+    const w = new World({ hero, seed: 5, god: true, run: defaultRunConfig({ ...run, talents, constellation: 6 }) });
+    let food = 0;
+    let censoredCoins = 0;
+    w.hooks.on("pickup", (p) => {
+      if (p.kind === "snack" || p.kind === "onigiri" || p.kind === "cake") food++;
+    });
+    simulate(w, 240, 1 / 30, new Bot(3), (ww) => {
+      for (let i = 0; i < ww.pickups.count; i++) if (ww.pickups.items[i].censored && !ww.pickups.items[i].dead) censoredCoins = Math.max(censoredCoins, 1);
+    });
+    return { food, foodEaten: w.runStats().foodEaten, censoredCoins };
+  };
+
+  test("Pudding under Censored eats no food (her puddings become censored coins); without it she still drops snacks", () => {
+    const off = eaten("pudding", {});
+    expect(off.food).toBeGreaterThan(0);
+    const on = eaten("pudding", { twists: ["censored"], twistRanks: { censored: 2 } });
+    expect(on.food).toBe(0);
+    expect(on.foodEaten).toBe(0);
+    expect(on.censoredCoins).toBe(1);
+  }, 120_000);
+
+  test("Senpai's Valentine chocolates are censored too", () => {
+    const talents = { senpai_valentines: 3 };
+    expect(TALENT_TREES.get("senpai")?.nodes.some((n) => n.id === "senpai_valentines")).toBe(true);
+    expect(eaten("senpai", {}, talents).food).toBeGreaterThan(0);
+    expect(eaten("senpai", { twists: ["censored"], twistRanks: { censored: 2 } }, talents).food).toBe(0);
+  }, 120_000);
+});

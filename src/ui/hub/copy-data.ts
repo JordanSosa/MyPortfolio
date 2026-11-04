@@ -533,6 +533,35 @@ export const NARRATOR: Readonly<Record<string, readonly string[]>> = {
     "A new character joins the cast! Ratings are up!",
     "New merchandise has been approved!"
   ],
+  "unlockHero": [
+    "A new character joins the cast! Ratings are up!",
+    "A new face in the opening credits! The fandom is already shipping them."
+  ],
+  "unlockWeapon": [
+    "New merchandise has been approved!",
+    "A new weapon! The toy line writes itself.",
+    "The prop department has outdone itself. Again."
+  ],
+  "unlockPassive": [
+    "(It's an accessory.)",
+    "An accessory! Sold separately. (It's free.)"
+  ],
+  "unlockRelic": [
+    "New merch in the gift shop! Totally optional.",
+    "Limited edition! (Unlimited copies available.)"
+  ],
+  "unlockTwist": [
+    "The network has notes. More heat, more rewards.",
+    "A plot twist! The writers swear they planned this."
+  ],
+  "unlockStage": [
+    "A new episode is airing! The network is thrilled!",
+    "New location! The background artists need a vacation."
+  ],
+  "unlockMany": [
+    "That's a lot of plot for one episode.",
+    "The season budget, spent in one go."
+  ],
   "run100": [
     "Episode 100! The show has outlived its source material!"
   ]
@@ -541,7 +570,7 @@ export const NARRATOR: Readonly<Record<string, readonly string[]>> = {
 /** Title-screen taglines (one per boot). */
 export const TAGLINES: readonly string[] = [
   "Now with 400% more episodes!",
-  "Season 2: Now With Merch",
+  "Now With Merch!",
   "As seen on a screen near you!",
   "Rated K for Kawaii",
   "The plushies are back (they never left)"

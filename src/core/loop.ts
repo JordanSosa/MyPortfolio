@@ -5,7 +5,8 @@
  *   loop.onVisibility = (hidden) => hidden && pauseGame();
  *   loop.start();
  *
- * - dt is real seconds since the previous frame, clamped to `maxDt` (1/20).
+ * - dt is real seconds since the previous frame, clamped to `maxDt` (1/20);
+ *   `rawDt` is the same interval unclamped (frame-time judging: AutoQuality).
  * - While the tab is hidden the loop stops requesting frames; when it comes
  *   back the first dt is small (no giant catch-up step).
  * - `substep(dt, 1/60, step)` splits a frame into equal stable sub-steps.
@@ -17,6 +18,8 @@ export class Loop {
   onVisibility: ((hidden: boolean) => void) | null = null;
   /** Milliseconds the last frame callback took (CPU time). */
   frameMs = 0;
+  /** Real seconds since the previous frame, NOT clamped to maxDt (1/60 on the first frame after a start / resume). */
+  rawDt = 1 / 60;
 
   private raf = 0;
   private last = -1;
@@ -58,6 +61,7 @@ export class Loop {
     let dt = this.last < 0 ? 1 / 60 : (now - this.last) / 1000;
     this.last = now;
     if (!(dt > 0)) dt = 1 / 240;
+    this.rawDt = dt;
     if (dt > this.maxDt) dt = this.maxDt;
     const t0 = performance.now();
     this.frame(dt, now / 1000);

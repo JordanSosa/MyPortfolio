@@ -12,7 +12,7 @@ import { gameContent } from "../src/meta/content";
 import { heroXpForLevel, masteryDamage } from "../src/meta/economy";
 import { addHeroXp } from "../src/meta/heroes";
 import { buildRunConfig, relicSlots, resolveLoadout, setLoadout, twistHeat, validateLoadout } from "../src/meta/loadout";
-import { defaultProfile } from "../src/meta/profile";
+import { defaultProfile, sanitizeProfile } from "../src/meta/profile";
 import { reconcileProfile } from "../src/meta/reconcile";
 import { TUNING } from "../src/meta/tuning";
 import { fixtureContent, freshProfile } from "./meta.fixtures";
@@ -65,6 +65,43 @@ describe("validation", () => {
     expect(twistHeat({ budget_cuts: 3, censored: 1 }, ctx)).toBe(1 + 2 + 2 + 2);
     expect(setLoadout(p, { twists: { censored: 1 } }, ctx)).toEqual([]);
     expect(p.loadout.twists).toEqual({ censored: 1 });
+  });
+
+  test("visiting an uncleared episode keeps the saved Plot Twists and Filler Arc (the run there is heat 0)", () => {
+    const p = freshProfile(ctx);
+    p.unlocks.twists.push("budget_cuts", "censored");
+    p.unlocks.stages.push("candy_kingdom");
+    cleared(p);
+    setLoadout(p, { stage: "dream_meadow", twists: { budget_cuts: 3, censored: 1 }, endless: true }, ctx);
+    const saved = { twists: { ...p.loadout.twists }, endless: p.loadout.endless };
+    expect(saved).toEqual({ twists: { budget_cuts: 3, censored: 1 }, endless: true });
+    // tap Candy Kingdom (not cleared): the issues are reported, the choice is kept
+    const issues = setLoadout(p, { stage: "candy_kingdom" }, ctx);
+    expect(issues.map((i) => `${i.field}:${i.reason}`).sort()).toEqual(["endless:notCleared", "twists:notCleared", "twists:notCleared"]);
+    expect(p.loadout.stage).toBe("candy_kingdom");
+    expect({ twists: p.loadout.twists, endless: p.loadout.endless }).toEqual(saved);
+    // ... but the run there has no heat and no Filler Arc, and the UI's plan shows none
+    const plan = buildRunConfig(p, {}, ctx);
+    expect(plan.heat).toBe(0);
+    expect(plan.config.twists).toEqual([]);
+    expect(plan.config.endless).toBe(false);
+    expect(plan.loadout.twists).toEqual({});
+    // a reload (sanitise + reconcile) keeps it too, and counts no loadout fix for it
+    const re = sanitizeProfile(JSON.parse(JSON.stringify(p)), 0).profile;
+    expect(re.loadout).toEqual(p.loadout);
+    expect(reconcileProfile(re, ctx).loadoutFixes).toBe(0);
+    expect(re.loadout).toEqual(p.loadout);
+    // back on Dream Meadow: the heat setup is still there
+    setLoadout(p, { stage: "dream_meadow" }, ctx);
+    expect({ twists: p.loadout.twists, endless: p.loadout.endless }).toEqual(saved);
+    expect(buildRunConfig(p, {}, ctx).heat).toBe(twistHeat(saved.twists, ctx));
+  });
+
+  test("real repairs still persist on an uncleared stage: unknown / locked twists dropped, ranks clamped", () => {
+    const p = freshProfile(ctx);
+    p.unlocks.twists.push("budget_cuts");
+    setLoadout(p, { twists: { budget_cuts: 9, dub_version: 1, ghost: 2 }, endless: false }, ctx);
+    expect(p.loadout.twists).toEqual({ budget_cuts: 3 });
   });
 });
 

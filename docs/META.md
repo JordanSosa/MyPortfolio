@@ -150,7 +150,16 @@ plotArmor, friendship, revives).
 unknown / locked, stage unknown / locked, relics unknown / not owned / duplicate /
 over the slots (1 + board + `unlocks.relicSlots`, max 4), twists unknown / locked
 / stage not cleared yet / rank over max, endless before a clear, unknown or
-locked start weapon.
+locked start weapon. `setLoadout` / the reconcile store `storedLoadout`: the repaired
+loadout, except that Plot Twist ranks and the Filler Arc toggle dropped only because the
+chosen stage is not cleared yet are kept (peeking at an uncleared episode keeps the heat
+setup; the run there is still heat 0, no Filler Arc - `buildRunConfig` resolves).
+
+After a grant (a pull, a Copium Exchange buy, the spark) `afterGrant` runs the unlock
+rules right away (a new hero's signature weapon, "own 4 heroes" passives: returned as
+`unlocks`, celebrated when the summon closes) and `autoEquipNewRelics` puts relics owned
+for the first time into free relic slots, best rarity first, never replacing one
+(`equipped`; the summary card reads EQUIPPED!).
 
 **`applyRunToProfile(profile, summary)`** -> `RunReport`: payout coins and gems
 line by line (amounts add up to the totals; multiplier lines carry `mul`),
@@ -184,8 +193,10 @@ the before / after tables are in ARCHITECTURE.md §6.6.
   fresh ~2:00 death ~45 (+40 from the Pilot Episode Plot Point); Dream Meadow 110-230 /
   ~730; Candy 210-525 / ~1,000; Academy 350-640 / ~1,400; Beach 690-1,200 / ~3,250; Final
   Arc 1,250-5,400 / ~9,800; a death inside 3:00 pays ~50 / 115 / 140 / 410 / 670 by stage.
-- **Gems**: stipend (4 a run + 1.5 / min + 3 / endless min) x gem find x heat (`1 + 0.06
-  heat`) x curse x Ratings^0.5, + first clear (240 / 320 / 400 / 480 / 800 by stage
+- **Gems**: stipend (4 a run, earned over the first minute played: `4 x min(1, time / 60)`,
+  + 1.5 / min + 3 / endless min) x gem find x heat (`1 + 0.06 heat`) x curse x Ratings^0.5
+  (a RETRY -> pause -> DROP quit loop pays ~0 at any heat or stage; a 1:41 death pays the
+  full stipend), + first clear (240 / 320 / 400 / 480 / 800 by stage
   order) + boss first kills (30, finals 60) + heat badges (200 / 400 / 800 / 1,600 at
   heat 4 / 8 / 16 / 32, once per stage) + codex bounties (hero 10, weapon 5, passive 3,
   enemy 3, boss 12, relic 2, stage 15); Plot Points pay separately (~24,800 ♦ in all, half
@@ -245,7 +256,9 @@ persists across rotations.
   seasonal names per loop); featured merch (20 SSR / UR / LR relics in the bible's
   order); Truck-kun's Isekai Express (Truck-kun on MYTHIC drops; every N result is
   the Traffic Cone). Featured banners rotate every 3 runs (`advanceRotation`,
-  called by `applyRunToProfile`). A banner whose featured item is not registered
+  called by `applyRunToProfile`) that lasted a minute or cleared the stage
+  (`TUNING.rotation.minRunSeconds`: instant quits never spin the banners; they still
+  count as episodes). A banner whose featured item is not registered
   yet is unavailable (`bannerView().block`).
 - **Pools**: every registered relic; the gacha heroes at their rarity; unlocked
   gameplay heroes at SR (constellation copies); Truck-kun only on his banner.

@@ -90,6 +90,31 @@ describe("AutoQuality", () => {
     expect(q.tier).toBe("high");
   });
 
+  test("a 5 fps device (200 ms frames, the real interval, not the loop's clamped dt) steps down within 4 s of wall time", () => {
+    const { q, changes } = auto("high");
+    let wall = 0;
+    while (!changes.length && wall < 10_000) {
+      q.sample(200, 40);
+      wall += 200;
+    }
+    expect(changes[0]).toBe("mid");
+    expect(wall).toBeLessThanOrEqual(4000);
+  });
+
+  test("one long hitch (tab switch, GC) counts as a single capped frame, not a whole bad window", () => {
+    const { q, changes } = auto("high");
+    run(q, 4, 1000 / 60, 3);
+    q.sample(5000, 3);
+    run(q, 10, 1000 / 60, 3);
+    expect(changes).toEqual([]);
+  });
+
+  test("low is clearly cheaper than mid (glow buffer, particles)", () => {
+    expect(QUALITY.low.glowScale).toBeLessThan(QUALITY.mid.glowScale);
+    expect(QUALITY.low.particles).toBeLessThanOrEqual(QUALITY.mid.particles / 2);
+    expect(QUALITY.low.bloom).toBe(true);
+  });
+
   test("disabled controller never changes tier", () => {
     const { q, changes } = auto("mid");
     q.enabled = false;
