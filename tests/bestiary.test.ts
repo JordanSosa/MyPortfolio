@@ -222,7 +222,7 @@ describe("bosses", () => {
     expect(w.boss).toBeNull();
   });
 
-  test("Lady Lunatic: P1 spirals/fans/teleports, P2 moon ring + bats + starfall, P3 flowers; fair; death = victory", () => {
+  test("Lady Lunatic: P1 spirals/fans/teleports, P2 moon ring + bats + starfall, P3 flowers; fair; death = victory", { tags: ["slow"] }, () => {
     const w = sandbox({ god: true, seed: 11 });
     const e = w.spawnEnemy("lady_lunatic", 0, -200)!;
     w.boss = e;
@@ -295,7 +295,7 @@ describe("bosses", () => {
     expect(alive(w, "puff").length).toBe(0);
   });
 
-  test("timeline: Nightmare Teddy at 6:00, Lady Lunatic at 9:00, enrage at 10:30, her death wins the run", () => {
+  test("timeline: Nightmare Teddy at 6:00, Lady Lunatic at 9:00, enrage at 10:30, her death wins the run", { tags: ["slow"] }, () => {
     const w = new World({ hero: "rin", seed: 21, god: true });
     const spawns: { id: string; t: number }[] = [];
     let enrage = 0;

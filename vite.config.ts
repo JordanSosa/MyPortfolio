@@ -1,3 +1,4 @@
+import { execSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { defineConfig, runnerImport, type Plugin } from "vite";
@@ -67,6 +68,19 @@ function standaloneHead(): Plugin {
   };
 }
 
+/** Build stamp for Settings "Copy diagnostics" (src/debug/diag.ts `__KK_BUILD__`): package version, commit, date. */
+function buildStamp(): { version: string; commit: string; date: string } {
+  let commit = "unknown";
+  try {
+    commit = execSync("git rev-parse --short HEAD", { stdio: ["ignore", "pipe", "ignore"] }).toString().trim();
+    if (execSync("git status --porcelain --untracked-files=no", { stdio: ["ignore", "pipe", "ignore"] }).toString().trim()) commit += "+dirty";
+  } catch {
+    /* not a git checkout */
+  }
+  const version = (JSON.parse(readFileSync(new URL("./package.json", import.meta.url), "utf8")) as { version?: string }).version ?? "0";
+  return { version, commit, date: new Date().toISOString().slice(0, 16).replace("T", " ") };
+}
+
 // `npm run build`         -> dist/        (multi-file, for GitHub Pages; BASE_PATH sets the sub-path)
 // `npm run build:single`  -> dist-single/ (one self-contained index.html, for sharing as a single page)
 export default defineConfig(({ mode }) => {
@@ -75,6 +89,7 @@ export default defineConfig(({ mode }) => {
     base: single ? "./" : process.env.BASE_PATH || "./",
     plugins: single ? [bakedAtlas(true), standaloneHead(), viteSingleFile()] : [bakedAtlas(false)],
     publicDir: single ? false : "public",
+    define: { __KK_BUILD__: JSON.stringify(buildStamp()) },
     server: { port: Number(process.env.PORT) || 5173, strictPort: false },
     build: {
       outDir: single ? "dist-single" : "dist",

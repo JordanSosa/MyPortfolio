@@ -97,12 +97,12 @@ describe("stage registry", () => {
 });
 
 describe("Dream Meadow parity with the shipped slice", () => {
-  test.each(MEADOW_PARITY.map((l) => [l.split("|").slice(0, 3).join(" "), l]))("%s plays exactly as before", (_name, line) => {
+  test.each(MEADOW_PARITY.map((l) => [l.split("|").slice(0, 3).join(" "), l]))("%s plays exactly as before", { tags: ["slow"] }, (_name, line) => {
     const [hero, seed, T] = line.split("|");
     expect(fingerprint(hero, Number(seed), Number(T))).toBe(line);
   });
 
-  test("an explicit default RunConfig is the same run as no RunConfig", () => {
+  test("an explicit default RunConfig is the same run as no RunConfig", { tags: ["slow"] }, () => {
     const run = (cfg: boolean) => {
       const w = new World({ hero: "rin", seed: 21, maxEnemies: 250, run: cfg ? defaultRunConfig() : undefined });
       simulate(w, 90, DT, new Bot(3));
@@ -210,7 +210,7 @@ const TEST_STAGE: StageDef = {
 describe("a second stage (registered by this test only)", () => {
   registerStage(TEST_STAGE);
 
-  test("its own roster, timeline, props and final boss drive the run", () => {
+  test("its own roster, timeline, props and final boss drive the run", { tags: ["slow"] }, () => {
     expect(stageBosses(TEST_STAGE)).toEqual(["king_puff"]);
     expect(stageEnemies(TEST_STAGE).sort()).toEqual(["boo", "shroomie"]);
     const w = new World({ hero: "hoshi", seed: 4, maxEnemies: 250, god: true, run: defaultRunConfig({ stage: "test_candy" }) });
@@ -301,7 +301,7 @@ describe("the device enemy ceiling (World.enemyCeiling)", () => {
     expect(w.spawnEnemy("puff", p.x + 300, p.y)).not.toBeNull();
   });
 
-  test("the Final Arc and the Beach Episode at the low tier stay under the ceiling and their events still finish", () => {
+  test("the Final Arc and the Beach Episode at the low tier stay under the ceiling and their events still finish", { tags: ["slow"], timeout: 240_000 }, () => {
     for (const stage of ["final_arc", "beach_episode"]) {
       const w = new World({ hero: "rin", seed: 11, god: true, maxEnemies: 150, run: { ...defaultRunConfig(), stage } });
       let peakPlain = 0;
@@ -315,5 +315,5 @@ describe("the device enemy ceiling (World.enemyCeiling)", () => {
       expect(["victory", "play"]).toContain(w.phase);
       expect(w.t, stage).toBeGreaterThan(stageDef(stage)!.duration - 5);
     }
-  }, 240_000);
+  });
 });

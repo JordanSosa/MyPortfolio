@@ -9,11 +9,20 @@
     "build:single": "vite build --mode single",
     "preview": "vite preview --host 0.0.0.0",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run --fsModuleCache=false --testTimeout=60000",
+    "test": "vitest run --tags-filter=!slow",
+    "test:slow": "vitest run --tags-filter=slow --fsModuleCache=false",
+    "test:all": "vitest run --fsModuleCache=false",
     "balance": "vitest run --config tools/vitest.balance.config.ts --root . --fsModuleCache=false --disableConsoleIntercept",
     "progression": "vitest run --config tools/progression.vitest.config.ts --root . --fsModuleCache=false --disableConsoleIntercept",
+    "balance:lab": "node tools/balance-lab/lab.mjs",
     "shot": "node scripts/shot.mjs",
-    "sprites": "node scripts/sprites.mjs"
+    "sprites": "node scripts/sprites.mjs",
+    "scenes": "node scripts/scenes.mjs",
+    "doctor": "node scripts/doctor.mjs",
+    "lint:css": "node scripts/lint-css.mjs",
+    "check:artifact": "node scripts/check-artifact.mjs",
+    "check:audio": "node scripts/check-audio.mjs",
+    "check:bundle": "node scripts/check-bundle.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.20.5",

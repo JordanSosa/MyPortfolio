@@ -43,6 +43,7 @@ import { Loop } from "../core/loop";
 import { urlSeed } from "../core/rng";
 import { time } from "../core/time";
 import { FpsMeter } from "../debug/fps";
+import { PH, prof } from "../debug/perf";
 import { debugRunConfig, type DebugParams } from "../debug/params";
 import { createFx, type Fx } from "../fx";
 import { CFG } from "../game/config";
@@ -191,6 +192,11 @@ export class App implements KitHost {
   private redraw = true;
   /** performance.now() of the last screen / modal change (the sprite prewarm waits for things to settle). */
   private changedAt = 0;
+  /**
+   * Debug step mode (src/debug/dev.ts `__kk.step`): "skip" = this frame does not draw the WebGL scene (it
+   * accumulates like a throttled modal frame), "force" = it draws whatever the screen. "auto" = the rules above.
+   */
+  debugDraw: "auto" | "skip" | "force" = "auto";
 
   constructor(readonly params: DebugParams) {
     const s = save.data.settings;
@@ -847,6 +853,7 @@ export class App implements KitHost {
   // ================================================================ frame
   private frame(dt: number): void {
     const t0 = performance.now();
+    prof.begin(t0);
     time.update(dt);
     this.input.update();
     this.nav.update(this.input);
@@ -893,39 +900,55 @@ export class App implements KitHost {
     const r = this.r;
     // an opaque hub page / a full-screen hub overlay hides the attract game: it neither steps nor draws
     const hidden = this.screen === "hub" && (!!this.hub?.coversScene || this.overlayCover);
+    const skipDraw = this.debugDraw === "skip";
+    if (this.debugDraw === "force") this.redraw = true;
+    prof.lap(PH.ui);
     if (s && this.screen !== "results" && !hidden) s.tick(time.dt, dt);
+    prof.lap(PH.sim);
     this.drawAcc += dt;
     this.drawSimAcc += time.dt;
     if (hidden) {
       // (the scene shows again on the first uncovered frame, drawn fresh: no stale / black frame)
       this.fx.update(time.dt, dt);
+      prof.lap(PH.fx);
       this.drawAcc = this.drawSimAcc = 0;
       this.redraw = true;
     } else if (this.screen === "results") {
       // the frozen run behind Episode Results: drawn on entry, then only after a resize / context restore
-      if (this.redraw && !r.contextLost) {
+      if (this.redraw && !r.contextLost && !skipDraw) {
         this.redraw = false;
         r.beginFrame(this.drawAcc);
         if (s) s.draw(r.time, 0, this.drawAcc);
+        prof.lap(PH.view);
         this.fx.draw();
+        prof.lap(PH.fx);
         r.endFrame();
+        prof.lap(PH.gpu);
       }
       this.drawAcc = this.drawSimAcc = 0;
     } else {
       // an in-run modal covers the scene: redraw it at most 30x per second (input, HUD and modals stay full rate)
       const throttled = !!this.modal && !this.redraw;
-      if (!throttled || this.drawAcc >= THROTTLED_DRAW) {
+      if (!skipDraw && (!throttled || this.drawAcc >= THROTTLED_DRAW)) {
         this.redraw = false;
         r.beginFrame(this.drawAcc);
         if (s) s.draw(r.time, this.drawSimAcc, this.drawAcc);
+        prof.lap(PH.view);
         this.fx.update(time.dt, dt);
         this.fx.draw();
+        prof.lap(PH.fx);
         r.endFrame();
+        prof.lap(PH.gpu);
         this.drawAcc = this.drawSimAcc = 0;
-      } else this.fx.update(time.dt, dt);
+      } else {
+        this.fx.update(time.dt, dt);
+        prof.lap(PH.fx);
+      }
     }
     if (g && this.screen === "game") this.hud.update(g.world, dt);
+    prof.lap(PH.hud);
     const cpu = performance.now() - t0;
+    prof.end(this.loop.rawDt, cpu, s ? s.world.enemyCount : 0, this.fx.ps.count, r.batch.stats.instances);
     this.fpsMeter.frame(dt, cpu, s && this.fpsMeter.visible ? `en ${s.world.enemyCount} p ${this.fx.ps.count} pr ${s.world.projectiles.count} q ${this.tier}` : "");
     // quality: judge only live gameplay / attract frames (not paused, modal, settings or a fresh screen)
     if (this.aqHold > 0) this.aqHold -= dt;

@@ -276,7 +276,7 @@ describe("The Final Arc: bosses", () => {
     expect(r.dead).toBe(true);
   });
 
-  test("CANCEL-SAMA: four phases degrade the show (ratings grade, half-res + 6 fps + particles, speed lines + still frames, countdown -> OVERTIME); his death restores it and clears the stage", () => {
+  test("CANCEL-SAMA: four phases degrade the show (ratings grade, half-res + 6 fps + particles, speed lines + still frames, countdown -> OVERTIME); his death restores it and clears the stage", { tags: ["slow"] }, () => {
     const w = sandbox();
     const c = spawnBoss(w, "cancel_sama");
     const seen = new Set<number>();
@@ -347,7 +347,7 @@ describe("The Final Arc: bosses", () => {
     expect(fx).toEqual(expect.arrayContaining(["grade:ratings:1", "renderScale::0.5", "animFps::6", "particles::0.5"]));
   });
 
-  test("endless: Cancel-sama's death starts the Filler Arc; rematches cycle the stage's bosses", () => {
+  test("endless: Cancel-sama's death starts the Filler Arc; rematches cycle the stage's bosses", { tags: ["slow"] }, () => {
     const w = new World({ hero: "rin", seed: 9, god: true, run: defaultRunConfig({ stage: "final_arc", endless: true }) });
     w.t = 1139;
     const ids: string[] = [];
@@ -364,7 +364,7 @@ describe("The Final Arc: bosses", () => {
 });
 
 describe("The Final Arc: a full headless run", () => {
-  test("the bot plays 20:00 with the timeline's roster, all three bosses fall, RENEWED FOR SEASON 2!!, no exceptions", () => {
+  test("the bot plays 20:00 with the timeline's roster, all three bosses fall, RENEWED FOR SEASON 2!!, no exceptions", { tags: ["slow"] }, () => {
     const w = new World({ hero: "rin", seed: 3, maxEnemies: 250, god: true, run: defaultRunConfig({ stage: "final_arc" }) });
     const seen = new Set<string>();
     const bosses: string[] = [];

@@ -211,7 +211,7 @@ const STRESS_EVO = ["galaxy_barrage", "love_tornado", "raijin_drum", "sugar_nuke
 test.each([
   ["6 max-level weapons", STRESS_BASE, 5],
   ["6 evolutions", STRESS_EVO, 1],
-])("60 s stress: %s with 250 enemies, no exceptions, bounded counts", (_name, ids, level) => {
+])("60 s stress: %s with 250 enemies, no exceptions, bounded counts", { tags: ["slow"] }, (_name, ids, level) => {
   const w = new World({ hero: "hoshi", seed: 21, director: false, god: true, maxEnemies: 400 });
   w.weapons.length = 0;
   for (const id of ids) expect(w.addWeapon(id, level)).toBeTruthy();
@@ -237,7 +237,7 @@ test.each([
 });
 
 describe("homing projectiles and pooled enemies", () => {
-  test("a homing star never keeps chasing a pooled Enemy object that was recycled into a new enemy", () => {
+  test("a homing star never keeps chasing a pooled Enemy object that was recycled into a new enemy", { tags: ["slow"] }, () => {
     const w = new World({ hero: "hoshi", seed: 21 });
     const bot = new Bot(3);
     simulate(w, 150, 1 / 30, bot);

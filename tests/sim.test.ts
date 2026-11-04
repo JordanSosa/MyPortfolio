@@ -13,7 +13,7 @@ import { World } from "../src/game/world";
 const DT = 1 / 30;
 
 describe.each(HERO_IDS)("3-minute run: %s", (hero) => {
-  test("plays through 3:00 with sane counts and progression", () => {
+  test("plays through 3:00 with sane counts and progression", { tags: ["slow"] }, () => {
     // (an early account: a no-account run is meant to die early since the Season 2 retune)
     const w = new World({ hero, seed: 1234, maxEnemies: 250, run: earlyAccountRun() });
     // (a hero that starts above Lv 1 - Isekai-kun's Cheat Skill - has its first level-up picks at 0:00)
@@ -131,7 +131,7 @@ test("shroomie splits into spores; elites drop a chest", () => {
   expect(w.pickups.items.slice(0, w.pickups.count).some((p) => p.kind === "chest")).toBe(true);
 });
 
-test("3:00 boss: WARNING, King Puff enters, slams (telegraph + bullets), dies into a golden chest", () => {
+test("3:00 boss: WARNING, King Puff enters, slams (telegraph + bullets), dies into a golden chest", { tags: ["slow"] }, () => {
   const w = new World({ hero: "hoshi", seed: 8, god: true });
   const seen = { warning: 0, spawn: 0, telegraph: 0, killed: 0, golden: 0 };
   w.bus.on("bossWarning", () => seen.warning++);

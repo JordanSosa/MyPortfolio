@@ -110,7 +110,7 @@ describe("applyRunToProfile", () => {
     expect(p.mastery.star_shot).toBeGreaterThan(0);
   });
 
-  test("integration: a headless bot run of the live World, built from the account and banked", () => {
+  test("integration: a headless bot run of the live World, built from the account and banked", { tags: ["slow"] }, () => {
     const live = gameContent();
     const p = defaultProfile(0);
     reconcileProfile(p, live);

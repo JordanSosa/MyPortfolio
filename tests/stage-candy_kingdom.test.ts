@@ -81,7 +81,7 @@ describe("candy kingdom: stage", () => {
     expect(info.rewardMul).toBe(1.5);
   });
 
-  test("its timeline spawns the whole roster, its props and the new event kinds", () => {
+  test("its timeline spawns the whole roster, its props and the new event kinds", { tags: ["slow"] }, () => {
     const w = new World({ hero: "rin", seed: 4, maxEnemies: 250, god: true, run: defaultRunConfig({ stage: "candy_kingdom" }) });
     const seen = new Set<string>();
     const waves = new Set<string>();
@@ -106,7 +106,7 @@ describe("candy kingdom: stage", () => {
     expect(rainBullets).toBeGreaterThan(0); // SPRINKLE STORM! falls straight down
   });
 
-  test("dream meadow never sees the candy props", () => {
+  test("dream meadow never sees the candy props", { tags: ["slow"] }, () => {
     const w = new World({ hero: "hoshi", seed: 2, god: true });
     const seen = new Set<string>();
     simulate(w, 120, DT, new Bot(1), (ww) => {
@@ -397,7 +397,7 @@ describe("candy kingdom: bosses", () => {
     expect(w.enemyCount).toBe(0);
   });
 
-  test("endless: the tyrant's death starts the Filler Arc and the rematches come", () => {
+  test("endless: the tyrant's death starts the Filler Arc and the rematches come", { tags: ["slow"] }, () => {
     const w = new World({ hero: "hoshi", seed: 9, god: true, run: defaultRunConfig({ stage: "candy_kingdom", endless: true }) });
     simulate(w, 20, DT, new Bot(2));
     w.director.warnBoss(BOSSES.get("sugar_plum_tyrant")!, 0.4);
@@ -423,7 +423,7 @@ describe("candy kingdom: bosses", () => {
 });
 
 describe("candy kingdom: full runs", () => {
-  test("a god-mode bot run clears the whole stage", () => {
+  test("a god-mode bot run clears the whole stage", { tags: ["slow"] }, () => {
     const w = new World({ hero: "rin", seed: 11, maxEnemies: 250, god: true, run: defaultRunConfig({ stage: "candy_kingdom" }) });
     simulate(w, 800, DT, new Bot(4), (ww) => {
       // (keep the bosses to a test-friendly length: chip them while they live)
@@ -435,7 +435,7 @@ describe("candy kingdom: full runs", () => {
     expect(w.bullets.count).toBeLessThanOrEqual(CFG.maxBullets);
   });
 
-  test("a mortal bot run plays out without exceptions", () => {
+  test("a mortal bot run plays out without exceptions", { tags: ["slow"] }, () => {
     for (const hero of ["hoshi", "mochi"]) {
       // (an early account: since the Season 2 retune a no-account run is meant to die in Candy Kingdom's opening)
       const w = new World({ hero, seed: 21, maxEnemies: 250, run: earlyAccountRun({ stage: "candy_kingdom" }) });

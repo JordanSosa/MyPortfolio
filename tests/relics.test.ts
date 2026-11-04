@@ -76,7 +76,7 @@ describe("relic catalogue", () => {
 });
 
 describe("every relic in a headless run", () => {
-  test("installs at ★0 and ★6 and plays 45 s with the bot without exceptions", () => {
+  test("installs at ★0 and ★6 and plays 45 s with the bot without exceptions", { tags: ["slow"] }, () => {
     for (const d of RELICS.values())
       for (const s of [0, 6]) {
         const w = new World({ hero: "hoshi", seed: 11, maxEnemies: 220, run: defaultRunConfig({ relics: [{ id: d.id, stars: s }] }) });
@@ -86,7 +86,7 @@ describe("every relic in a headless run", () => {
       }
   });
 
-  test("a fast-forwarded (muted) run plays exactly like a watched one with all the event relics on", () => {
+  test("a fast-forwarded (muted) run plays exactly like a watched one with all the event relics on", { tags: ["slow"] }, () => {
     const relics = ["rival_plushie", "oversized_sword_keychain", "screentone_sheet", "red_string_of_fate", "sakura_snow_globe", "wind_machine", "mascot_head", "compact_mirror", "real_friend"];
     const run = (muted: boolean) => {
       const w = new World({ hero: "rin", seed: 4, maxEnemies: 220, run: defaultRunConfig({ relics: relics.map((id) => ({ id, stars: 3 })) }) });
@@ -496,7 +496,7 @@ describe("UR, LR and MYTHIC relics", () => {
     expect(w.runStats().killsByWeapon.star_shot).toBe(w.weapons[0].kills + f.inst!.kills);
   });
 
-  test("A Real Friend works with every hero (and leaves the hero's i-frames / shields alone)", () => {
+  test("A Real Friend works with every hero (and leaves the hero's i-frames / shields alone)", { tags: ["slow"] }, () => {
     for (const h of HEROES) {
       const w = new World({ hero: h.id, seed: 2, maxEnemies: 180, run: defaultRunConfig({ relics: [{ id: "real_friend", stars: 3 }] }) });
       expect(() => simulate(w, 30, DT, new Bot(4)), h.id).not.toThrow();
@@ -530,7 +530,7 @@ describe("NANI?! pops", () => {
     expect(w.runStats().nanis).toBe(2);
   });
 
-  test("a long bot run pops some NANI?! (and never more than one per 6 s)", () => {
+  test("a long bot run pops some NANI?! (and never more than one per 6 s)", { tags: ["slow"] }, () => {
     const w = new World({ hero: "rin", seed: 3, maxEnemies: 250 });
     simulate(w, 180, DT, new Bot(2));
     const n = w.runStats().nanis ?? 0;

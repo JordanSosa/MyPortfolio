@@ -18,6 +18,8 @@ import "./ui/kit/kit.css";
 import "./ui/hub/hub.css";
 import { readParams } from "./debug/params";
 import { installHooks } from "./debug/hooks";
+import { installDiag } from "./debug/diag";
+import { installDev } from "./debug/dev";
 import { preloadAtlas } from "./render/atlas-source";
 import { App } from "./ui/app";
 import { resetSettings } from "./ui/save";
@@ -79,6 +81,8 @@ function createApp(): App | null {
 }
 
 async function boot(): Promise<void> {
+  // diagnostics (Settings "Copy diagnostics"): record errors / warnings from the very start
+  installDiag();
   // block pinch / double-tap zoom and long-press menus on iOS
   for (const ev of ["gesturestart", "gesturechange", "gestureend"]) document.addEventListener(ev, (e) => e.preventDefault(), { passive: false });
   // (text fields keep their double-tap selection and long-press paste menu: the save import box)
@@ -106,6 +110,8 @@ async function boot(): Promise<void> {
   const app = createApp();
   if (!app) return;
   installHooks(app);
+  // developer suite: ?step=1 / ?scenario= / ?dev=1, the ` key, a 3-finger long-press (lazy chunks)
+  installDev(app);
   app.start();
   document.getElementById("boot")?.remove();
 }

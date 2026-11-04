@@ -243,7 +243,7 @@ describe("start bonuses and flags", () => {
     expect(threes).toBe(20);
   });
 
-  test("eliteRate adds elites to every elite event", () => {
+  test("eliteRate adds elites to every elite event", { tags: ["slow"] }, () => {
     const count = (flags: Record<string, number>) => {
       const w = new World({ hero: "hoshi", seed: 2, god: true, run: run({ flags }) });
       let elites = 0;
@@ -298,7 +298,7 @@ describe("banish and skip", () => {
     expect(w.summary().stats.skipsUsed).toBe(1);
   });
 
-  test("the bot banishes cards it would never take and skips filler-only offers", () => {
+  test("the bot banishes cards it would never take and skips filler-only offers", { tags: ["slow"] }, () => {
     // (an early account so the run lasts long enough for a full build)
     const w = new World({ hero: "mochi", seed: 6, maxEnemies: 250, run: earlyAccountRun({ flags: { banish: 3, skip: 3 } }) });
     simulate(w, 240, DT, new Bot(2));

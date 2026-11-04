@@ -801,7 +801,7 @@ describe("counters feed the account", () => {
 
 // ================================================================ in a real run
 describe("in a real run", () => {
-  test("a 2-minute bot run holding all four (then all four evolutions) survives without exceptions", () => {
+  test("a 2-minute bot run holding all four (then all four evolutions) survives without exceptions", { tags: ["slow"] }, () => {
     for (const set of [ARSENAL.map((a) => a.weapon), ARSENAL.map((a) => a.evo)]) {
       const w = new World({ hero: "mochi", seed: 4242, maxEnemies: 250 });
       for (const id of set) w.addWeapon(id, 5);

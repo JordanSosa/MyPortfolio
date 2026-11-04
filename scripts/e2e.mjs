@@ -1,5 +1,6 @@
 // End-to-end smoke test: desktop, mobile portrait and mobile landscape.
-//   node scripts/e2e.mjs [--only desktop|portrait|landscape] [--out shots/e2e] [--keep-going]
+//   node scripts/e2e.mjs [--only desktop|portrait|landscape] [--out shots/e2e] [--keep-going] [--serial]
+// (the devices run in parallel, one browser each; --serial runs them one after another)
 //
 // Per device:
 //   A) the real Season 2 flow with real taps / clicks: splash -> tap -> HUB home -> PLAY -> episode
@@ -96,10 +97,11 @@ async function resolveModal(page, mobile) {
   }
 }
 
-for (let di = 0; di < DEVICES.length; di++) {
+async function runDevice(di, browser) {
   const dev = DEVICES[di];
-  const rec = { device: dev.name, steps: [], shots: [], errors: [] };
-  results.push(rec);
+  const rec = { device: dev.name, steps: [], shots: [], errors: [], ms: 0 };
+  results[di] = rec;
+  const T0 = Date.now();
   const page = await newPage(browser, dev.opts);
   const step = async (name, fn) => {
     const t0 = Date.now();
@@ -208,13 +210,21 @@ for (let di = 0; di < DEVICES.length; di++) {
         moved = x1 > x0 + 4;
       }
       if (!moved) throw new Error(`player did not move right (${x0.toFixed(1)} -> ${x1.toFixed(1)})`);
-      await resolveModal(page, mobile);
       if (mobile) {
-        const visible = await page.evaluate(() => !document.querySelector(".kk-touch").hidden);
-        if (!visible) throw new Error("touch controls not visible during gameplay");
-        await page.locator(".kk-dash").tap();
+        // (a level-up can pop between resolving the modals and the tap, hiding the controls: pick it, tap again)
+        for (let i = 0; ; i++) {
+          await resolveModal(page, mobile);
+          const visible = await page.evaluate(() => !document.querySelector(".kk-touch").hidden);
+          try {
+            if (!visible) throw new Error("touch controls not visible during gameplay");
+            await page.locator(".kk-dash").tap({ timeout: 5000 });
+            break;
+          } catch (e) {
+            if (i >= 3) throw e;
+          }
+        }
         await sleep(300);
-      }
+      } else await resolveModal(page, mobile);
     });
     await step("pause -> QUIT RUN -> Episode Results", async () => {
       // (a level-up can pop between resolving the modals and the tap: pick it, then tap pause again)
@@ -388,6 +398,17 @@ for (let di = 0; di < DEVICES.length; di++) {
   rec.errors = errs;
   if (errs.length) failed = true;
   await page.context().close();
+  rec.ms = Date.now() - T0;
+}
+
+// The devices run in parallel, one Chromium each (pages of one browser share its single SwiftShader GPU process and
+// serialise; separate browsers use separate cores): 3 devices took 6.3 min one after another. --serial = the old way.
+const T0 = Date.now();
+if (args.serial) for (let di = 0; di < DEVICES.length; di++) await runDevice(di, browser);
+else {
+  const extra = await Promise.all(DEVICES.slice(1).map(() => launchBrowser()));
+  await Promise.all(DEVICES.map((_, di) => runDevice(di, di === 0 ? browser : extra[di - 1])));
+  for (const b of extra) await b.close();
 }
 
 await browser.close();
@@ -397,6 +418,7 @@ console.log("\n===== E2E SUMMARY =====");
 for (const r of results) {
   console.log(`\n[${r.device}]`);
   for (const s of r.steps) console.log("  " + s);
+  console.log(`  device time: ${(r.ms / 1000).toFixed(1)} s`);
   if (r.stats) console.log("  stats:", JSON.stringify(r.stats));
   console.log(`  screenshots: ${r.shots.length} -> ${outDir}/${r.device}-*.png`);
   if (r.errors.length) {
@@ -404,5 +426,5 @@ for (const r of results) {
     for (const e of r.errors.slice(0, 12)) console.log("    " + e.split("\n")[0]);
   } else console.log("  page errors: 0");
 }
-console.log(failed ? "\nE2E: FAILED" : "\nE2E: PASSED");
+console.log(`${failed ? "\nE2E: FAILED" : "\nE2E: PASSED"} in ${((Date.now() - T0) / 1000).toFixed(0)} s (${results.map((r) => `${r.device} ${(r.ms / 1000).toFixed(0)} s`).join(", ")}${args.serial ? ", serial" : ", in parallel"})`);
 process.exit(failed ? 1 : 0);

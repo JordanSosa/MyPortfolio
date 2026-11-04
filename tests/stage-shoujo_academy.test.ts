@@ -69,7 +69,7 @@ describe("shoujo academy: stage", () => {
     for (const id of stageBosses(st)) expect(BOSSES.get(id)?.boss, id).toBeDefined();
   });
 
-  test("its timeline spawns the whole roster, its props and the new event kinds", () => {
+  test("its timeline spawns the whole roster, its props and the new event kinds", { tags: ["slow"] }, () => {
     const w = new World({ hero: "rin", seed: 4, maxEnemies: 250, god: true, run: defaultRunConfig({ stage: "shoujo_academy" }) });
     const seen = new Set<string>();
     const waves = new Set<string>();
@@ -293,7 +293,7 @@ function bossRun(id: string, seed = 5): { w: World; e: Enemy; states: Set<number
 }
 
 describe("shoujo academy: bosses", () => {
-  test("student council president: every pattern of all three phases, rules on their own clock", () => {
+  test("student council president: every pattern of all three phases, rules on their own clock", { tags: ["slow"] }, () => {
     const { w, e, states } = bossRun("council_president");
     const rules = new Set<number>();
     step(w, 40, () => {
@@ -415,7 +415,7 @@ describe("shoujo academy: bosses", () => {
     expect(w.phase).toBe("victory");
   });
 
-  test("endless: the Filler Arc continues with president / bishounen rematches", () => {
+  test("endless: the Filler Arc continues with president / bishounen rematches", { tags: ["slow"] }, () => {
     const w = new World({ hero: "hoshi", seed: 9, god: true, run: defaultRunConfig({ stage: "shoujo_academy", endless: true }) });
     simulate(w, 20, DT, new Bot(2));
     w.director.warnBoss(BOSSES.get("bishounen")!, 0.4);
@@ -443,7 +443,7 @@ describe("shoujo academy: bosses", () => {
 });
 
 describe("shoujo academy: full runs", () => {
-  test("a god-mode bot run clears the whole stage", () => {
+  test("a god-mode bot run clears the whole stage", { tags: ["slow"] }, () => {
     const w = new World({ hero: "hoshi", seed: 12, maxEnemies: 250, god: true, run: defaultRunConfig({ stage: "shoujo_academy" }) });
     simulate(w, 920, DT, new Bot(4), (ww) => {
       const b = ww.boss;
@@ -454,7 +454,7 @@ describe("shoujo academy: full runs", () => {
     expect(w.bullets.count).toBeLessThanOrEqual(CFG.maxBullets);
   });
 
-  test("a mortal bot run plays out without exceptions", () => {
+  test("a mortal bot run plays out without exceptions", { tags: ["slow"] }, () => {
     for (const hero of ["rin", "mochi"]) {
       // (an early account: since the Season 2 retune a no-account run is meant to hit the Academy's opening like a wall)
       const w = new World({ hero, seed: 22, maxEnemies: 250, run: earlyAccountRun({ stage: "shoujo_academy" }) });

@@ -74,7 +74,7 @@ describe("run integrity", () => {
     expect(value + w.coins / w.stats.greed).toBeCloseTo(total, 6);
   });
 
-  test("full unmuted run (listener on every event): victory, no exceptions, every list bounded", () => {
+  test("full unmuted run (listener on every event): victory, no exceptions, every list bounded", { tags: ["slow"] }, () => {
     // (the shipped slice's card pool: Season 2 content changes every level-up roll of this frozen seed)
     // (+ an early account's damage: since the verification pass's Dream Meadow retune a no-account hero can't kill
     // Lady Lunatic inside the 15 minutes even in god mode - the test is about a full run to the victory)

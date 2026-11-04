@@ -99,7 +99,7 @@ describe("rates + pity (1e6 pulls)", () => {
     expect(Math.abs(ssrPlus - consolidatedSsrPlus())).toBeLessThan(0.0015);
   });
 
-  test("the 10-pull floor guarantees SR or better in every 10", () => {
+  test("the 10-pull floor guarantees SR or better in every 10", { tags: ["slow"] }, () => {
     const roller = new RarityRoller();
     const rng = new Rng(7);
     const st = { pity: 0, pityUR: 0 };
@@ -169,7 +169,7 @@ describe("pulls", () => {
     expect(s.copiumEarned).toBe(p.currencies.copium);
   });
 
-  test("featured 50/50: about half the featured-rarity drops are featured; a loss guarantees the next", () => {
+  test("featured 50/50: about half the featured-rarity drops are featured; a loss guarantees the next", { tags: ["slow"] }, () => {
     const p = rich();
     const feat = featuredNow(p, "hero", ctx)!;
     expect(feat).toBeDefined();

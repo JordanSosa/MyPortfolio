@@ -42,7 +42,7 @@ describe("Filler Arc (endless)", () => {
     expect(w.endlessOn).toBe(false);
   });
 
-  test("with endless the run goes on: FILLER ARC, rising scaling, elite waves, boss rematches, episode cards", () => {
+  test("with endless the run goes on: FILLER ARC, rising scaling, elite waves, boss rematches, episode cards", { tags: ["slow"] }, () => {
     // (an early account's damage: a rematch waits for the previous boss to fall, and since the verification pass's
     // Dream Meadow retune a fresh-save Rin can't take down the 3:00 / 6:00 bosses inside this window)
     const w = new World({ hero: "rin", seed: 2, god: true, maxEnemies: 250, run: earlyAccountRun({ endless: true }) });
@@ -125,7 +125,7 @@ describe("Filler Arc (endless)", () => {
 });
 
 describe("RunStats", () => {
-  test("a bot run's counters agree with the world and the event stream", () => {
+  test("a bot run's counters agree with the world and the event stream", { tags: ["slow"] }, () => {
     const w = new World({ hero: "rin", seed: 12, maxEnemies: 250 });
     let dashes = 0;
     let chests = 0;

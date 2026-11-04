@@ -13,8 +13,12 @@
  *    from the pause menu the run in progress would bank into the new profile.
  * Works with touch, mouse, keys (left/right adjusts the focused slider /
  * segment) and gamepad.
+ * DIAGNOSTICS (next to DONE, also mid-run): copies the device / fps / audio /
+ * errors report of src/debug/diag.ts for a bug report (a selectable box when
+ * the host blocks the clipboard).
  */
 import type { App, UiScreen } from "../app";
+import { copyText, diagnosticsText } from "../../debug/diag";
 import { esc, fmtInt, h } from "../dom";
 import { confirmDialog } from "../kit/overlay";
 import { save, type Settings } from "../save";
@@ -77,7 +81,8 @@ export function openSettings(app: App, onClose: () => void): UiScreen {
         }
         <div class="ss-row"><button class="btn small red" data-nav data-act="reset">✕ START OVER</button></div>
       </div>
-      <div class="btn-row" style="margin-top:.6em"><button class="btn small" data-nav data-nav-default data-act="done">✓ DONE</button></div>
+      <textarea class="ss-text" data-ta="diag" readonly hidden aria-label="Diagnostics report"></textarea>
+      <div class="btn-row" style="margin-top:.6em"><button class="btn small" data-nav data-nav-default data-act="done">✓ DONE</button><button class="btn small ghost" data-nav data-act="diag" aria-label="Copy diagnostics for a bug report">⧉ DIAGNOSTICS</button></div>
     </div>`;
   app.ui.appendChild(el);
 
@@ -312,6 +317,24 @@ export function openSettings(app: App, onClose: () => void): UiScreen {
     onClose();
   };
   onTap(el.querySelector('[data-act="done"]'), close);
+  // (the clipboard call happens inside the click: hosts only allow it during the gesture)
+  const diagBtn = el.querySelector<HTMLElement>('[data-act="diag"]');
+  onTap(diagBtn, () => {
+    const text = diagnosticsText(app);
+    void copyText(text).then((ok) => {
+      if (!diagBtn) return;
+      app.sfx(ok ? "uiConfirm" : "uiMove");
+      diagBtn.textContent = ok ? "✓ COPIED" : "SELECT & COPY ↑";
+      setTimeout(() => (diagBtn.textContent = "⧉ DIAGNOSTICS"), 2600);
+      if (!ok) {
+        const ta = el.querySelector('[data-ta="diag"]') as HTMLTextAreaElement;
+        ta.hidden = false;
+        ta.value = text;
+        ta.focus();
+        ta.select();
+      }
+    });
+  });
 
   const L = layer(el, close);
   L.onAdjust = (focus, dir) => {

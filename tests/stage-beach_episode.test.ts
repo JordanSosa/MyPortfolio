@@ -328,7 +328,7 @@ describe("Beach Episode: bosses", () => {
     expect(w.phase).toBe("victory");
   });
 
-  test("endless: the dragon's death starts the Filler Arc and the rematches loop", () => {
+  test("endless: the dragon's death starts the Filler Arc and the rematches loop", { tags: ["slow"] }, () => {
     const w = new World({ hero: "rin", seed: 9, god: true, run: defaultRunConfig({ stage: "beach_episode", endless: true }) });
     w.t = 899;
     const ids: string[] = [];
@@ -345,7 +345,7 @@ describe("Beach Episode: bosses", () => {
 });
 
 describe("Beach Episode: a full headless run", () => {
-  test("the bot plays 16:00 with the timeline's roster, both bosses fall, the stage clears, no exceptions", () => {
+  test("the bot plays 16:00 with the timeline's roster, both bosses fall, the stage clears, no exceptions", { tags: ["slow"] }, () => {
     const w = new World({ hero: "hoshi", seed: 3, maxEnemies: 250, god: true, run: defaultRunConfig({ stage: "beach_episode" }) });
     const seen = new Set<string>();
     const bosses: string[] = [];

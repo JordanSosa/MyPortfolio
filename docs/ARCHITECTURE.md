@@ -199,6 +199,13 @@ src/
     hooks.ts           window.__kk (skipTo, spawn, giveXp, levelUp, chest, ult, give, clearWeapons, pause, endRun, stats,
                        relic, twist, endless, stageFx, runStats ...)
     fps.ts             FPS meter
+    perf.ts            frame profiler (always on: per-phase CPU ring + 60 s histogram; App.frame laps it)
+    diag.ts            error / warning ring, context losses, the "Copy diagnostics" text + clipboard fallback
+    dev.ts             developer suite entry: ?step=1 step mode (__kk.step / render / freeze), ?scenario=, ?dev=1,
+                       the ` key + 3-finger long-press, lazy loaders (docs/DEVTOOLS.md §3)
+    scenarios.ts       named scenarios (warp, sandboxed account runs) + snapshot.ts (__kk.snapshot JSON); lazy chunk
+    profiles.ts        seeded profiles (tools/checkpoints.ts) + the save sandbox; lazy chunk
+    console/           the dev console overlay (Perf / Run / Audio / Acct / Scn / Log tabs); lazy chunk
 
 tests/                 vitest: core math, xp/cards/chests/meta, headless 3-minute bot runs, boss, ults,
                        bestiary.test.ts (late enemies, both bosses through every pattern/phase, victory, enrage,
@@ -217,11 +224,20 @@ tests/                 vitest: core math, xp/cards/chests/meta, headless 3-minut
 tools/balance.probe.ts `npm run balance`: full headless runs, every hero x seed, good + lazy bot, pacing report (section 6)
 tools/progression.sim.ts `npm run progression`: consecutive runs with one account (bot + spending policy), hours to
                        every EXPANSION §2 milestone, income / power curves (docs/META.md §9)
-scripts/e2e.mjs        Playwright e2e: desktop / mobile portrait / mobile landscape, screenshots, fails on errors
+scripts/e2e.mjs        Playwright e2e: desktop / mobile portrait / mobile landscape in parallel, screenshots, fails on errors
 scripts/flows.mjs      Playwright account flows (section 11): fresh save -> run -> bank -> buy -> stronger run, v1
                        migration, Filler Arc clear, Android Back in every state, keyboard-only play; 4 devices
 scripts/peak.mjs       peak-chaos readability shots (adaptive bloom limiter on / off)
 scripts/icons.mjs      regenerates public/icon-192.png + icon-512.png from the atlas
+scripts/scenes.mjs     scene gallery: scenarios in step mode on N browsers, contact sheet, visual anomaly flags
+                       (blackout, murk, illegible text, placeholders, overflow, errors), films (name~frames/every),
+                       --baseline / --diff, --self-test (docs/DEVTOOLS.md §5)
+scripts/doctor.mjs     every cheap gate in parallel (§7); lint-css.mjs (global CSS collisions), check-artifact.mjs
+                       (CSP boot of the published page), check-audio.mjs (synthesis cost budget + lite-profile shape,
+                       the AudioContext each device gets, Android focus-loss recovery), check-bundle.mjs (main-chunk
+                       budget, dev code stays lazy) (§6)
+vitest.config.ts       the unit suite: fast by default, `slow` tag for long headless runs (npm run test:slow / test:all)
+CLAUDE.md              the agent guide: which tool answers what, rules, known pitfalls
 public/                PWA manifest + icons
 ```
 
@@ -838,6 +854,7 @@ then tunes income / costs so an account reaches each checkpoint at its hours
 | `node tools/progression.mjs` | The economy's ground truth (6.6, META.md §9): bot accounts (weak / mid / strong x seeds, one process each, 4 in parallel) play real runs from a fresh save and bank / spend like a player; milestones in hours / runs, checkpoint snapshots, income per phase, the "something to buy" hook and dead zones, unlock timeline. `npm run progression` is one account with a line per run (`VERBOSE=1`). |
 | `tools/econ.sim.ts` | Offline economy checks: `ECON=fit` prices `matrix --stats` runs with the live payout / XP / mastery formulas (`FIT_PATCH` tries a change), `ECON=reprice` reprices the checkpoints' board ranks under other ring costs. |
 | `node tools/matrix.mjs --stats` | Keeps each run's RunStats in the result (input of `ECON=fit`). |
+| `npm run balance:lab` | **Start here** (docs/DEVTOOLS.md §4): the whole checkpoint x stage matrix, boss fights, weapon DPS, level curves, a progression sample and anomaly flags in ~85 s cold / ~10 s warm. Analytic model + short real-sim samples on 4 cached workers, what-ifs with `--set "stage.final_arc.scaling.hp*=1.2"` (files untouched). Writes `shots/balance-lab/<name>/report.{html,json,md}`. The matrix and the progression tool stay for exact long runs. |
 
 **Bots** (`src/debug/bot.ts makeBot`): `lazy` (random level-up picks, never
 dashes: the weak player), **`mid` (the average player the curve is tuned for:
@@ -1165,12 +1182,24 @@ Parallel content work: one agent per new file in `weapons/`, `enemies/`,
 
 ## 8. Verification
 
+**Start with `npm run doctor`** (~25 s: typecheck, fast tests, sprites, CSS collision lint, audio cost budget + the
+profile each device gets + Android focus recovery, bundle budget, artifact CSP boot) and `npm run scenes` for anything
+visual (docs/DEVTOOLS.md §5-7, CLAUDE.md). docs/DEVTOOLS.md §8 shows each check catching the Season 2 bug it exists
+for, and §9 has the measured before / after.
+
 ```
+npm run doctor                 # every cheap gate in parallel, one pass / fail table (--scenes, --all)
+npm run scenes                 # 29 key screens x i13 + desktop (Kuro's ult filmed) with blackout / murk / illegible-text /
+                               # placeholder / overflow / error flags; --only "ult:kuro~180/15" films one scenario
 npm run typecheck
-npm test                       # unit + headless bot runs (all heroes), bosses, ults, determinism, run integrity,
-                               # AutoQuality / save validation / fmtNum (tests/quality.test.ts)
-                               # (--testTimeout=60000: the full-run sims take 5-9 s on a loaded / CI machine)
-node scripts/e2e.mjs           # desktop + mobile portrait + mobile landscape: splash -> hub -> PLAY -> episodes -> loadout
+npm test                       # the FAST suite (~8 s): everything not tagged "slow" (vitest.config.ts)
+npm run test:slow              # tests tagged { tags: ["slow"] }: full stage runs, 3-minute bot runs (all heroes),
+                               # relic / talent sweeps, Dream Meadow parity, fuzzers (~40 s)
+npm run test:all               # both (the pre-split `npm test`): unit + headless bot runs, bosses, ults, determinism,
+                               # run integrity, AutoQuality / save validation / fmtNum (tests/quality.test.ts)
+                               # (testTimeout 60 s, 240 s for "slow": the full-run sims take 5-9 s on a loaded machine)
+node scripts/e2e.mjs           # (~2.5 min: the 3 devices in parallel, one browser each; --serial ~5 min)
+                               # desktop + mobile portrait + mobile landscape: splash -> hub -> PLAY -> episodes -> loadout
                                # -> START EPISODE -> run -> quit -> Episode Results -> hub; hub pages (board buy, talents,
                                # pull, wiki, settings export, Android Back); autoplay level-up / chest / pause / results
 node scripts/shot.mjs --path "/?autoplay=1&hero=rin&skip=150" --mobile --wait 5000 --out shots/x.png
@@ -1184,6 +1213,10 @@ node tools/matrix.mjs          # power-vs-stage matrix: checkpoints P0-P7 x 5 st
 npm run progression            # account progression simulator (docs/META.md §9; BOT=weak|mid|strong RUNS=...)
 npm run build && npm run build:single   # dist/ (Pages) and dist-single/index.html (standalone, works from file://)
 ```
+
+**Fast path (docs/DEVTOOLS.md §3):** `/?scenario=<name>&step=1` reaches any moment in under ~1 s and
+`__kk.step(n)` advances it deterministically (one synchronous draw at the end), so screenshots never
+wait on headless frame rates. The notes below are for live (rAF) pages.
 
 Headless Chromium renders with SwiftShader at ~5 fps; the loop clamps dt to
 1/20 s, so CSS-free timers that run on frame time (feedback `after()`, modal

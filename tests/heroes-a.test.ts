@@ -181,7 +181,7 @@ describe.each(HEROES)("$hero", ({ hero, weapon, evo, passive, ult }) => {
     expect(left).toBe(0);
   });
 
-  test("a 3-minute bot run survives without exceptions", () => {
+  test("a 3-minute bot run survives without exceptions", { tags: ["slow"] }, () => {
     // (an early account: a no-account run is meant to die early since the Season 2 retune)
     const w = new World({ hero, seed: 1234, maxEnemies: 250, run: earlyAccountRun() });
     let ults = 0;
@@ -198,7 +198,7 @@ describe.each(HEROES)("$hero", ({ hero, weapon, evo, passive, ult }) => {
     expect(sig && sig.damage).toBeGreaterThan(1000);
   });
 
-  test("every talent at max rank + C6 (a maxed account) runs 90 s with ults and an evolution", () => {
+  test("every talent at max rank + C6 (a maxed account) runs 90 s with ults and an evolution", { tags: ["slow"] }, () => {
     const talents: Record<string, number> = {};
     for (const n of TALENT_TREES.get(hero)!.nodes) talents[n.id] = n.maxRank;
     const w = new World({ hero, seed: 99, maxEnemies: 250, run: defaultRunConfig({ talents, constellation: 6, weaponLevelBonus: { [weapon]: 2 } }) });
@@ -555,19 +555,19 @@ describe("Censored (no food or heal pickups) covers every hero-kit snack", () =>
     return { food, foodEaten: w.runStats().foodEaten, censoredCoins };
   };
 
-  test("Pudding under Censored eats no food (her puddings become censored coins); without it she still drops snacks", () => {
+  test("Pudding under Censored eats no food (her puddings become censored coins); without it she still drops snacks", { tags: ["slow"], timeout: 120_000 }, () => {
     const off = eaten("pudding", {});
     expect(off.food).toBeGreaterThan(0);
     const on = eaten("pudding", { twists: ["censored"], twistRanks: { censored: 2 } });
     expect(on.food).toBe(0);
     expect(on.foodEaten).toBe(0);
     expect(on.censoredCoins).toBe(1);
-  }, 120_000);
+  });
 
-  test("Senpai's Valentine chocolates are censored too", () => {
+  test("Senpai's Valentine chocolates are censored too", { tags: ["slow"], timeout: 120_000 }, () => {
     const talents = { senpai_valentines: 3 };
     expect(TALENT_TREES.get("senpai")?.nodes.some((n) => n.id === "senpai_valentines")).toBe(true);
     expect(eaten("senpai", {}, talents).food).toBeGreaterThan(0);
     expect(eaten("senpai", { twists: ["censored"], twistRanks: { censored: 2 } }, talents).food).toBe(0);
-  }, 120_000);
+  });
 });

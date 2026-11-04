@@ -67,7 +67,7 @@ describe("baked atlas", () => {
     expect(Buffer.from(a.buildPixels()).equals(Buffer.from(live.buildPixels()))).toBe(true);
   });
 
-  test("rasters cut from the baked texels: opaque / clear pixels exact, partial alpha premultiplies back to the same texel", () => {
+  test("rasters cut from the baked texels: opaque / clear pixels exact, partial alpha premultiplies back to the same texel", { tags: ["slow"] }, () => {
     const a = Atlas.fromBaked(baked.meta, live.buildPixels().slice());
     let partial = 0;
     for (const id of live.sprites.keys()) {

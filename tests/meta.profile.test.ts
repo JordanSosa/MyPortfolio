@@ -90,7 +90,7 @@ describe("profile defaults + sanitiser", () => {
     expect(r2.profile).toEqual(r1.profile);
   });
 
-  test("fuzz: random corruption of a lived-in profile never throws and always yields a valid, stable profile", () => {
+  test("fuzz: random corruption of a lived-in profile never throws and always yields a valid, stable profile", { tags: ["slow"] }, () => {
     const rng = new Rng(1234);
     const base = freshProfile(ctx);
     base.currencies = { coins: 5000, gems: 3200, copium: 77 };

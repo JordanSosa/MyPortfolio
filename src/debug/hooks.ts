@@ -23,6 +23,10 @@
  *   __kk.runStats()            the RunStats collected so far
  *   __kk.prewarm()             UI sprite prewarm progress { done, total } (it waits out runs / modals / overlays)
  *   (run configs from the URL: ?stage= ?endless=1 ?twists= ?relics= ?talents= ?cons= ?flags= ... see params.ts)
+ * Developer suite (src/debug/dev.ts adds these; docs/DEVTOOLS.md §3):
+ *   __kk.step(frames, dt) / __kk.render() / __kk.freeze()      deterministic step mode (?step=1)
+ *   await __kk.scenario(name) / __kk.scenarios() / __kk.snapshot()   named states, structured live state
+ *   __kk.diagnostics() / __kk.dev() / __kk.perf                 diagnostics text, the dev console, the profiler
  */
 import { time } from "../core/time";
 import type { App } from "../ui/app";

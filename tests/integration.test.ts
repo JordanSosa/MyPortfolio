@@ -47,7 +47,7 @@ function startWorld(p: Profile, choice = {}, seed = 3): World {
 }
 
 describe("fail forward: run -> bank -> buy -> a stronger run", () => {
-  test("a fresh account's first death pays enough for a board node, and the node is in the next run", () => {
+  test("a fresh account's first death pays enough for a board node, and the node is in the next run", { tags: ["slow"] }, () => {
     const p = fresh();
     const w1 = startWorld(p);
     const might0 = w1.stats.might;
@@ -164,7 +164,7 @@ describe("RunConfig: nothing ignored, nothing applied twice", () => {
     expect(heatLine?.mul).toBeCloseTo(1 + plan.heat * TUNING.payout.heatCoinPer, 2);
   });
 
-  test("content pools: an account offers only its unlocked weapons (+ the hero's signature)", () => {
+  test("content pools: an account offers only its unlocked weapons (+ the hero's signature)", { tags: ["slow"] }, () => {
     const p = fresh();
     p.unlocks.weapons = ["thunder_bell", "candy_bomb"]; // (a hand-made account: the 8 originals are start content)
     const plan = buildRunConfig(p, {}, ctx);
@@ -223,7 +223,7 @@ describe("banking", () => {
     expect(Object.keys(p.achievements.progress).length + Object.keys(p.achievements.done).length).toBeGreaterThan(0);
   });
 
-  test("greed scales the coin bonuses; the coins picked up already include it", () => {
+  test("greed scales the coin bonuses; the coins picked up already include it", { tags: ["slow"] }, () => {
     const p = fresh();
     const w = startWorld(p);
     simulate(w, 60, DT, new Bot(4));
@@ -241,7 +241,7 @@ describe("banking", () => {
     expect(picked).toBe(s.coins);
   });
 
-  test("a Filler Arc run banks as a clear with its endless time and record", () => {
+  test("a Filler Arc run banks as a clear with its endless time and record", { tags: ["slow"] }, () => {
     const p = fresh();
     cleared(p);
     const plan = buildRunConfig(p, { endless: true }, ctx);

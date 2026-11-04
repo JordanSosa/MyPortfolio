@@ -31,7 +31,7 @@ function crowd(w: World, n: number, r = 30, id = "puff"): void {
 }
 
 describe("hook toolkit", () => {
-  test("hooks fire while muted (fast-forward) exactly as when watched", () => {
+  test("hooks fire while muted (fast-forward) exactly as when watched", { tags: ["slow"] }, () => {
     const count = (muted: boolean) => {
       const w = new World({ hero: "rin", seed: 8, maxEnemies: 250 });
       w.muted = muted;
@@ -47,7 +47,7 @@ describe("hook toolkit", () => {
     expect(count(true)).toBe(count(false));
   });
 
-  test("nested hooks (a kill listener that kills) keep every payload intact", () => {
+  test("nested hooks (a kill listener that kills) keep every payload intact", { tags: ["slow"] }, () => {
     // Exorcism's ofuda bursts kill inside the kill hook; the RunStats collector listens after it
     const w = new World({ hero: "rin", seed: 4, maxEnemies: 250, run: defaultRunConfig({ talents: { rin_exorcism: 3 } }) });
     let bursts = 0;
@@ -251,7 +251,7 @@ describe("talent trees", () => {
     }
   });
 
-  test("every node installs, and a fully talented run plays (each hero)", () => {
+  test("every node installs, and a fully talented run plays (each hero)", { tags: ["slow"] }, () => {
     for (const hero of ["hoshi", "rin", "mochi"]) {
       const talents: Record<string, number> = {};
       for (const n of TALENT_TREES.get(hero)!.nodes) talents[n.id] = n.maxRank;
@@ -507,7 +507,7 @@ describe("Plot Twists", () => {
     expect(w.player.hp).toBe(hp);
   });
 
-  test("Spoilers: bosses arrive with no WARNING and no spawn pause", () => {
+  test("Spoilers: bosses arrive with no WARNING and no spawn pause", { tags: ["slow"] }, () => {
     const w = new World({ hero: "hoshi", seed: 2, god: true, run: defaultRunConfig({ twists: ["spoilers"] }) });
     let warnings = 0;
     let spawnAt = -1;

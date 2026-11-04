@@ -161,14 +161,14 @@ describe.each(GROUP)("$hero", ({ hero, weapon, evo, passive, ult }) => {
     expect(r.steps).toBeLessThan(60 * 7.5);
   });
 
-  test("a 3-minute bot run survives without exceptions", () => {
+  test("a 3-minute bot run survives without exceptions", { tags: ["slow"] }, () => {
     const w = new World({ hero, seed: 11, maxEnemies: 250, run: earlyAccountRun() });
     expect(() => simulate(w, 180, 1 / 30, new Bot(3))).not.toThrow();
     expect(w.t).toBeGreaterThan(60);
     expect(w.kills).toBeGreaterThan(100);
   });
 
-  test("maxed talents (two full branches) + C6: a 3-minute bot run with ults survives", () => {
+  test("maxed talents (two full branches) + C6: a 3-minute bot run with ults survives", { tags: ["slow"] }, () => {
     const tree = TALENT_TREES.get(hero)!;
     const talents: Record<string, number> = {};
     for (const n of tree.nodes) if (n.branch !== 2 || hero === "isekai_kun") talents[n.id] = n.maxRank;

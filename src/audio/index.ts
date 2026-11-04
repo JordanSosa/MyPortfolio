@@ -17,7 +17,7 @@
  *   the wait.
  */
 import type { AudioAPI, MusicTrack, SfxId, SfxOpts } from "./api";
-import { Engine } from "./engine";
+import { Engine, MAX_VOICES, MAX_VOICES_LITE } from "./engine";
 
 export type { AudioAPI, MusicTrack, SfxId, SfxOpts } from "./api";
 
@@ -56,6 +56,45 @@ class RealtimeAudio implements AudioAPI {
   /** for the test bench / debug overlay */
   get internals(): { ctx: AudioContext | null; engine: Engine | null } {
     return { ctx: this.ctx, engine: this.engine };
+  }
+
+  /** Read-only diagnostics snapshot (see audioStats). */
+  stats(): AudioStats {
+    const ctx = this.ctx;
+    const e = this.engine;
+    let drops = 0;
+    let started = 0;
+    if (e) {
+      for (const k in e.budgetDrops) drops += e.budgetDrops[k as SfxId] ?? 0;
+      for (const k in e.started) started += e.started[k as SfxId] ?? 0;
+    }
+    const num = (v: unknown) => (typeof v === "number" && Number.isFinite(v) ? v : null);
+    let voices = 0;
+    try {
+      voices = e ? e.activeVoices : 0;
+    } catch {
+      /* ignore */
+    }
+    return {
+      state: this.failed ? "failed" : ctx ? ctx.state : "none",
+      sampleRate: ctx ? ctx.sampleRate : 0,
+      baseLatency: num(ctx?.baseLatency),
+      outputLatency: num((ctx as (AudioContext & { outputLatency?: number }) | null)?.outputLatency),
+      // (before the unlock gesture: the profile the context will be created with)
+      lite: ctx ? this.lite : wantLite(),
+      unlocked: this.everRunning,
+      wantSuspended: this.wantSuspended,
+      engine: !!e,
+      voices,
+      maxVoices: this.lite ? MAX_VOICES_LITE : MAX_VOICES,
+      stress: this.stress,
+      skippedNotes: e ? e.skippedNotes : 0,
+      budgetDrops: drops,
+      started,
+      track: this.track,
+      muffled: this.muffled,
+      lookahead: e ? e.lookahead : 0,
+    };
   }
 
   unlock(): void {
@@ -342,4 +381,37 @@ export const audio: AudioAPI = impl;
 /** Debug access (test bench). Not part of the game contract. */
 export function audioInternals(): { ctx: AudioContext | null; engine: Engine | null } {
   return impl.internals;
+}
+
+/** Audio diagnostics (dev console, Settings "Copy diagnostics"). Read-only. */
+export interface AudioStats {
+  /** AudioContext state ("running", "suspended", "interrupted", "closed"), "none" before unlock, "failed" without WebAudio. */
+  state: string;
+  sampleRate: number;
+  /** Seconds (null where the browser does not report it). */
+  baseLatency: number | null;
+  outputLatency: number | null;
+  /** Phone profile (24 kHz, 'playback' latency, fewer voices). */
+  lite: boolean;
+  unlocked: boolean;
+  wantSuspended: boolean;
+  engine: boolean;
+  voices: number;
+  maxVoices: number;
+  /** Main-thread stress 0..1 (late scheduler ticks). */
+  stress: number;
+  /** Music notes skipped because the scheduler fell behind. */
+  skippedNotes: number;
+  /** Low-priority sfx triggers dropped by the voice budget / voices started (since unlock). */
+  budgetDrops: number;
+  started: number;
+  track: MusicTrack;
+  muffled: boolean;
+  /** Music scheduling lookahead (s). */
+  lookahead: number;
+}
+
+/** Read-only audio diagnostics snapshot (never throws, never changes audio state). */
+export function audioStats(): AudioStats {
+  return impl.stats();
 }

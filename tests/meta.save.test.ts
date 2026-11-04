@@ -169,7 +169,7 @@ describe("v1-shaped view (pre-hub screens) + banking runs", () => {
     expect(s.data.best).toBe(s.profile.best);
   });
 
-  test("recordRun banks a live World run and persists it", () => {
+  test("recordRun banks a live World run and persists it", { tags: ["slow"] }, () => {
     const s = new SaveStore();
     const plan = s.runPlan();
     const w = new World({ hero: plan.hero, seed: 8, run: plan.config });
@@ -336,7 +336,7 @@ describe("several windows (kko.save.v2.rev)", () => {
     expect(changed).toBe(1);
   });
 
-  test("recordRun in a stale window banks INTO the newer profile (a run is never dropped)", () => {
+  test("recordRun in a stale window banks INTO the newer profile (a run is never dropped)", { tags: ["slow"] }, () => {
     const a = new SaveStore();
     const b = new SaveStore();
     const plan = a.runPlan();
