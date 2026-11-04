@@ -1,6 +1,6 @@
 // End-to-end smoke test: desktop, mobile portrait and mobile landscape.
-//   node scripts/e2e.mjs [--only desktop|portrait|landscape] [--out shots/e2e] [--keep-going] [--serial]
-// (the devices run in parallel, one browser each; --serial runs them one after another)
+//   node scripts/e2e.mjs [--only desktop|portrait|landscape] [--out shots/e2e] [--keep-going] [--serial] [--joystick]
+// (the devices run in parallel, one browser each; --serial runs them one after another; --joystick runs only D, ~35 s)
 //
 // Per device:
 //   A) the real Season 2 flow with real taps / clicks: splash -> tap -> HUB home -> PLAY -> episode
@@ -11,6 +11,11 @@
 //      Merch Machine (fine print sheet), Wiki (Plot Points), settings (save data tab), with the Back button
 //      / Escape popping the stack.
 //   C) autoplay + skip: gameplay, forced level-up modal, golden chest reel, pause menu, results.
+//   D) (mobile) the joystick across modals, with real multi-touch (CDP, several fingers, step mode): a finger
+//      held through a level-up / chest / pause, a thumb put back down during the level-up close delay (on the
+//      fading backdrop or a card), a second offer, a finger held on DASH, pointercancel, a tap on the closing
+//      modal. After each: the held finger steers (knob under it, the hero walks); no finger down = no move and
+//      no knob. (Season 3 owner bug: "the stick gets stuck after picking an upgrade".)
 // Screenshots go to shots/e2e/<device>-<step>.png. Fails (exit 1) on any page error or
 // console.error, or when a step's expected state is not reached.
 import { parseArgs, startServer, launchBrowser, newPage, ensureDir } from "./lib.mjs";
@@ -21,7 +26,7 @@ const DEVICES = [
   { name: "desktop", opts: { w: 1280, h: 720 } },
   { name: "portrait", opts: { mobile: true } },
   { name: "landscape", opts: { mobile: true, landscape: true } },
-].filter((d) => !args.only || args.only === d.name);
+].filter((d) => (!args.only || args.only === d.name) && (!args.joystick || d.opts.mobile));
 const HEROES = ["hoshi", "rin", "mochi"];
 /** A progressed save v2 profile (sanitised on load like any other) for the hub-page steps. */
 const SEED = {
@@ -97,6 +102,275 @@ async function resolveModal(page, mobile) {
   }
 }
 
+/**
+ * D) the joystick across modals: real multi-touch through CDP (Input.dispatchTouchEvent with several touch points,
+ * so Chrome's own pointer / gesture pipeline runs) on `run:early` in step mode. Real waits are only the UI's own
+ * timers (the level-up's 430 ms close delay). Notes: Chrome gives a SECOND finger's tap no click while another
+ * finger is down, so "a modal closes while a finger is held" is a programmatic click (a key press would switch the
+ * game to keyboard mode and hide the touch controls); touchmoves reach the page aligned to animation frames, and
+ * step mode requests none, so every step first flushes one.
+ */
+async function joystickSteps(browser, dev, step, rec) {
+  const page = await newPage(browser, dev.opts);
+  let cdp = null;
+  try {
+    await step("joystick: run:early in step mode", async () => {
+      await page.goto(`${url}/?scenario=run:early&step=1&mute=1`, { waitUntil: "load" });
+      await waitFor(page, () => ["ready", "error"].includes(document.documentElement.dataset.kkScenario), null, 60000, "run:early");
+      if ((await page.evaluate(() => document.documentElement.dataset.kkScenario)) !== "ready") throw new Error("scenario run:early failed");
+      cdp = await page.context().newCDPSession(page);
+    });
+    if (!cdp) return;
+    const fingers = new Map();
+    let nextId = 1;
+    const tp = (id) => ({ x: fingers.get(id).x, y: fingers.get(id).y, id, radiusX: 4, radiusY: 4, force: 1 });
+    const touch = (type, touchPoints) => cdp.send("Input.dispatchTouchEvent", { type, touchPoints });
+    const down = async (x, y) => {
+      const id = nextId++;
+      fingers.set(id, { x, y });
+      await touch("touchStart", [...fingers.keys()].map(tp));
+      return id;
+    };
+    const move = async (id, x, y) => {
+      fingers.set(id, { x, y });
+      await touch("touchMove", [...fingers.keys()].map(tp));
+    };
+    // (four moves: the first one after an adoption only centres the stick)
+    const drag = async (id, dx, dy) => {
+      const { x, y } = fingers.get(id);
+      for (let i = 1; i <= 4; i++) await move(id, x + (dx * i) / 4, y + (dy * i) / 4);
+    };
+    // (a touchEnd listing one point releases that finger only)
+    const up = async (id) => {
+      const p = tp(id);
+      fingers.delete(id);
+      await touch("touchEnd", [p]);
+    };
+    const cancelAll = async () => {
+      fingers.clear();
+      await touch("touchCancel", []);
+    };
+    const flush = () => page.evaluate(() => new Promise((r) => requestAnimationFrame(() => setTimeout(r, 0))));
+    const frames = async (n) => {
+      await flush();
+      await page.evaluate((k) => window.__kk.step(k), n);
+    };
+    const state = () =>
+      page.evaluate(() => {
+        const a = window.__kk.app;
+        const i = a.input;
+        const k = i.touch.knob.getBoundingClientRect();
+        const p = a.game.world.player;
+        return { modal: a.modalKind, mx: i.move.x, my: i.move.y, stick: i.stickActive, knob: i.touch.stick.classList.contains("on"), kx: k.x + k.width / 2, ky: k.y + k.height / 2, px: p.x, py: p.y };
+      });
+    const check = (ok, msg) => {
+      if (!ok) throw new Error(msg);
+    };
+    const vp = page.viewportSize();
+    // play-area spots clear of the HUD, DASH / OVERDRIVE (bottom right) and the pause button (top right)
+    const P1 = { x: Math.round(vp.width * 0.28), y: Math.round(vp.height * 0.7) };
+    const P2 = { x: Math.round(vp.width * 0.4), y: Math.round(vp.height * 0.45) };
+    const fmt = (s) => `move ${s.mx.toFixed(2)},${s.my.toFixed(2)} knob ${s.knob} stick ${s.stick}`;
+    /** INVARIANT: no finger down -> no move, no knob */
+    const idle = async (label) => {
+      await frames(2);
+      const s = await state();
+      check(s.mx === 0 && s.my === 0 && !s.knob && !s.stick, `${label}: no finger is down but ${fmt(s)}`);
+    };
+    /** the held finger steers: the knob sits under it and the hero walks that way */
+    const steers = async (label, id, dx = 40, dy = 0) => {
+      await flush();
+      const s0 = await state();
+      await drag(id, dx, dy);
+      await frames(12);
+      const s = await state();
+      const f = fingers.get(id);
+      const off = Math.hypot(s.kx - f.x, s.ky - f.y);
+      const walked = Math.hypot(s.px - s0.px, s.py - s0.py);
+      check(s.knob && s.stick && off < 6 && s.mx * dx + s.my * dy > 0 && walked > 2, `${label}: the held finger does not steer (${fmt(s)}, knob ${off.toFixed(1)} px from the finger, hero walked ${walked.toFixed(1)})`);
+    };
+    const levelUp = async (n = 1) => {
+      await page.evaluate((k) => {
+        const w = window.__kk.world;
+        for (let i = 0; i < k; i++) w.addXp(w.xpNext - w.xp + 0.01);
+      }, n);
+      for (let i = 0; i < 6 && (await state()).modal !== "levelup"; i++) await frames(20);
+      await frames(30); // the 0.35 s pick guard + the fly-in
+      check((await state()).modal === "levelup", "no level-up modal");
+    };
+    const cardAt = (i = 0) =>
+      page.evaluate((k) => {
+        const r = document.querySelectorAll(".levelup .card")[k].getBoundingClientRect();
+        return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) };
+      }, i);
+    const tapAt = async (p) => {
+      const id = await down(p.x, p.y);
+      await sleep(40);
+      await up(id);
+      await sleep(30);
+    };
+    const clickSel = (sel) => page.evaluate((q) => document.querySelector(q)?.click(), sel);
+    const closed = async (what) => {
+      for (let i = 0; i < 40 && (await state()).modal; i++) {
+        await sleep(30);
+        await frames(1);
+      }
+      await frames(2);
+      check(!(await state()).modal, `${what}: the modal did not close`);
+    };
+    /** each case starts clean: no finger down, no modal */
+    const jstep = (name, fn) =>
+      step(`joystick ${name}`, async () => {
+        if (fingers.size) await cancelAll();
+        if ((await state()).modal) await page.evaluate(() => window.__kk.app.closeModal());
+        await frames(3);
+        await fn();
+      });
+
+    await jstep("(a) held through a level-up, the modal closes under it", async () => {
+      await idle("start");
+      const f = await down(P1.x, P1.y);
+      await steers("before the level-up", f);
+      await levelUp();
+      await drag(f, 0, -20);
+      const s = await state();
+      check(!s.knob && s.mx === 0, `modal open: the stick should let go (${fmt(s)})`);
+      await clickSel(".levelup .card");
+      await sleep(480);
+      await closed("level-up");
+      const s2 = await state();
+      check(s2.knob && s2.stick && Math.hypot(s2.kx - fingers.get(f).x, s2.ky - fingers.get(f).y) < 6, `modal closed: the knob should be back under the held finger (${fmt(s2)})`);
+      await steers("after the level-up", f, -40, 0);
+      await up(f);
+      await idle("lifted");
+    });
+    for (const where of ["backdrop", "card"]) {
+      await jstep(`(b) thumb back down during the 430 ms close delay, on the ${where}`, async () => {
+        await levelUp();
+        await tapAt(await cardAt(0));
+        const at = where === "card" ? await cardAt(1) : P1;
+        await sleep(120);
+        const f = await down(at.x, at.y);
+        await drag(f, 6, 0);
+        await sleep(450);
+        await closed("level-up");
+        await steers("after the close", f, 0, 40);
+        await up(f);
+        await idle("lifted");
+      });
+    }
+    await jstep("(c) held, lifted during the level-up, then a new touch", async () => {
+      const f = await down(P1.x, P1.y);
+      await drag(f, 30, 0);
+      await levelUp();
+      await up(f);
+      await tapAt(await cardAt(0));
+      await sleep(480);
+      await closed("level-up");
+      await idle("after the pick");
+      const g = await down(P2.x, P2.y);
+      await steers("a new touch", g);
+      await up(g);
+      await idle("lifted");
+    });
+    await jstep("(d) held through the chest and the pause menu", async () => {
+      const f = await down(P1.x, P1.y);
+      await drag(f, 30, 0);
+      await page.evaluate(() => window.__kk.chest(true));
+      for (let i = 0; i < 6 && (await state()).modal !== "chest"; i++) await frames(20);
+      check((await state()).modal === "chest", "no chest modal");
+      await frames(200);
+      for (let i = 0; i < 6 && (await state()).modal === "chest"; i++) {
+        await clickSel(".chest-modal");
+        await frames(40);
+      }
+      await closed("chest");
+      await steers("after the chest", f, 0, -40);
+      await page.evaluate(() => window.__kk.pause());
+      await frames(20);
+      check((await state()).modal === "pause", "no pause menu");
+      await drag(f, 10, 0);
+      await page.evaluate(() => window.__kk.app.resume());
+      await closed("pause");
+      await steers("after the pause menu", f, 40, 0);
+      await up(f);
+      await idle("lifted");
+    });
+    await jstep("(e) two pending levels: the second offer, then the thumb in the close delay", async () => {
+      await levelUp(2);
+      await tapAt(await cardAt(0));
+      await sleep(480);
+      await frames(30);
+      check((await state()).modal === "levelup", "no second offer");
+      await tapAt(await cardAt(0));
+      await sleep(150);
+      const f = await down(P2.x, P2.y);
+      await sleep(350);
+      await closed("level-up");
+      await steers("after the second pick", f, 0, 40);
+      await up(f);
+      await idle("lifted");
+    });
+    await jstep("(f) a finger held on DASH across a level-up is never the stick", async () => {
+      const d = await page.evaluate(() => {
+        const r = window.__kk.app.input.touch.dashBtn.getBoundingClientRect();
+        return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) };
+      });
+      const f = await down(d.x, d.y);
+      await levelUp();
+      await clickSel(".levelup .card");
+      await sleep(480);
+      await closed("level-up");
+      await drag(f, -30, 0);
+      await frames(3);
+      const s = await state();
+      check(!s.stick && !s.knob && s.mx === 0, `the DASH finger took the stick (${fmt(s)})`);
+      const g = await down(P2.x, P2.y);
+      await steers("a second finger", g);
+      await up(g);
+      await up(f);
+      await idle("lifted");
+    });
+    await jstep("(g) pointercancel mid-drag", async () => {
+      const f = await down(P1.x, P1.y);
+      await steers("dragging", f);
+      await cancelAll();
+      await idle("cancelled");
+      const g = await down(P2.x, P2.y);
+      await steers("the next touch", g);
+      await up(g);
+      await idle("lifted");
+    });
+    await jstep("(h) a tap on the closing level-up picks no second card", async () => {
+      await levelUp();
+      const c = await cardAt(1);
+      // (count the picks the World is asked for)
+      await page.evaluate(() => {
+        const w = window.__kk.world;
+        const choose = w.choose.bind(w);
+        w.__picks = 0;
+        w.choose = (card) => {
+          w.__picks++;
+          return choose(card);
+        };
+      });
+      await tapAt(await cardAt(0));
+      // (the moment the 430 ms close delay ends: the modal fades out for 220 ms more)
+      for (let i = 0; i < 100 && (await page.evaluate(() => window.__kk.modal)); i++) await sleep(10);
+      await tapAt(c);
+      await sleep(480);
+      await frames(3);
+      const picks = await page.evaluate(() => window.__kk.world.__picks);
+      check(picks === 1, `one level-up, ${picks} cards applied (a tap on the fading modal picked again)`);
+      await idle("after");
+    });
+  } finally {
+    rec.errors.push(...page.__logs.filter((l) => l.startsWith("[pageerror]") || l.startsWith("[error]")));
+    await cdp?.detach().catch(() => {});
+    await page.context().close();
+  }
+}
+
 async function runDevice(di, browser) {
   const dev = DEVICES[di];
   const rec = { device: dev.name, steps: [], shots: [], errors: [], ms: 0 };
@@ -104,6 +378,7 @@ async function runDevice(di, browser) {
   const T0 = Date.now();
   const page = await newPage(browser, dev.opts);
   const step = async (name, fn) => {
+    if (args.joystick && !name.startsWith("joystick")) return;
     const t0 = Date.now();
     try {
       await fn();
@@ -185,7 +460,8 @@ async function runDevice(di, browser) {
       await waitFor(page, () => window.__kk.screen === "game" && !!document.querySelector(".ep-title"), null, 15000, "episode title card");
       await sleep(400);
       await shot(page, dev.name, "5-episode-card", rec);
-      await waitFor(page, () => window.__kk.screen === "game" && window.__kk.world && window.__kk.world.t > 0.5, null, 20000, "game running");
+      // (the card + READY? run on frame time, dt clamped to 1/20 s: a DPR-3 phone page on a loaded SwiftShader needed > 20 s)
+      await waitFor(page, () => window.__kk.screen === "game" && window.__kk.world && window.__kk.world.t > 0.5, null, 45000, "game running");
       await sleep(800);
       await shot(page, dev.name, "5-game-start", rec);
     });
@@ -394,7 +670,15 @@ async function runDevice(di, browser) {
   } catch {
     /* recorded */
   }
-  const errs = page.__logs.filter((l) => l.startsWith("[pageerror]") || l.startsWith("[error]"));
+  // ---------------------------------------------------------------- D) the joystick across modals (mobile, own page)
+  if (dev.opts.mobile) {
+    try {
+      await joystickSteps(browser, dev, step, rec);
+    } catch {
+      /* recorded */
+    }
+  }
+  const errs = [...rec.errors, ...page.__logs.filter((l) => l.startsWith("[pageerror]") || l.startsWith("[error]"))];
   rec.errors = errs;
   if (errs.length) failed = true;
   await page.context().close();

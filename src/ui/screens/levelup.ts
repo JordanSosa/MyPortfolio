@@ -245,12 +245,13 @@ export function openLevelUp(app: App, w: World): UiScreen {
     app.sfx("coin");
     cardsEl.querySelectorAll<HTMLElement>(".card").forEach((b) => b.classList.add("gone"));
     setTimeout(() => {
-      busy = false;
       if (w.pendingLevels > 0) {
+        busy = false;
         app.input.markTouchesStale();
         app.sfx("levelUp", 0.6);
         render(w.offer());
       } else {
+        // (busy stays set: a tap on the fading modal must never pick again)
         app.closeModal();
         time.easeTo(1, 0.25);
       }
@@ -272,12 +273,13 @@ export function openLevelUp(app: App, w: World): UiScreen {
     // (World.choose kept the rest of the offer for a second pick when the level is still pending)
     bonusPick = double && w.pendingLevels === pending;
     setTimeout(() => {
-      busy = false;
       if (w.pendingLevels > 0) {
+        busy = false;
         app.input.markTouchesStale();
         app.sfx("levelUp", 0.6);
         render(w.offer());
       } else {
+        // (busy stays set: a tap on the fading modal must never pick a second card for one level)
         app.closeModal();
         time.easeTo(1, 0.25);
       }

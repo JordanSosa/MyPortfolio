@@ -4,7 +4,8 @@
  * banners (WARNING / INCOMING / ELITE / EVOLUTION / boss name card with
  * letterbox bars), low-HP danger border, the SSS rainbow screen border,
  * onboarding hints / bubbles and the run-start READY?/GO! stinger. Pause
- * button top-right.
+ * button top-right. Keyboard / mouse / gamepad play: the Overdrive gauge
+ * bottom-right (hud-overdrive.ts; touch has the OVERDRIVE button instead).
  *
  * Performance rules (it runs every frame on phones):
  *  - every write is diffed; bars are quantised (1/400) and use pre-built
@@ -14,12 +15,13 @@
  *    replays, no forced reflow), rate-limited per element;
  *  - weapon / passive slots are reused: only a new item creates a node.
  */
-import { RANKS } from "../game/config";
+import { CFG, RANKS } from "../game/config";
 import type { Enemy } from "../game/types";
 import type { World } from "../game/world";
 import type { FeedbackHooks } from "../view/feedback";
 import { Bump, fmtNum, fmtTime, h, img, sprite } from "./dom";
 import { HudArsenal2 } from "./hud-arsenal2";
+import { HudOverdrive } from "./hud-overdrive";
 
 /** Pre-built `scaleX(i / 400)` strings (bars are quantised to 1/400). */
 const SCALE: string[] = Array.from({ length: 401 }, (_, i) => `scaleX(${i / 400})`);
@@ -142,6 +144,8 @@ export class Hud implements FeedbackHooks {
   private wSlots: Slot[] = [];
   /** Lightstick beat pulse + Thousand Crane Wish counter on the weapon slots (hud-arsenal2.ts). */
   private readonly a2 = new HudArsenal2();
+  /** Overdrive gauge for non-touch play (hud-overdrive.ts). */
+  private readonly od: HudOverdrive;
   private pSlots: Slot[] = [];
   // diff cache
   private c = { lvl: -1, sec: -1, kills: -1, coins: -1, bv: -1, combo: -1, comboShown: -1, rank: -2, xpk: -1, full: false, barQ: -1, hot: false, bossQ: -1, ghostQ: -1, warn: false, dirWarn: false, danger: false, sss: false };
@@ -187,6 +191,7 @@ export class Hud implements FeedbackHooks {
       onPause();
     });
     r.appendChild(pause);
+    this.od = new HudOverdrive(r);
     parent.appendChild(r);
     this.root = r;
     const q = (s: string) => r.querySelector(s) as HTMLElement;
@@ -254,6 +259,7 @@ export class Hud implements FeedbackHooks {
     this.xp.classList.remove("full");
     this.comboRankEl.textContent = "";
     this.comboMult.textContent = "";
+    this.od.reset();
   }
 
   /** Re-render icons (art may have changed after a hot reload / context restore). */
@@ -315,6 +321,7 @@ export class Hud implements FeedbackHooks {
       });
     }
     this.a2.update(w, this.wSlots, realDt);
+    this.od.update(w.ultMeter / CFG.ultMax, w.ultReady, realDt);
     // combo
     const cb = w.combo;
     if (cb >= 3) {
@@ -461,6 +468,20 @@ export class Hud implements FeedbackHooks {
     if (!on) this.placeBubbles();
   }
 
+  /**
+   * The Overdrive gauge (App, every frame): shown while the touch controls are not (keyboard / mouse /
+   * gamepad play), `pad` = the gamepad's button label. Re-anchors the onboarding bubbles when it appears /
+   * disappears (they point at it, or at the touch button).
+   */
+  overdriveGauge(show: boolean, pad: boolean): void {
+    if (this.od.mode(show, pad) && this.bubbles.size) this.placeBubbles();
+  }
+
+  /** Overdrive pressed before it is charged: the gauge shakes (the touch button's deny). */
+  denyOverdrive(): void {
+    this.od.deny();
+  }
+
   /** Take keyboard focus away from HUD buttons (so Enter / Space never re-click the pause button). */
   blurButtons(): void {
     const a = document.activeElement;
@@ -492,7 +513,8 @@ export class Hud implements FeedbackHooks {
   }
 
   /**
-   * A speech bubble pointing at a touch button (`anchor` selector, e.g. ".kk-dash"),
+   * A speech bubble pointing at a touch button (`anchor` selector, e.g. ".kk-dash"; a selector list points
+   * at the first of them on screen, e.g. the OVERDRIVE button or else the HUD's Overdrive gauge),
    * or a free pill above the bottom edge when `anchor` is null / not on screen.
    * `ttl` > 0 hides it after that many real seconds (paused under modals).
    */
@@ -525,10 +547,17 @@ export class Hud implements FeedbackHooks {
   }
 
   private placeBubble(el: HTMLElement, anchor: string | null): void {
-    const a = anchor ? document.querySelector<HTMLElement>(anchor) : null;
-    const r = a?.getBoundingClientRect();
+    let r: DOMRect | null = null;
+    if (anchor)
+      for (const a of document.querySelectorAll<HTMLElement>(anchor)) {
+        const ar = a.getBoundingClientRect();
+        if (ar.width >= 1) {
+          r = ar;
+          break;
+        }
+      }
     const s = el.style;
-    if (!r || r.width < 1) {
+    if (!r) {
       el.classList.add("free");
       s.right = s.top = "";
       s.removeProperty("--avail");
@@ -628,7 +657,7 @@ export class Hud implements FeedbackHooks {
       this.bossHold = 0;
     }
   }
-  /** OVERDRIVE is charged: the first-runs bubble (the touch button + hero aura show readiness anyway). */
+  /** OVERDRIVE is charged: the first-runs bubble (the touch button or the gauge + hero aura show readiness anyway). */
   ultReady(): void {
     const u = this.ultHint;
     if (!u) return;

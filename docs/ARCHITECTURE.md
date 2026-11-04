@@ -174,6 +174,8 @@ src/
     hud.ts             HUD (XP, level, timer, kills/coins, icons, combo, boss bar, banners + boss letterbox,
                        onboarding hint / bubbles, READY?/GO! stamp); diffed, quantised, WAAPI juice (see 2.1);
                        `hud-arsenal2.ts`: the lightstick icon pulses on the beat, the Thousand Crane Wish counter
+                       `hud-overdrive.ts`: the Overdrive gauge (bottom-right) whenever the touch controls are hidden
+                       (keyboard / mouse / gamepad), with the key to press; the hero's own dash pips stay the dash display
     cutin.ts           ultimate anime cut-in overlay (ended by the sim / App only: no wall-clock timer)
     tutorial.ts        first-runs onboarding (move hint until moved, DASH bubble until the first dash,
                        OVERDRIVE-ready bubble x2, "fills as you fight" once per run)
@@ -522,9 +524,10 @@ bodies that are up destroy the `world.bullets` they touch (beams, slams and tele
 break after the level's `block` bullets and reform after `mendTime` (`mend` s scaled by the cooldown stat at half
 rate, the Amount stat's extra bodies and a second guarding weapon; knobs in `CFG.guard`, docs/content/weapons.md
 §7). Only instances in `world.weapons` block (A Real Friend's copy never does). Per-instance state is typed arrays
-(`guardOf` / `guardIf` for the view); cues are `weaponFx` WFX_ORB_BLOCK / BREAK / REFORM; blocks count in
-`RunStats.orbitalBlocks`. A new orbital weapon adds `block` / `mend` to its levels, the three calls, and its id
-to `GUARDED` in `view/weapon-fx.ts` (the ghost rings).
+(`guardOf`); the view only plays the cues, `weaponFx` WFX_ORB_BLOCK / BREAK / REFORM (nothing is drawn per
+frame: a broken body is empty space until it reforms, no cooldown marker by design); blocks count in
+`RunStats.orbitalBlocks`. A new orbital weapon adds `block` / `mend` to its levels and the three calls (the cues
+come for free).
 
 ### Enemy (`src/game/enemies/<name>.ts`)
 
@@ -835,7 +838,7 @@ carries trait behaviour, and the bot's per-hero distances live in `debug/bot.ts`
 | Boss phase change (banner, flash, shockwave, speed lines, duck), enrage (WARNING banner, red grade + vignette) | `bestiary-fx.ts bossPhase / bossEnrage / applyGrade` |
 | VICTORY: slow-mo chained explosions up the final boss, dawn flash at 1.7 s, enemies dissolve into light, the stage's `victory.title` / `line` ("DAWN BREAKS!", "SUGAR CRASH!" ...: the title steps down a whole pixel scale and a long line wraps onto two rows when the view is too narrow), sunrise grade sweep + sun + god rays, fireworks, victory music, results modal at 7.2 s | `bestiary-fx.ts finalDeath / victory / drawDawn`, `App.gameFrame` |
 | Bullet clears pop every bullet into a sparkle | `bestiary-fx.ts bulletsCleared` |
-| Orbital Guard: a bullet pops on an orbiting body's rim (flare, tiny ring, sparks), the body shatters (bits in its colour, puff, ring), a dotted ghost ring (never a solid orb: bullets are solid) fills in where it will reform and blinks before it does, the reform collapses a ring onto it with a pop; sfx rate-limited, cues budgeted per frame. Warm Tea: an amber ring at Pudding's feet whose 8 dots count the seconds left, a warm glow and steam, blinking as it cools | `view/weapon-fx.ts guardCue / drawGuard`, `view/heroes-a-fx.ts drawWarmTea` |
+| Orbital Guard: a bullet pops on an orbiting body's rim (small blink, tiny ring, two sparks), a breaking body goes KA-POP (white flash, sparkles and bits in its colour and white, a quick ring; under half a second, no smoke), and then nothing: no cooldown marker while it is down (owner feedback), it just pops back in (sim scale pop + a silent speck of sparkle); sfx rate-limited (block, break), cues budgeted per frame (breaks apart from rim pops: a volley never swallows an explosion). Warm Tea: an amber ring at Pudding's feet whose 8 dots count the seconds left, a warm glow and steam, blinking as it cools | `view/weapon-fx.ts guardCue`, `view/heroes-a-fx.ts drawWarmTea` |
 | Combo counter, rank stamps (one-shot shine inside the glyph's gradient fill), SSS border (opacity crossfade), milestone blip every 25 (`comboUp`); the timer bar drains faster at high ranks (gold-pink from S), a rank drop replays the letter falling in + a red flinch on the counter + a soft high `comboBreak` | `hud.ts` (WAAPI), `feedback.ts enemyKilled / comboDrop` |
 | Peak-chaos readability: adaptive bloom limiter (`r.post.load` from the glow-instance count), fewer sparks / puffs / numbers, fainter + smaller enemy numbers (a screen with 40+ enemy bullets counts as busy too), hero beacon (faint silhouette + ring above player fx, under bullets; also forced on for ~0.5 s when an explosion / Raijin blast lands on the hero, `WorldView.coverHero`), small player shots fade within 16 px of the hero's body (Galaxy Barrage streams spawn there); the beacon redraws the hero's current frame translucent (its plum outline reads over white blasts and pink star clouds), and the live boss gets the same treatment (boss beacon) so it never vanishes under six evolutions | `render/post.ts feedGlow`, `feedback.ts frame()`, `fx/damage.ts busy`, `WorldView.drawHeroBeacon / drawBossBeacon / drawProjectiles` |
 | HUD banners while a boss is alive drop below the hero and shrink (`.banner.low`): Lady Lunatic fights from the upper half, so ENRAGED! / ELITE! / EVOLUTION! never cover her or her bullets | `hud.ts banner()`, `styles.css` |

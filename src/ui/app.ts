@@ -989,6 +989,7 @@ export class App implements KitHost {
               if (w.ultReady) w.input.ult = true;
               else if (!w.ult && w.phase === "play") {
                 inp.deny("ult");
+                this.hud.denyOverdrive();
                 this.sfx("uiDeny", 0.6);
                 this.tut?.denied();
               }
@@ -1011,6 +1012,11 @@ export class App implements KitHost {
     }
     inp.setUltCharge(w.ultMeter / CFG.ultMax, w.ultReady);
     inp.setDashCharge(w.dashMeter);
+    // keyboard / mouse / gamepad: the HUD's Overdrive gauge stands in for the hidden OVERDRIVE button (never both;
+    // while the controls are not wanted - a modal, READY? - the device decides, so a phone never flashes it;
+    // gone with the button once the run is over: TO BE CONTINUED, the victory card)
+    const odOn = w.phase === "play" && (playing ? !shown : inp.lastDevice !== "touch");
+    this.hud.overdriveGauge(odOn, inp.lastDevice === "gamepad");
 
     // a pause asked for during the cut-in / READY? opens right after it
     if (this.pausePending && !this.modal && !cut && !hold) this.pause();

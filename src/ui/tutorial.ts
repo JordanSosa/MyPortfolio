@@ -6,8 +6,10 @@
  *     first dash (persisted: save.data.tut.dash); the first hit taken before
  *     that pulses the DASH button;
  *  3. the first two times OVERDRIVE charges (save.data.tut.ult), a bubble on the
- *     OVERDRIVE button (touch) or a key hint (keyboard / gamepad);
- *  4. pressing OVERDRIVE before it is charged explains the meter once per run.
+ *     OVERDRIVE button (touch) or on the HUD's Overdrive gauge with the key to
+ *     press (keyboard / gamepad: hud-overdrive.ts);
+ *  4. pressing OVERDRIVE before it is charged explains the meter once per run
+ *     (pointing at the button / the gauge).
  * Bubbles / hints live in the HUD (hud.ts): they hide under modals and stay
  * inside the safe area.
  */
@@ -17,7 +19,8 @@ import type { Hud } from "./hud";
 import { save } from "./save";
 
 const DASH_BTN = ".kk-dash";
-const ULT_BTN = ".kk-ult";
+/** The touch OVERDRIVE button, else (touch controls hidden: keyboard / gamepad) the HUD's Overdrive gauge. */
+const ULT_ANCHOR = ".kk-ult, .kk-od-orb";
 
 export class Tutorial {
   private moveT = 0;
@@ -37,9 +40,14 @@ export class Tutorial {
       world.bus.on("playerHurt", () => this.hurt()),
     );
     if (save.data.tut.ult < 2) {
+      const input = this.input;
       hud.ultHint = {
-        html: this.touch ? "<b>OVERDRIVE READY</b> — TAP!" : this.input.lastDevice === "gamepad" ? "<b>B</b>: OVERDRIVE!" : "<b>E</b>: OVERDRIVE!",
-        anchor: this.touch ? ULT_BTN : null,
+        // (read when the bubble shows: a touchscreen laptop may have switched device since the run began)
+        get html() {
+          const d = input.lastDevice;
+          return d === "touch" ? "<b>OVERDRIVE READY</b> — TAP!" : `<b>OVERDRIVE READY</b> — PRESS <b>${d === "gamepad" ? "B" : "E"}</b>!`;
+        },
+        anchor: ULT_ANCHOR,
         shown: () => {
           save.data.tut.ult++;
           save.save();
@@ -95,7 +103,7 @@ export class Tutorial {
   denied(): void {
     if (this.denyShown) return;
     this.denyShown = true;
-    this.hud.bubble("tip", "OVERDRIVE <b>fills as you fight</b>", this.touch ? ULT_BTN : null, 2.4);
+    this.hud.bubble("tip", "OVERDRIVE <b>fills as you fight</b>", ULT_ANCHOR, 2.4);
   }
 
   private dashed(): void {

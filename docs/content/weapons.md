@@ -621,9 +621,12 @@ Owner feedback: orbitals felt weak against shooters, and late game is a bullet h
 
 - A body that is up destroys every **enemy bullet** (`world.bullets`) it touches - a pop at the contact point.
   Boss beams, slams, dash lanes and telegraphed blasts are not bullets and are never blocked.
-- After `block` bullets it **breaks**: no hits, hidden, a dotted ghost ring marks where it will be, for its
-  **mend time**; then it **reforms** with a pop. A chipped body (block > 1) is whole again after its mend time
-  without a hit.
+- After `block` bullets it **breaks** with a small explosion in the weapon colour (a white flash, sparkles and
+  bits, a quick ring - gone in under half a second): no hits, hidden, for its **mend time**; then it
+  **reforms**, simply popping back in (a speck of sparkle, no sound). Nothing marks a broken body or its
+  recovery - the slot is empty space until it is back (owner feedback: a cooldown marker was clutter and
+  impossible to track in the chaos). A chipped body (block > 1) is whole again after its mend time without a
+  hit, and looks the same chipped or not.
 - Mend time = `mend` s × (0.5 + 0.5 × **cooldown**) × (bodies / own bodies)^0.5 × (1 + 0.5 per extra guarding
   weapon) - the knobs are `CFG.guard` (`cd`, `amount`, `share`; lab what-if `--set "cfg.guard.amount=1"`):
   - Wish Charm / Polite Bow builds recover faster, at half the stat's rate (the 0.35 floor mends in 0.68×).

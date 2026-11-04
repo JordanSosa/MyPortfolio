@@ -36,9 +36,10 @@
  *     guardBlock(w, g, block, mend, color, cx, cy, R);  // bullets in the ring band -> blocks / breaks
  *
  * A broken body keeps its projectile (the ring spacing stays put) with r = 0 (no hits) and scale 0
- * (the generic drawer draws nothing, the teacup drawer skips it); the view draws the ghost ring at
- * the slot's position from the guard (`guardIf`, src/view/weapon-fx.ts) and the weaponFx cues
- * WFX_ORB_BLOCK / BREAK / REFORM (one reused payload, muted-safe). No allocations per step.
+ * (the generic drawer draws nothing, the teacup drawer skips it): its slot is empty space until it
+ * reforms - by design there is no cooldown marker (the owner: unreadable in the chaos, clutter). The
+ * view only plays the weaponFx cues WFX_ORB_BLOCK / BREAK / REFORM (src/view/weapon-fx.ts: a rim pop,
+ * a small explosion, a speck of sparkle; one reused payload, muted-safe). No allocations per step.
  */
 import type { Projectile, WeaponInstance } from "../types";
 import type { World } from "../world";
@@ -61,7 +62,7 @@ export class OrbitalGuard {
   ) {}
   /** Seconds left broken per slot (0 = up). */
   readonly down = new Float32Array(GUARD_MAX);
-  /** Length of the current break (s): the ghost ring's progress = 1 - down / downFor. */
+  /** Length of the current break (s): its mend time (tests read it; nothing is drawn from it). */
   readonly downFor = new Float32Array(GUARD_MAX);
   /** Bullets absorbed since the body was last whole (breaks at `block`). */
   readonly chips = new Uint8Array(GUARD_MAX);
@@ -69,7 +70,7 @@ export class OrbitalGuard {
   readonly calm = new Float32Array(GUARD_MAX);
   /** Seconds since the slot reformed (SETTLED = it never broke / long ago). */
   readonly upT = new Float32Array(GUARD_MAX).fill(SETTLED);
-  /** The slot's body centre and radius this step (the ghost ring follows the orbit). */
+  /** The slot's body centre and radius this step (blocks, and the break / reform cues, read them). */
   readonly x = new Float32Array(GUARD_MAX);
   readonly y = new Float32Array(GUARD_MAX);
   readonly r = new Float32Array(GUARD_MAX);
@@ -77,7 +78,7 @@ export class OrbitalGuard {
   n = 0;
   /** The weapon's own body count (level + Limit Break + talents, without the Amount stat): mendTime's dilution. 0 = n. */
   ref = 0;
-  /** Chips that break a body (the weapon's current `block`): the view's crack read. */
+  /** Chips that break a body (the weapon's current `block`; tests read it, nothing is drawn from it). */
   block = 1;
   /** Bullets blocked by this instance (the run total is RunStats.orbitalBlocks). */
   blocks = 0;
@@ -95,11 +96,6 @@ export function guardOf(inst: WeaponInstance): OrbitalGuard {
     GUARDS.set(inst, g);
   }
   return g;
-}
-
-/** The instance's guard if it has one (the view: read-only). */
-export function guardIf(inst: WeaponInstance): OrbitalGuard | undefined {
-  return GUARDS.get(inst);
 }
 
 /**

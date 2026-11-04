@@ -586,7 +586,7 @@ export class HeroesAFx {
   private drawTea(p: Projectile, time: number): void {
     const r = this.r;
     if (p.a === 0) {
-      // (Orbital Guard: scale 0 = broken - weapon-fx draws its ghost ring; it pops back in on reform)
+      // (Orbital Guard: scale 0 = broken - nothing is drawn in its place; it pops back in on reform)
       const sc = p.scale;
       if (sc <= 0) return;
       const a = this.anims.get("w_teacup");

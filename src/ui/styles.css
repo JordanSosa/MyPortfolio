@@ -1852,6 +1852,11 @@ img.px,
   animation: fade-out 0.2s ease-in both;
   pointer-events: none;
 }
+/* (#ui > * sets pointer-events: auto with an ID's weight: without this a closing modal kept eating touches
+   for its whole fade-out, so a thumb put back down to move landed on a dead card, never on the joystick) */
+#ui > .modal.out {
+  pointer-events: none;
+}
 @keyframes fade-in {
   from {
     opacity: 0;

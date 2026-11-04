@@ -92,8 +92,9 @@ script waits with `page.waitForFunction(() => document.documentElement.dataset.k
 | `stage:<id>` | 40 % into that stage (its mix, ground, grade, music) |
 | `boss:<id>` `boss:<id>:p2` `:p3` `boss:<id>@0.3` | the boss after its entrance, at its stage and time; p2 / p3 = HP 50 % / 20 % (the phase change plays) |
 | `ult:<hero>` `ult:<hero>:mid` | the anime cut-in / 1 s into the active ultimate |
+| `hud:overdrive` `hud:overdrive-ready` `hud:overdrive-pad` `hud:overdrive-tut` `hud:overdrive-swap` | the HUD's Overdrive gauge of keyboard / mouse / gamepad play (1:40 Dream Meadow): 60 % charged; full (the rainbow READY); full with the gamepad's B; a fresh account's first run with the OVERDRIVE READY bubble pointing at it; a touchscreen laptop (a touch mid-run must swap the gauge for the OVERDRIVE button, a key must swap it back: asserted, the scenario fails otherwise). On touch devices the OVERDRIVE button shows instead (the gauge must not) |
 | `speech` `speech:<stage>` | the 4 enemies nearest the hero speak from their stage's pools, plus one free bubble (default Candy Kingdom) |
-| `orbital:<weapon>` `orbital:<tea weapon>:tea` | Orbital Guard mid-Shoujo Academy (Mochi's Yarn Orbit Lv5 / Cosmic Yarn, Pudding's Teapot Tempest Lv5 / Eternal Tea Party): a 16-bullet ring fired at the hero, shown once a body breaks (film it for the reform: `orbital:yarn_orbit~150/10`); `:tea` = Warm Tea on the move (1:30, a calmer crowd) |
+| `orbital:<weapon>` `orbital:<tea weapon>:tea` | Orbital Guard mid-Shoujo Academy (Mochi's Yarn Orbit Lv5 / Cosmic Yarn, Pudding's Teapot Tempest Lv5 / Eternal Tea Party): a 16-bullet ring fired at the hero, shown once a body breaks (film it for the reform: `orbital:yarn_orbit~150/10`); `:calm` = the same volley in the run's first seconds, the orbital alone (judge the break and the empty slot; not in `--all`); `:tea` = Warm Tea on the move (1:30, a calmer crowd) |
 | `levelup` `chest` `chest:golden` `pause` `over:death` `over:victory` | in-run modals |
 | `levelup:evo-hints` `levelup:evo-four` `levelup:evo-many` `chest:evo-hints` `pause:evo-hints` | evolution hints: a mid account that discovered 4 evolutions, a hand-picked build + offer (READY, pair-completing passive, missing passive, an undiscovered recipe; 3 / 4 / 6 cards) |
 | `results:death` `results:victory` `results:first-clear` | Episode Results of a real (sandboxed) account run, finished; first-clear = a P1 account clears Dream Meadow (unlock cards) |
@@ -311,6 +312,7 @@ npm run scenes -- --only boss:,ult:kuro          # scenario name prefixes (or ex
 npm run scenes -- --only "ult:kuro~180/15"       # a FILM: the scenario, then a checked shot every 15 frames for 180
 npm run scenes -- --only boss: --film 120/20     # film every scene of the run
 npm run scenes -- --all --devices i13,i13l,se,desktop,w360 --jobs 4
+npm run scenes -- --only hud: --devices desktop,fhd,laptop,half   # desktop windows: 1280x720, 1920x1080, 1366x768, 683x768
 npm run scenes -- --baseline                     # store shots/scenes/baseline/ (+ a per-scene noise floor)
 npm run scenes -- --diff                         # perceptual pixel diff % per shot vs the baseline (+ .diff.png)
 npm run scenes -- --quick                        # 11 scenes, one device, Kuro's ult filmed: 21 shots (doctor --scenes)

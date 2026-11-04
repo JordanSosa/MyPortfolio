@@ -7,7 +7,7 @@
 //   npm run scenes -- --only "ult:kuro~180/15"      a FILM: the scenario, then a checked shot every 15 frames for 180
 //                                                   (transient effects: an ult's shadow pass, a flash, a phase change)
 //   npm run scenes -- --all                         every scenario __kk.scenarios() lists (81)
-//   npm run scenes -- --devices i13,i13l,se,desktop,w360 --jobs 4
+//   npm run scenes -- --devices i13,i13l,se,desktop,w360 --jobs 4   (also fhd 1920x1080, laptop 1366x768, half 683x768)
 //   npm run scenes -- --baseline                    store these shots as the visual baseline (shots/scenes/baseline/); every
 //                                                   scene is loaded twice and its load-to-load diff kept as its noise floor
 //   npm run scenes -- --diff                        compare against the baseline: perceptual pixel diff % per shot (a
@@ -33,7 +33,7 @@
 import { mkdirSync, readFileSync, writeFileSync, existsSync, rmSync } from "node:fs";
 import { createRequire } from "node:module";
 import { execSync } from "node:child_process";
-import { dirname, join, relative } from "node:path";
+import { dirname, join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { parseArgs, startServer, launchBrowser as launchLib } from "./lib.mjs";
 
@@ -73,6 +73,11 @@ export const DEVICE_LIST = {
   se: () => ({ ...devices["iPhone SE"] }),
   w360: () => ({ viewport: { width: 360, height: 740 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, userAgent: devices["Pixel 5"].userAgent }),
   desktop: () => ({ viewport: { width: 1280, height: 720 }, deviceScaleFactor: 1 }),
+  // more desktop windows (keyboard / mouse: no touch controls, the HUD's Overdrive gauge instead): a 1080p monitor,
+  // a small laptop, and a browser snapped to half of that laptop's screen
+  fhd: () => ({ viewport: { width: 1920, height: 1080 }, deviceScaleFactor: 1 }),
+  laptop: () => ({ viewport: { width: 1366, height: 768 }, deviceScaleFactor: 1 }),
+  half: () => ({ viewport: { width: 683, height: 768 }, deviceScaleFactor: 1 }),
 };
 
 /**
@@ -479,7 +484,8 @@ export async function runScenes(args = {}) {
   const T0 = Date.now();
   const deviceIds = String(args.devices && args.devices !== true ? args.devices : args.quick ? "i13" : "i13,desktop").split(",").map((s) => s.trim()).filter(Boolean);
   for (const d of deviceIds) if (!DEVICE_LIST[d]) throw new Error(`unknown device '${d}' (${Object.keys(DEVICE_LIST).join(", ")})`);
-  const out = join(ROOT, args.out && args.out !== true ? args.out : "shots/scenes/latest");
+  // (resolve: an absolute --out, e.g. a scratch dir, stays where it was asked for instead of landing inside the repo)
+  const out = resolve(ROOT, args.out && args.out !== true ? args.out : "shots/scenes/latest");
   const baseDir = join(ROOT, "shots/scenes/baseline");
   const jobsN = Math.max(1, Number(args.jobs ?? 4));
   const timeout = Number(args.timeout ?? 30000);

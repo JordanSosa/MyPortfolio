@@ -517,6 +517,9 @@ const PAGES: Record<string, PageId[]> = {
   wiki: ["home", "wiki"],
 };
 
+/** hud:<moment> names (the Overdrive gauge of non-touch play). */
+const HUD_OD = ["overdrive", "overdrive-ready", "overdrive-pad", "overdrive-tut", "overdrive-swap"];
+
 const KINDS: Record<string, Kind> = {
   hub: {
     group: "hub",
@@ -610,20 +613,65 @@ const KINDS: Record<string, Kind> = {
       else await c.until(() => !!w.ult && w.ult.phase === "cutin" && w.ult.t >= 0.55, "the cut-in", 120);
     },
   },
+  hud: {
+    group: "run",
+    desc: "the HUD's Overdrive gauge (keyboard / mouse / gamepad play; touch shows the OVERDRIVE button instead), 1:40 into Dream Meadow: hud:overdrive = 60 % charged, hud:overdrive-ready = full (the rainbow READY), hud:overdrive-pad = full with the gamepad's B; hud:overdrive-tut = a fresh account's first run, the OVERDRIVE READY bubble pointing at it (at the button on touch); hud:overdrive-swap = a touchscreen laptop: a touch mid-run brings the OVERDRIVE button and hides the gauge, a key brings the gauge back (both asserted; shown 35 % charged)",
+    list: () => [...HUD_OD],
+    run: async (c, a) => {
+      if (!HUD_OD.includes(a)) throw new Error(`hud:<${HUD_OD.join("|")}>, got '${a}'`);
+      const tut = a === "overdrive-tut";
+      // (tut: no warp, so the meter has never been full and filling it fires the real ultReady -> tutorial bubble)
+      useProfile(c, tut ? "fresh" : "mid");
+      const w = startRun(c, "dream_meadow");
+      if (!tut) warp(c, w, 100, 12);
+      if (a === "overdrive-pad") c.app.input.lastDevice = "gamepad";
+      await c.frames(30);
+      if (a === "overdrive") {
+        w.ultMeter = CFG.ultMax * 0.6;
+        await c.frames(10);
+        return;
+      }
+      if (a === "overdrive-swap") {
+        // through the real Input listeners (window, capture): a touch press + lift, then a key press + release
+        const inp = c.app.input;
+        const gauge = () => document.querySelector<HTMLElement>(".kk-od")?.hidden === false;
+        const x = Math.round(innerWidth * 0.3);
+        const y = Math.round(innerHeight * 0.65);
+        const at = document.elementFromPoint(x, y) ?? document.body;
+        for (const type of ["pointerdown", "pointerup"])
+          at.dispatchEvent(new PointerEvent(type, { pointerType: "touch", pointerId: 77, isPrimary: true, clientX: x, clientY: y, bubbles: true }));
+        await c.frames(2);
+        if (!inp.touchControlsVisible || gauge()) throw new Error("a touch mid-run: the OVERDRIVE button must replace the gauge");
+        for (const type of ["keydown", "keyup"] as const) window.dispatchEvent(new KeyboardEvent(type, { code: "KeyW", bubbles: true }));
+        w.ultMeter = CFG.ultMax * 0.35;
+        await c.frames(10);
+        if (inp.touchControlsVisible || !gauge()) throw new Error("a key mid-run: the gauge must replace the OVERDRIVE button");
+        return;
+      }
+      // the driving bot would cast a full meter: the hero stands still (runs are invulnerable by default)
+      c.release();
+      c.holdUlt = false;
+      if (tut) c.app.hud.hideHint();
+      w.addUlt(CFG.ultMax);
+      // (the READY pop and the bubble's entrance settle)
+      await c.frames(40);
+      if (!w.ultReady) throw new Error("the Overdrive meter is not full");
+    },
+  },
   orbital: {
     group: "run",
-    desc: "Orbital Guard mid-Shoujo Academy (Mochi / Pudding, the weapon at Lv5 or evolved): orbital:<weapon> = a 16-bullet ring fired at the hero, shown once a body breaks (film it for the reform: orbital:yarn_orbit~150/10); orbital:<tea weapon>:tea = Warm Tea on the move",
+    desc: "Orbital Guard mid-Shoujo Academy (Mochi / Pudding, the weapon at Lv5 or evolved): orbital:<weapon> = a 16-bullet ring fired at the hero, shown once a body breaks (film it for the reform: orbital:yarn_orbit~150/10); orbital:<weapon>:calm = the same volley in the run's first seconds (the orbital alone on a near-empty screen: judge the break and the empty slot); orbital:<tea weapon>:tea = Warm Tea on the move",
     list: () => [...Object.keys(ORBITALS), "teapot_tempest:tea", "eternal_tea_party:tea"],
     run: async (c, a) => {
       const [id, moment] = a.split(":");
       const o = ORBITALS[id];
-      if (!o) throw new Error(`orbital:<${Object.keys(ORBITALS).join("|")}>[:tea], got '${a}'`);
+      if (!o) throw new Error(`orbital:<${Object.keys(ORBITALS).join("|")}>[:tea|:calm], got '${a}'`);
       useProfile(c, "mid", o.hero);
       const w = startRun(c, "shoujo_academy", o.hero);
       // (level 10: one warp chest, so the base weapon is not evolved behind our back; the tea moment earlier,
-      // in a calmer crowd, so the Warm Tea ring at her feet can be judged)
+      // in a calmer crowd, so the Warm Tea ring at her feet can be judged; calm: no warp, the run's first seconds)
       if (moment === "tea") warp(c, w, 90, 8);
-      else warp(c, w, 200, 10);
+      else if (moment !== "calm") warp(c, w, 200, 10);
       w.muted = true;
       let inst = (o.evo && w.hasWeapon(o.evo)) || w.hasWeapon(o.base) || w.addWeapon(o.base, 5);
       if (!inst) throw new Error(`${o.hero} cannot hold ${o.base}`);
@@ -634,6 +682,8 @@ const KINDS: Record<string, Kind> = {
       w.muted = false;
       if (inst.def.id !== (o.evo ?? o.base)) throw new Error(`orbital:${id}: got ${inst.def.id}`);
       const held = inst;
+      // (calm: the run's first kills would open a level-up card over the film of the reform)
+      if (moment === "calm") w.xpNext = 1e9;
       c.mark("orbital ready");
       await c.frames(30);
       if (moment === "tea") {
