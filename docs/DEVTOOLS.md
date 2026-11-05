@@ -356,7 +356,7 @@ The exit code is 1 when a shot has an error-level flag.
 | `pageError` | error | an uncaught error or a `console.error` (minus SwiftShader / Vite noise) |
 | `scroll` | error | the document or a vertical page scroller scrolls sideways |
 | `overflow` | warning | a text or control element sticks out of the viewport and is not clipped on purpose or sliding |
-| `scenario` / `harness` | error | the scenario ended in `error`, or a timeout |
+| `scenario` / `harness` | error | the scenario ended in `error`, a timeout, or the page / browser crashed (that worker gets a fresh page or browser and the run goes on: before, one crashed Chromium in an `--all` run failed every later job of its worker and the run hung with nothing printed) |
 | `diff` (`--diff`) | warning > 0.5 % + noise, error > 10 % + noise | pixels changed vs the baseline |
 
 Notes on the checks:
@@ -665,7 +665,7 @@ npm run doctor -- --only lint:css,typecheck | --skip artifact | --json | --jobs 
 | Run | Wall time | Work |
 | --- | --- | --- |
 | `npm run doctor` | **24 s** | 85 s of work over 4 lanes; audio (cost + devices) 24 s, fast tests 19 s under load, artifact 19 s, bundle 11 s, sprites 9 s, typecheck 3 s, lint 2 s |
-| `npm run doctor -- --scenes` | **35 s** | + the quick gallery (12 scenes, Kuro's ult and a crowd filmed: 26 shots), the critical path |
+| `npm run doctor -- --scenes` | **95-110 s** | + the quick gallery (12 scenes, Kuro's ult and a crowd filmed: 26 shots, 62-69 s inside doctor). Its load fails the audio cost budget (`full.heavy` 1.04x vs 1.05x), which then reruns alone and passes: 3 of 3 runs, so the rerun is the critical path (35 s with the old 21-shot set) |
 | `npm run doctor -- --all` | 65 s | the full suite, 65 s under load, is the critical path |
 
 ### 7.2 Fast / slow tests (`vitest.config.ts`)

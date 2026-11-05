@@ -838,7 +838,7 @@ function flagsFor(name, shot) {
   const h = p.hero;
   if (wo && h && h.keep != null && !h.cutin && p.snap?.screen === "game" && !p.snap.modal && h.keep < wo.keepWarn) {
     const err = h.keep < wo.keep;
-    f.push({ kind: "washout", level: err ? wo.level : "warning", msg: `the hero is lost in the frame: ${h.keep}% of her contrast survives (${err ? "error" : "warning"} under ${err ? wo.keep : wo.keepWarn}%; ${h.ink ?? "-"}% of her outline still dark, ${h.wash}% of her pixels near-white, +${h.lift} luminance, ${h.halo}% near-white within ${h.r}px) at (${h.x}, ${h.y})` });
+    f.push({ kind: "washout", level: err ? wo.level : "warning", msg: `the hero is lost in the frame: ${h.keep}% of her contrast survives (${err ? wo.level : "warning"} under ${err ? wo.keep : wo.keepWarn}%; ${h.ink ?? "-"}% of her outline still dark, ${h.wash}% of her pixels near-white, +${h.lift} luminance, ${h.halo}% near-white within ${h.r}px) at (${h.x}, ${h.y})` });
   }
   if (p.illegible?.length) add("illegible", `illegible bitmap text: ${p.illegible.slice(0, 3).map((x) => `${x.glyphs} ${x.font} glyphs in ink ${x.ink} on their ${x.outline} outline (contrast ${x.ratio})`).join("; ")}`);
   if (p.placeholders || p.domMissing) add("placeholder", `placeholder art: ${p.placeholders} sprite draws${p.placeholderIds?.length ? ` (${p.placeholderIds.join(", ")})` : ""}, ${p.domMissing} missing DOM icons`);

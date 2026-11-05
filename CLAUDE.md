@@ -39,10 +39,10 @@ Further docs:
 
 | You need | Run | Time |
 | --- | --- | --- |
-| Confidence before a commit | `npm run doctor` (add `--scenes` for visuals, `--all` for the slow tests too) | ~25 s (~40 s with `--scenes`) |
+| Confidence before a commit | `npm run doctor` (add `--scenes` for visuals, `--all` for the slow tests too) | ~25-45 s (~95-110 s with `--scenes`) |
 | Unit tests while iterating | `npm test` (the fast suite); `npm run test:slow` / `npm run test:all` for long headless runs | 8 s / 40 s / 50 s |
 | Type errors | `npm run typecheck` | 2 s |
-| To *see* the game (any change to UI, art, fx or layout) | `npm run scenes`, then open `shots/scenes/latest/contact.png` | ~85 s for 100 shots |
+| To *see* the game (any change to UI, art, fx or layout) | `npm run scenes`, then open `shots/scenes/latest/contact.png` | ~2 min for 100 shots |
 | A narrower visual check | `npm run scenes -- --only boss:,ult: --devices i13,se`; `--all` covers all 108 scenarios | seconds |
 | A transient effect (an ult, a flash, a phase change) | film it: `npm run scenes -- --only "ult:kuro~180/15"` (a checked shot every 15 frames for 180) or `--film` | ~6 s |
 | Is the hero still visible in a busy fight? | `npm run scenes -- --only crowd: --film 120/15 --devices i13` (`washout`); what buries her: add `--blame` | ~1-2 min |
@@ -52,7 +52,7 @@ Further docs:
 | A balance or difficulty answer | `npm run balance:lab` and what-ifs with `--set "boss.*.hp*=0.9"` | 10 s warm, 85 s cold |
 | Publishing the artifact | `npm run check:artifact` (the CSP boot check); publish `shots/artifact/kira-kira-overdrive.html` | 18 s |
 | A change to audio | `npm run check:audio` (phone cost budget + lite-profile shape, clipping, NaN; the profile each device gets; Android focus-loss recovery) | 18 s |
-| The real flows with real taps | `node scripts/e2e.mjs` (3 devices in parallel) | ~4.5 min |
+| The real flows with real taps | `node scripts/e2e.mjs` (3 devices in parallel) | ~6 min |
 | Did a tool really catch an old bug? | `docs/DEVTOOLS.md` §8: export the old commit, link `node_modules`, run the tool from the copy | |
 | A change to CSS or class names | `npm run lint:css` | 1 s |
 | Bundle growth | `npm run check:bundle` (main-chunk budget; dev code must stay lazy) | 5 s |
