@@ -64,12 +64,14 @@ export const KEY_SCENES = [
   "hub:fresh", "hub:rich", "stages", "loadout", "board", "heroes", "hero:kuro", "gacha", "wiki", "settings",
   "run:early", "run:late", "stage:candy_kingdom", "stage:shoujo_academy", "stage:beach_episode", "stage:final_arc",
   "boss:lady_lunatic", "boss:gingerbread_golem:p2", "boss:cancel_sama", "speech",
+  // (filmed: the hero-readability stress scene; without the hero focus zone she scored 4-38 in 6 of its 9 frames)
+  "crowd:magical_girl_47:mid~120/15",
   // (filmed: Kuro's ETERNAL ABYSS shadow pass is a transient full-screen effect between two scenario moments)
   "ult:hoshi", "ult:kuro~180/15", "ult:truck_kun:mid",
   "levelup", "chest:golden", "pause", "over:death", "results:first-clear", "gacha:pull-x10",
 ];
-/** doctor --scenes: one of each kind, one device (11 scenes, 21 shots with Kuro's filmed ult). */
-export const QUICK_SCENES = ["hub:mid", "board", "gacha", "run:early", "run:late", "boss:king_puff", "speech", "ult:kuro~150/15", "levelup", "over:death", "results:victory"];
+/** doctor --scenes: one of each kind, one device (12 scenes, 26 shots with Kuro's filmed ult and a filmed crowd). */
+export const QUICK_SCENES = ["hub:mid", "board", "gacha", "run:early", "run:late", "boss:king_puff", "speech", "crowd:kuro:mid~120/30", "ult:kuro~150/15", "levelup", "over:death", "results:victory"];
 
 export const DEVICE_LIST = {
   i13: () => ({ ...devices["iPhone 13"] }),
@@ -194,8 +196,9 @@ export const PROBE = async ({ lite = false, contrast = 1.5, heroR = 20, blame = 
       return buf;
     };
     // Her draws: the Entity sprite, and on a busy screen the beacon's redraw above the fx (Bullets layer: no lean,
-    // a 1 px plum outline), which is what shows
-    const mine = (layer, h, x, y) => (layer === 3 || layer === 7) && hs.has(h) && Math.abs(x - p.x) < 1.5 && Math.abs(y - p.y) < 12;
+    // a 1 px plum outline), which is what shows. Not her dash afterimages (tinted, part-flashed copies under her)
+    const mine = (layer, h, x, y, col = 0xffffff, fl = 0) =>
+      (layer === 3 || layer === 7) && hs.has(h) && Math.abs(x - p.x) < 1.5 && Math.abs(y - p.y) < 12 && (col === 0xffffff || fl >= 1);
     const draws = [];
     const ctx = { draws, mine, read, shot: null, finish: null };
     ctx.finish = (blame, heroDump) => heroFinish(app, g, w, ctx, { rect, dpr, x0, y1, rw, rh, read, mine, hs, cam, r, gl, p }, blame, heroDump);
@@ -207,32 +210,32 @@ export const PROBE = async ({ lite = false, contrast = 1.5, heroR = 20, blame = 
     const b = r.batch;
     const ps = app.fx.ps;
     const ghosts = app.fx.ghosts;
-    // her recorded draws replayed alone (bloom off: nothing glows, so its blur passes would add nothing)
+    // her recorded draws replayed alone (bloom off: nothing glows, so its blur passes would add nothing), and the
+    // same frame with nothing drawn: the empty background under the same grade, vignette, shockwaves and flash
     const bloomWas = r.post.bloomEnabled;
-    let clean;
+    let clean, empty;
     try {
       r.post.bloomEnabled = false;
       r.beginFrame(0);
       for (const d of ctx.draws) b.drawP(...d);
       r.endFrame();
       clean = read();
+      r.beginFrame(0);
+      r.endFrame();
+      empty = read();
     } finally {
       r.post.bloomEnabled = bloomWas;
     }
     const shot = ctx.shot;
-    // the empty background per row: its two border columns (the box is ~3x her size), interpolated across; her mask
-    // = pixels off that, and their centroid = the disc centre
+    // her mask = pixels off the empty background, and their centroid = the disc centre. (An estimate from the box's
+    // border columns took a shockwave's bright rim for part of her: Final Arc frames she reads fine in scored -56.)
     const n = rw * rh;
     const mask = new Uint8Array(n);
     let cnt = 0, sx = 0, sy = 0;
     for (let j = 0; j < rh; j++) {
-      const L = j * rw * 4;
-      const R0 = L + (rw - 2) * 4;
       for (let i = 0; i < rw; i++) {
-        const t = i / (rw - 1);
-        const k = L + i * 4;
-        let d = 0;
-        for (let ch = 0; ch < 3; ch++) d += Math.abs(clean[k + ch] - ((clean[L + ch] + clean[L + 4 + ch]) / 2) * (1 - t) - ((clean[R0 + ch] + clean[R0 + 4 + ch]) / 2) * t);
+        const k = (j * rw + i) * 4;
+        const d = Math.abs(clean[k] - empty[k]) + Math.abs(clean[k + 1] - empty[k + 1]) + Math.abs(clean[k + 2] - empty[k + 2]);
         if (d < 30) continue;
         mask[j * rw + i] = 1;
         cnt++;
@@ -515,7 +518,7 @@ export const PROBE = async ({ lite = false, contrast = 1.5, heroR = 20, blame = 
     b.drawP = function (layer, handle, ...rest) {
       const id = ph.get(handle);
       if (id !== undefined) seen.set(id, (seen.get(id) ?? 0) + 1);
-      if (hero && hero.mine(layer, handle, rest[0], rest[1])) hero.draws.push([layer, handle, ...rest]);
+      if (hero && hero.mine(layer, handle, rest[0], rest[1], rest[5], rest[7])) hero.draws.push([layer, handle, ...rest]);
       const fid = glyph.get(handle);
       if (fid !== undefined && rest[6] >= 0.35) {
         const k = `${fid}|${rest[5]}|${Math.round(rest[7] * 20) / 20}`;

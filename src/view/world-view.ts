@@ -102,6 +102,12 @@ export class WorldView {
   heroHud = true;
   /** Seconds left of the hero beacon forced on by a blast over the hero (coverHero). */
   private coverT = 0;
+  /**
+   * Enemies piled in front of the hero this frame (drawEnemies: each one drawn after her in the y-sort that overlaps
+   * her body, weighted by size) and the beacon level it drives (fast attack, ~0.3 s release).
+   */
+  private pile = 0;
+  private pileK = 0;
   /** The hero frame drawn this frame (the beacon redraws it above the player's fx). */
   private heroH = 0;
   private heroSx = 1;
@@ -232,6 +238,9 @@ export class WorldView {
     // (stageFx anim caps / still frames quantize enemies, the boss and deco - the hero, bullets and gems keep full rate)
     const real = time;
     time = this.animTime(time);
+    // hero focus zone: the player's fx (Flag.Focus: particles, shots) fade per pixel over her body (SpriteBatch.focus)
+    const pl = w.player;
+    if (!pl.dead && this.heroHud) r.batch.setFocus(pl.x, pl.y - HERO_MID + this.heroXf.dy);
     this.ground.draw(time, w.player.x, w.player.y);
     this.drawTelegraphs(time);
     this.drawPickups(time);
@@ -283,6 +292,8 @@ export class WorldView {
     const pl = w.player;
     const down = pl.dead;
     const capFps = this.stage.stillT > 0 ? 0.001 : this.stage.animFps;
+    const hy = pl.y - HERO_MID;
+    this.pile = 0;
     for (let i = 0; i < w.enemies.count; i++) {
       const e = items[i];
       if (e.dead) continue;
@@ -307,13 +318,19 @@ export class WorldView {
       const y = e.y - e.z;
       r.shadow(e.x, e.y, def.shadow * e.scale * (1 - Math.min(0.4, e.z / 30)), def.prop ? 0.8 : 1);
       const tint = frozen ? C.lightBlue : (def.tint ?? 0xffffff);
-      const flash = e.flash > 0 ? (def.boss ? BOSS_FLASH : 1) : 0;
+      let flash = e.flash > 0 ? (def.boss ? BOSS_FLASH : 1) : 0;
       let ea = e.alpha;
       if (down) {
         const dx = e.x - pl.x;
         const dy = e.y - e.cy - (pl.y - 8);
         const rr = 40 + e.r;
         if (dx * dx + dy * dy < rr * rr) ea *= 0.5;
+      } else if (y > pl.y && Math.abs(e.x - pl.x) < e.r + 7 && Math.abs(y - e.cy - hy) < e.r + 10) {
+        // in front of her and over her body: its hit flash is softened like a boss's (her own weapons hit it all the
+        // time: a white silhouette on her), and a pile of these (a swarm of exam papers) hides her (drawHeroBeacon)
+        const q = e.r / 8;
+        this.pile += Math.min(2, q * q) * ea * (1 + flash);
+        flash *= BOSS_FLASH;
       }
       // (Studio Change twist: an elite's outline only appears once it has been hit)
       const outline = def.boss || (e.elite && !(w.look.eliteOutlineOnHit && e.hp >= e.maxHp));
@@ -392,9 +409,9 @@ export class WorldView {
     const xf = this.heroXf;
     const sx = face * (2 - sq) * xf.sx;
     const sy = sq * xf.sy;
-    // dash afterimages (cyan / pink)
+    // dash afterimages (cyan / pink), under every entity: on an fx layer the freshest one tinted her whole sprite
     if (p.dashT > 0 && dt > 0) {
-      if (this.trail.tick(dt, h, p.x, p.y, sx, sy, this.ghostI & 1 ? C.cyan : C.pink, Layer.FxBelow)) this.ghostI++;
+      if (this.trail.tick(dt, h, p.x, p.y, sx, sy, this.ghostI & 1 ? C.cyan : C.pink, Layer.Entity)) this.ghostI++;
       if (this.frameN % 2 === 0) this.fx.ps.emit(P.dust, p.x, p.y, 1, Math.atan2(-p.dashDY, -p.dashDX));
     }
     let alpha = 1;
@@ -498,18 +515,23 @@ export class WorldView {
     const p = this.w.player;
     const load = this.r.post.load;
     this.coverT = Math.max(0, this.coverT - realDt);
-    // busy screen (glow load) or a big blast right on top of the hero (coverHero) even on a calm screen
-    const k = Math.max(load < 0.2 ? 0 : Math.min(1, (load - 0.2) / 0.5), Math.min(1, this.coverT / 0.2));
+    // enemies piled in front of her (hit-flashing ones count double): one is ordinary depth, a few hide her
+    const pk = clamp((this.pile - 0.6) / 1.4, 0, 1);
+    this.pileK = pk >= this.pileK ? pk : Math.max(pk, this.pileK - realDt * 3);
+    // busy screen (glow load), a big blast right on top of the hero (coverHero) even on a calm screen, or a pile
+    const k = Math.max(load < 0.2 ? 0 : Math.min(1, (load - 0.2) / 0.5), Math.min(1, this.coverT / 0.2), this.pileK);
     if (k <= 0 || p.dead || !this.heroHud) return;
     const q = 0.5 + 0.5 * Math.sin(time * 5);
     const r = this.r;
+    const xf = this.heroXf;
+    const y = p.y + xf.dy;
     // the hero's own current frame (dark plum outline: reads over white blasts and pink star clouds alike).
-    // Late game the evolved beams / star streams converge on her: near-opaque + a 1 px plum outline pass
-    const heavy = clamp((load - 0.5) / 0.2, 0, 1);
+    // Late game the evolved beams / star streams converge on her, or a pile covers her: near-opaque + a 1 px plum outline
+    const heavy = Math.max(clamp((load - 0.5) / 0.2, 0, 1), this.pileK);
     const a = ((0.5 + 0.12 * q) * (1 - heavy) + 0.85 * heavy) * k * this.heroA;
     if (heavy > 0)
-      for (let i = 0; i < 4; i++) r.spr(Layer.Bullets, this.heroH, p.x + OUT_X[i], p.y + OUT_Y[i], this.heroSx, this.heroSy, 0, C.outline, a * heavy, 1, 0);
-    r.spr(Layer.Bullets, this.heroH, p.x, p.y, this.heroSx, this.heroSy, 0, 0xffffff, a, 0.1 * (1 - heavy), 0);
+      for (let i = 0; i < 4; i++) r.spr(Layer.Bullets, this.heroH, p.x + OUT_X[i], y + OUT_Y[i], this.heroSx, this.heroSy, xf.rot, C.outline, a * heavy, 1, 0);
+    r.spr(Layer.Bullets, this.heroH, p.x, y, this.heroSx, this.heroSy, xf.rot, 0xffffff, a, 0.1 * (1 - heavy), 0);
     r.ring(Layer.Bullets, p.x, p.y - 8, 13, this.w.hero.color, (0.35 + 0.2 * q) * k, 0, false);
   }
 
@@ -568,8 +590,8 @@ export class WorldView {
             al *= ha;
           }
         }
-        r.spr(Layer.Fx, h, p.x, y, sx, s, p.rot, p.tint, al, 0, (p.glow ? Flag.Glow : 0) | Flag.NoSnap);
-        if (p.glow && tr && tr.halo > 0) r.glow(p.x, y, tr.halo * s, tr.color, tr.haloAlpha * ha);
+        r.spr(Layer.Fx, h, p.x, y, sx, s, p.rot, p.tint, al, 0, (p.glow ? Flag.Glow : 0) | Flag.NoSnap | Flag.Focus);
+        if (p.glow && tr && tr.halo > 0) r.glow(p.x, y, tr.halo * s, tr.color, tr.haloAlpha * ha, Layer.FxAdd, Flag.Add | Flag.Glow | Flag.Focus);
       }
       // trails
       if (tr && !busy && (this.frameN + p.uid) % tr.every === 0) {
@@ -665,7 +687,8 @@ export class WorldView {
       const big = lk && lk.baseR && b.r > lk.baseR * 1.1 ? b.r / lk.baseR : 1;
       const s = (0.45 + 0.55 * born) * big;
       const alpha = Math.min(1, (b.life - b.age) / 0.25);
-      r.glow(b.x, b.y, (lk ? (lk.glowR ?? 8.5) : moon ? 11 : star ? 9.5 : 8.5) * s, col, 0.6 * alpha, Layer.Bullets);
+      // (the halo fades over the hero like the player's fx - the bullet itself stays crisp: SpriteBatch.focus)
+      r.glow(b.x, b.y, (lk ? (lk.glowR ?? 8.5) : moon ? 11 : star ? 9.5 : 8.5) * s, col, 0.6 * alpha, Layer.Bullets, Flag.Add | Flag.Glow | Flag.Focus);
       const turn = lk ? !!lk.spin || !!lk.velRot : moon || star;
       const rot = lk ? (lk.spin ? time * lk.spin + i * 0.7 : lk.velRot ? Math.atan2(b.vy, b.vx) : 0) : star ? time * 6 : moon ? Math.atan2(b.vy, b.vx) : 0;
       r.spr(Layer.Bullets, h, b.x, b.y, s, s, rot, tinted ? b.tint : (lk?.tint ?? 0xffffff), alpha, 1 - born, Flag.Glow | (turn || big !== 1 ? Flag.NoSnap : 0));
@@ -786,6 +809,8 @@ const KNOCK_T = 0.5;
 
 /** Radius (art px) around the hero's body inside which small player shots fade (drawProjectiles). */
 const HERO_CLEAR = 16;
+/** Her body's centre above her feet (art px): the hero focus zone's centre (SpriteBatch.focus). */
+const HERO_MID = 11;
 
 /** Scale curve for popping orbitals: grow in over 0.15 s, shrink out over the last 0.15 s. */
 function popScale(age: number, life: number): number {

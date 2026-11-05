@@ -5,7 +5,7 @@
  *   x, y, scaleX, scaleY, rotation, pivotX, pivotY   (f32 x7)
  *   uv rect: tx | ty << 16, tw | th << 16              (u16 x4, atlas pixels)
  *   colour RGBA8 (straight tint; A = alpha)
- *   extra  RGBA8: flash (lerp to tint colour), additive, noSnap, -
+ *   extra  RGBA8: flash (lerp to tint colour), additive, noSnap, focus (Flag.Focus: fades inside the hero focus zone)
  *
  * Premultiplied-alpha blending (ONE, ONE_MINUS_SRC_ALPHA) everywhere; additive
  * sprites output alpha 0, so normal and additive sprites mix in one draw call
@@ -70,6 +70,8 @@ out vec2 v_uv;
 out vec4 v_tint;   // rgb = tint * alpha, a = alpha
 out float v_aout;  // output alpha multiplier = alpha * (1 - additive)
 out float v_flash;
+out vec2 v_rel;
+out float v_focus;
 void main() {
   vec2 corner = vec2(float(gl_VertexID & 1), float(gl_VertexID >> 1));
   vec2 size = vec2(a_uv.zw);
@@ -93,22 +95,31 @@ void main() {
   v_tint = vec4(a_color.rgb * a_color.a, a_color.a);
   v_aout = a_color.a * (1.0 - a_extra.y);
   v_flash = a_extra.x;
+  v_rel = p;
+  v_focus = a_extra.w;
 }`;
 
 const FS = `#version 300 es
 precision highp float;
 uniform sampler2D u_atlas;
 uniform float u_gain;
+uniform vec4 u_focus;
+uniform float u_focusMin;
 in vec2 v_uv;
 in vec4 v_tint;
 in float v_aout;
 in float v_flash;
+in vec2 v_rel;
+in float v_focus;
 out vec4 o;
 void main() {
   vec4 t = texture(u_atlas, v_uv);           // premultiplied
   // flash lerps toward the tint colour: white tint = classic hit flash, other tints = coloured silhouette
   vec3 rgb = mix(t.rgb, vec3(t.a), v_flash) * v_tint.rgb;
-  o = vec4(rgb * u_gain, t.a * v_aout);
+  // hero focus zone (Flag.Focus)
+  float m = 1.0;
+  if (v_focus > 0.5 && u_focusMin < 1.0) m = mix(u_focusMin, 1.0, smoothstep(u_focus.z, u_focus.w, length(v_rel - u_focus.xy)));
+  o = vec4(rgb * (u_gain * m), t.a * v_aout * m);
 }`;
 
 export class SpriteBatch {
@@ -118,6 +129,30 @@ export class SpriteBatch {
   sortBias = 0;
   /** Explicit sort key for subsequent Entity draws (NaN = use y + sortBias). */
   sortKey = NaN;
+  /**
+   * Hero focus zone (readability at peak chaos; docs/ENGINE.md "Hero focus zone"). Sprites drawn with
+   * `Flag.Focus` (particles on the fx layers, player shots, kill bursts, enemy numbers) fade per pixel around the hero, in the scene
+   * and in the glow buffer: down to `min` inside `r0` art px of (x, y), untouched beyond `r1`. How far they fade
+   * follows how much flagged fx sits on her this frame (`load`: the alpha of every flagged sprite overlapping the
+   * zone, small sparks counted down to a quarter): `calm` on a quiet screen, `busy` from `to` on; it rises at once
+   * and eases back over ~0.4 s. The view sets `on` / x / y every frame (reset() turns it off), so the attract game
+   * and the hub never fade anything.
+   */
+  readonly focus = {
+    on: false,
+    x: 0,
+    y: 0,
+    r0: 12,
+    r1: 26,
+    calm: 0.6,
+    busy: 0.12,
+    from: 1.5,
+    to: 6,
+    /** This frame's raw load, the smoothed 0..1 busy level, and what the shader keeps at the centre. */
+    load: 0,
+    k: 0,
+    min: 1,
+  };
   /** Instances drawn last frame (scene + glow) and draw calls. */
   readonly stats = { instances: 0, glow: 0, drawCalls: 0 };
 
@@ -251,7 +286,19 @@ export class SpriteBatch {
     const a = alpha >= 1 ? 255 : (alpha * 255 + 0.5) | 0;
     const col = ((color >>> 16) & 255) | (color & 0xff00) | ((color & 255) << 16) | (a << 24);
     const ext =
-      (flash <= 0 ? 0 : flash >= 1 ? 255 : (flash * 255 + 0.5) | 0) | (flags & Flag.Add ? 0xff00 : 0) | (flags & Flag.NoSnap ? 0xff0000 : 0);
+      (flash <= 0 ? 0 : flash >= 1 ? 255 : (flash * 255 + 0.5) | 0) |
+      (flags & Flag.Add ? 0xff00 : 0) |
+      (flags & Flag.NoSnap ? 0xff0000 : 0) |
+      (flags & Flag.Focus ? 0xff000000 : 0);
+    if (flags & Flag.Focus && this.focus.on) {
+      // focus load: flagged fx overlapping the zone (by its larger half-extent), sparks weighted down to a quarter
+      const F = this.focus;
+      const half = 0.5 * Math.max((uv1 & 0xffff) * Math.abs(sx), (uv1 >>> 16) * Math.abs(sy));
+      const dx = x - F.x;
+      const dy = y - F.y;
+      const rr = F.r1 + half;
+      if (dx * dx + dy * dy < rr * rr) F.load += alpha * Math.min(1, Math.max(0.25, half / 8));
+    }
     if (!(flags & Flag.GlowOnly)) {
       const L = this.layers[layer];
       if (L.count >= L.cap && !L.grow()) return this.full();
@@ -314,6 +361,28 @@ export class SpriteBatch {
     this.glow.count = 0;
     this.sortBias = 0;
     this.sortKey = NaN;
+    this.focus.on = false;
+    this.focus.load = 0;
+  }
+
+  /** Centre the hero focus zone on (x, y) for this frame (the view calls it while the hero is up). */
+  setFocus(x: number, y: number): void {
+    const F = this.focus;
+    F.on = true;
+    F.x = x;
+    F.y = y;
+  }
+
+  /**
+   * After the frame's draws (Renderer.endFrame): the busy level jumps to this frame's load (the load is known
+   * before anything is drawn, so a blast's first white frame is already faded) and eases back down; sets `min`.
+   */
+  updateFocus(dt: number): SpriteBatch["focus"] {
+    const F = this.focus;
+    const t = F.on ? Math.min(1, Math.max(0, (F.load - F.from) / (F.to - F.from))) : 0;
+    F.k = t >= F.k ? t : F.k + (t - F.k) * (1 - Math.exp(-dt * 2.5));
+    F.min = F.on ? F.calm + (F.busy - F.calm) * F.k : 1;
+    return F;
   }
 
   // ------------------------------------------------------------------ GPU
@@ -412,6 +481,9 @@ export class SpriteBatch {
     gl.uniform2f(p.u.u_snap, snapX, snapY);
     gl.uniform2f(p.u.u_atlasInv, 1 / this.atlas.width, 1 / this.atlas.height);
     gl.uniform1f(p.u.u_gain, gain);
+    const F = this.focus;
+    gl.uniform4f(p.u.u_focus, F.x - ox, F.y - oy, F.r0, F.r1);
+    gl.uniform1f(p.u.u_focusMin, F.min);
     gl.uniform1i(p.u.u_atlas, 0);
     gl.activeTexture(gl.TEXTURE0);
     gl.bindTexture(gl.TEXTURE_2D, this.atlas.texture);

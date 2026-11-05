@@ -87,7 +87,7 @@ r.sprite({ id: "chest", frame: 1, x, y, layer: Layer.Entity, scale: 1.5, flipX: 
 - **Pivot:** comes from the sprite def (`feet` actors: `(w/2, h-1)`, everything else is centred). Override it with `r.batch.drawP(..., px, py)` or `sprite({ pivotX, pivotY })`.
 - **Sub-rectangles:** `r.batch.drawSub(layer, handle, rx, ry, rw, rh, x, y, sx, sy, color, alpha, flash, flags, px, py)` draws only part of a frame (pivot relative to the sub-rect). Used to re-draw lettering un-mirrored over a flipped sprite (boss Truck-kun's cargo box, `src/view/finale-fx.ts`).
 - **Flash** lerps the sprite toward its **tint colour**. With the default white tint that is the white hit flash; with `tint = C.cyan` and `flash = 1` you get a solid cyan silhouette.
-- **Flags** (`Flag`): `Add` (additive), `Glow` (also drawn into the bloom buffer), `GlowOnly` (only in bloom: halos), `NoSnap` (skip pixel-grid snapping).
+- **Flags** (`Flag`): `Add` (additive), `Glow` (also drawn into the bloom buffer), `GlowOnly` (only in bloom: halos), `NoSnap` (skip pixel-grid snapping), `Focus` (player fx: fades over the hero, see "Hero focus zone" below).
 - **Snapping:** unrotated quads have their min corner snapped to the art-pixel grid, so sprites never shimmer. Rotated sprites are not snapped.
 - **Animation:** `r.frame(anim, t, loop = true)` (same as `animFrame`) returns the handle at time `t`. `r.handle(id, frame)` gives a single frame.
 
@@ -201,6 +201,50 @@ full of evolved weapons stays readable instead of whiting out. Game code reads
 `r.post.load` to thin its own juice (the feedback bridge scales its spark /
 puff / damage-number budgets and sets `fx.dmg.busy`, the view draws a faint
 hero beacon above player fx).
+
+**Hero focus zone (`r.batch.focus`, `Flag.Focus`).** The limiter above is
+global, but the haze that buries the hero is local: hit sparks on the enemies
+hugging her, a Candy Bomb blast centred on her, kill bursts, pickup sparkles,
+Galaxy Barrage stars, a "DON!" over her head. Measured with the `washout`
+check (`docs/DEVTOOLS.md` §5), the glow load stayed under the limiter's
+threshold in 10 of 11 heroes' mid-run fights while her `keep` fell as low as 0-7.
+So the player's fx fade **per pixel** over her body instead:
+
+- Draws flagged `Flag.Focus` fade in the sprite shader (scene and glow pass
+  alike, so they neither cover her nor bloom over her): down to `focus.min`
+  inside `r0` (12 art px) of her body centre, untouched beyond `r1` (26). The
+  view centres the zone every frame (`WorldView.draw`: `setFocus(x, feet - 11)`);
+  `reset()` turns it off, so the hub, the attract game and a downed hero never
+  fade anything.
+- How far they fade follows how much flagged fx sits on her this frame
+  (`focus.load`: the alpha of every flagged draw overlapping the zone, small
+  sparks counted by size down to a quarter): `calm` (0.6) on a quiet screen,
+  `busy` (0.12) from `to` (6) on. It rises in the same frame (the load is known
+  before the GPU draws, so a blast's first white frame is already faded) and
+  eases back over ~0.4 s.
+- The composite cuts the glow core and bloom over her by up to
+  `r.post.focusBloomCut` (0.7) x that busy level, within `focusR0` / `focusR1`
+  (12 / 34 art px), so the bloom of a blast just outside the zone does not fog
+  her either.
+- Flagged: particles on `Fx` / `FxAdd` (not `FxBelow` dust or decals), the
+  view's player shots and their halos, the enemies' death pops (`fx.ghosts` on
+  the fx layers), Truck-kun's isekai light pillars, enemy damage-number glyphs,
+  and the glow halo of enemy bullets (the bullet sprite stays crisp, so what is
+  about to hit her reads). Not flagged: her own deliberate looks (shield bubble,
+  Overdrive-ready aura, Warm Tea, ult overlays, the henshin flash), telegraphs,
+  enemy bullets, boss attacks.
+- Cost: one `length()` + `smoothstep` per flagged fragment (a branch skips the
+  rest), one per composite pixel while busy, and a few flops per flagged draw on
+  the CPU. No extra pass.
+
+Two neighbours of the zone: the hero's dash afterimages are drawn on
+`Layer.Entity` under every entity (`Afterimages` sorts Entity-layer ghosts
+first: on `FxBelow` the freshest one sat on top of her and turned her into a
+flat cyan / pink silhouette for the whole dash), and enemies in front of her
+that overlap her body soften their hit flash to `BOSS_FLASH` and count toward
+the hero beacon's **pile** trigger (`WorldView.pile`: a few of them, a swarm of
+white exam papers, redraw her near-opaque with the plum outline above them).
+Player-anchored world texts start above her head (`WorldTexts`, `HEAD_CLEAR`).
 
 ---
 

@@ -25,7 +25,8 @@
 //   E) (mobile) developer mode: without it a 3-finger long-press and the ` key never open the dev console; 7 taps on
 //      the Settings build label switch it on (toast, kept across a reload: then the long-press opens the console)
 //      and off again; ?dev=1 turns it on (and opens the console), ?dev=0 off.
-// Every device also checks that no layer fading out of #ui (a screen, a modal: .out) is ever hit-testable.
+// Every device also checks that no layer fading out of #ui (a screen, a modal: .out) is ever hit-testable, nor the
+// episode title card (display-only).
 // Screenshots go to shots/e2e/<device>-<step>.png. Fails (exit 1) on any page error or
 // console.error, or when a step's expected state is not reached.
 import { parseArgs, startServer, launchBrowser, newPage, ensureDir } from "./lib.mjs";
@@ -745,6 +746,12 @@ async function runDevice(di, browser) {
     await step("START EPISODE (title card, READY? / GO!)", async () => {
       await tap('.loadout [data-act="go"]');
       await waitFor(page, () => window.__kk.screen === "game" && !!document.querySelector(".ep-title"), null, 15000, "episode title card");
+      // (display-only: `#ui > *` made it catch every tap while it was up)
+      const cardPe = await page.evaluate(() => {
+        const e = document.querySelector("#ui > .ep-title");
+        return e ? getComputedStyle(e).pointerEvents : "none";
+      });
+      if (cardPe !== "none") throw new Error(`the episode card catches taps (pointer-events: ${cardPe})`);
       await sleep(400);
       await shot(page, dev.name, "5-episode-card", rec);
       // (the card + READY? run on frame time, dt clamped to 1/20 s: a DPR-3 phone page on a loaded SwiftShader needed > 20 s)

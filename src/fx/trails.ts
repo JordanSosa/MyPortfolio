@@ -7,6 +7,9 @@
  *   const trail = new TrailEmitter(ghosts, 0.03);
  *   trail.tick(dt, handle, x, y, facing, 1, i % 2 ? C.cyan : C.pink);
  *   ghosts.update(time.dt); ghosts.draw();
+ *
+ * Ghosts on Layer.Entity sort under every entity (a trail behind the hero: on the fx layers the freshest ghost sat
+ * on top of her and tinted her flat cyan / pink for the whole dash).
  */
 import { Flag, Layer } from "../render/layers";
 import type { Renderer } from "../render/renderer";
@@ -53,7 +56,8 @@ export class Afterimages {
     this.life[i] = life;
     this.a0[i] = alpha;
     this.layer[i] = layer;
-    this.flags[i] = (additive ? Flag.Add : 0) | (glow ? Flag.Glow : 0);
+    // (on the fx layers - an enemy's white death pop - it fades over the hero like the particles: SpriteBatch.focus)
+    this.flags[i] = (additive ? Flag.Add : 0) | (glow ? Flag.Glow : 0) | (layer === Layer.Fx || layer === Layer.FxAdd ? Flag.Focus : 0);
   }
 
   update(dt: number): void {
@@ -71,14 +75,18 @@ export class Afterimages {
 
   draw(): void {
     const b = this.r.batch;
+    const under = this.r.camera.view.y - 64;
     // oldest first
     for (let k = 0; k < MAX; k++) {
       const i = (this.next + k) % MAX;
       if (!this.alive[i]) continue;
       const t = this.age[i] / this.life[i];
       const a = this.a0[i] * (1 - t) * (1 - t * 0.5);
+      // (an Entity-layer ghost sorts under every visible entity)
+      if (this.layer[i] === Layer.Entity) b.sortKey = under;
       // flash makes the ghost a colour-tinted silhouette (flash lerps toward the tint)
       b.draw(this.layer[i], this.h[i], this.x[i], this.y[i], this.sx[i], this.sy[i], this.rot[i], this.col[i], a, this.flash, this.flags[i]);
+      b.sortKey = NaN;
     }
   }
 }

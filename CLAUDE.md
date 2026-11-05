@@ -43,8 +43,9 @@ Further docs:
 | Unit tests while iterating | `npm test` (the fast suite); `npm run test:slow` / `npm run test:all` for long headless runs | 8 s / 40 s / 50 s |
 | Type errors | `npm run typecheck` | 2 s |
 | To *see* the game (any change to UI, art, fx or layout) | `npm run scenes`, then open `shots/scenes/latest/contact.png` | ~70 s for 82 shots |
-| A narrower visual check | `npm run scenes -- --only boss:,ult: --devices i13,se`; `--all` covers all 86 scenarios | seconds |
+| A narrower visual check | `npm run scenes -- --only boss:,ult: --devices i13,se`; `--all` covers all 108 scenarios | seconds |
 | A transient effect (an ult, a flash, a phase change) | film it: `npm run scenes -- --only "ult:kuro~180/15"` (a checked shot every 15 frames for 180) or `--film` | ~6 s |
+| Is the hero still visible in a busy fight? | `npm run scenes -- --only crowd: --film 120/15 --devices i13` (`washout`); what buries her: add `--blame` | ~1-2 min |
 | Visual regressions | `npm run scenes -- --baseline` once, then `npm run scenes -- --diff` | |
 | A specific game state | `/?scenario=<name>&step=1`, then `__kk.step(n)` and `await __kk.snapshot()` (JSON). List: `await __kk.scenarios()` | <1 s |
 | Live state on a device | dev console: `?dev=1` (also turns developer mode on for that browser), or in developer mode the `` ` `` key / a 3-finger long-press. Phone in the artifact viewer: Settings, tap the build label 7 times | |
@@ -116,6 +117,14 @@ around it. `docs/DEVTOOLS.md` §8 shows how each check was proven against the Se
     (`ult:kuro~180/15`). A single scenario moment missed it.
   - Speech bubbles drew dark ink with `font_main`'s dark outline, so every letter became a blob. `illegible`
     flags any bitmap text whose ink is about as dark as its font's outline (the `speech` scenario shows bubbles).
+  - Mochi and Pudding mid-run sat inside a white / amber haze of hit sparks and pickup sparkles. `washout` flags an
+    in-run frame where less than 35 % of the hero's own contrast survives (a replay of her own draw calls vs the
+    frame); `crowd:<hero>[:mid]` stress every hero, `--blame` names the draw sites (docs/DEVTOOLS.md §5).
+  - The fix is the **hero focus zone**: player fx drawn with `Flag.Focus` fade per pixel over her body
+    (`r.batch.focus`, docs/ENGINE.md). Particles on the fx layers get it automatically. A view draw of new fx that
+    lands on her (sparks, blasts, kill bursts) should pass it; her own deliberate looks and enemy attacks should
+    not. The key and quick scene sets film a `crowd:` scene, so a regression fails `npm run scenes` and
+    `doctor --scenes`.
   - Also flagged: blackouts, whiteouts, blank screens, placeholder sprites, page errors, elements cut off at
     the viewport edge and sideways scrolling. `--self-test` proves each check fires.
 - **Headless time.**

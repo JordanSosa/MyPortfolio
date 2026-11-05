@@ -100,6 +100,8 @@ const F_GLOWONLY = 4;
 const F_BOUNCE = 8;
 const F_ROTVEL = 16;
 const F_STRETCH = 32;
+/** On the fx layers (Fx / FxAdd): drawn with Flag.Focus, so it fades over the hero (SpriteBatch.focus). */
+const F_FOCUS = 64;
 
 const CURVES: Record<Curve, number> = { linear: 0, out: 1, in: 2, pop: 3, none: 4 };
 const ACURVES: Record<AlphaCurve, number> = { linear: 0, late: 1, inout: 2, flicker: 3, none: 4 };
@@ -297,6 +299,7 @@ export class Particles {
     const lay = layer >= 0 ? layer : c.layer;
     let flags = c.flags;
     if (lay === Layer.FxAdd) flags |= F_ADD;
+    if (lay === Layer.Fx || lay === Layer.FxAdd) flags |= F_FOCUS;
     for (let k = 0; k < total; k++) {
       let i: number;
       if (this.count < this.capacity) i = this.count++;
@@ -516,6 +519,7 @@ export class Particles {
       if (fl & F_ADD) bf |= Flag.Add;
       if (fl & F_GLOW && t < glowL[i]) bf |= Flag.Glow;
       if (fl & F_GLOWONLY) bf |= Flag.GlowOnly;
+      if (fl & F_FOCUS) bf |= Flag.Focus;
       const fla = flashA[i] > 0 && t < 0.3 ? flashA[i] * (1 - t / 0.3) : 0;
       const h = h0[i] + f;
       b.draw(layer[i], h, x[i], y[i] - z[i], sx, sc, r, col, al, fla, bf);

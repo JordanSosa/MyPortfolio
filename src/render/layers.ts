@@ -34,4 +34,9 @@ export const Flag = {
   GlowOnly: 4,
   /** Disable pixel-grid snapping for this sprite (smooth sub-pixel motion when scaled/rotated). */
   NoSnap: 8,
+  /**
+   * Player fx (fx-layer particles, shots, kill bursts, enemy numbers): fades per pixel inside the hero focus zone
+   * (`SpriteBatch.focus`), in the scene and the glow buffer, so a storm of sparks / blasts on her never buries her.
+   */
+  Focus: 16,
 } as const;

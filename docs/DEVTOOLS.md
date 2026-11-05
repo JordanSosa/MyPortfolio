@@ -430,7 +430,7 @@ Measured on all 69 scenarios x 4 devices (before `speech`), the threshold margin
 Every fault must produce its flag and the clean shot must stay clean. A clean shot must also diff 0 % against
 itself and more than 10 % against its blackout.
 
-Measured: 20/20 pass in 20.5 s.
+Measured: 20/20 pass in 20.5 s; with the `washout` fault, 22/22 in 44.5 s (a host at load 5-10, another agent's runs in parallel).
 
 **Determinism.**
 
@@ -456,6 +456,7 @@ Measured: 20/20 pass in 20.5 s.
 | `--quick` (10 shots, i13) | 14 s alone, 21-30 s inside doctor |
 | `--quick` today (11 scenes + a 10-frame film = 21 shots, i13) | 14.5 s alone, 35 s inside doctor |
 | one scene, one device (server + browser + shot + sheet) | 6 s |
+| `npm run scenes` with the `washout` check vs `--no-hero` (82 shots, 50 of them measured; host at load 9-18) | 121-142 s vs 138-140 s: within the noise. `HERO_FINISH` took 12-15 s of worker time (4 workers), median 0.2-0.3 s per in-run shot, nearly all of it the read-back's GPU sync |
 | `--self-test` (14 shots, 2 devices) | 16.5 s |
 
 Where the time went, and what fixed it:

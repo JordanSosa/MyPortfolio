@@ -25,6 +25,11 @@ export interface WorldTextOpts {
 
 /** Vertical step (px) between stacked player-anchored texts. */
 const STACK = 14;
+/**
+ * A player-anchored text's box starts at least this far above her feet (the top of her head + 2 px), pop-in
+ * overshoot included: "DON!" at -30 sat on her hair and its glow hid her face for half a second.
+ */
+const HEAD_CLEAR = 26;
 
 interface T {
   s: string;
@@ -54,9 +59,11 @@ export class WorldTexts {
     const scale = o.scale ?? 2;
     const rise = o.rise ?? 10;
     if (anchor === 1) {
+      // never over her head (the pop-in grows a scale-2 text by ~25 %)
+      const lh = this.r.text.lineHeight;
+      y = Math.min(y, -HEAD_CLEAR - (lh * scale * 1.25) / 2);
       // stack above the player-anchored texts still alive ("BOOM!" + "MAGNET!" in the same second):
       // at least STACK px per live one, and clear of the topmost one's box once it has fully risen
-      const lh = this.r.text.lineHeight;
       let k = 0;
       let top = Infinity;
       for (const t of this.list) {

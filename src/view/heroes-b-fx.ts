@@ -818,7 +818,8 @@ export class HeroesBFx {
       }
       const k = t.t / t.life;
       const f = Math.min(this.nPillar - 1, Math.floor(k * this.nPillar));
-      r.spr(Layer.FxAdd, this.hPillar + f, t.x, t.y, t.r, t.r * (0.8 + 0.4 * k), 0, 0xffffff, 1 - k * k, 0, Flag.Add | Flag.Glow);
+      // (a kill fx: fades over the hero like the particles when the enemy died right next to her, SpriteBatch.focus)
+      r.spr(Layer.FxAdd, this.hPillar + f, t.x, t.y, t.r, t.r * (0.8 + 0.4 * k), 0, 0xffffff, 1 - k * k, 0, Flag.Add | Flag.Glow | Flag.Focus);
     }
     // honk waves (cone: w_honk_wave scaled to the length; ring: a soft expanding ring) and sparkle waves
     for (const t of this.waves) {

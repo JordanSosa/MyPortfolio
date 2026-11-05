@@ -300,6 +300,11 @@ export class Renderer {
 
     this.batch.upload();
     this.post.feedGlow(this.batch.glowCount, sw * sh, this.frameDt);
+    // hero focus zone: the composite cuts bloom over her as far as the batch fades the player's fx (SpriteBatch.focus)
+    const F = this.batch.updateFocus(this.frameDt);
+    this.post.focusX = F.x;
+    this.post.focusY = F.y;
+    this.post.focusCut = F.on ? F.k * this.post.focusBloomCut : 0;
 
     // scene pass
     const p = this.pipeline;

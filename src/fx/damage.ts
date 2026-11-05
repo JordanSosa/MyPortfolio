@@ -4,7 +4,8 @@
  * A crit landing next to a fresh crit (< 0.15 s old, within 14 px) merges into it
  * (summed value, re-pop) instead of stacking; `aliveCrit` counts live crits for the
  * caller's cap. Enemy numbers near `focus` (the hero) shrink and fade so a wall of
- * numbers never hides the hero.
+ * numbers never hides the hero, and their glyphs carry Flag.Focus (the renderer's
+ * hero focus zone fades them per pixel over her body).
  *
  *   dmg.spawn(x, y, 12)                 // normal (white)
  *   dmg.spawn(x, y, 48, "crit")         // yellow x2, wobble, sparkle, "!"
@@ -247,7 +248,8 @@ export class DamageNumbers {
       }
       const flash = d.t < 0.06 ? (1 - d.t / 0.06) * (1 - dim) : 0;
       const rot = d.wobble ? Math.sin(d.t * 26) * 0.12 * (1 - u) : 0;
-      text.drawCodes(Layer.Text, d.codes, d.n, x, y, s, d.color, alpha, glow, flash, d.wobble ? 1.2 : 0, d.t, rot);
+      // (and every enemy-number glyph fades per pixel over her body, like the player's fx: SpriteBatch.focus)
+      text.drawCodes(Layer.Text, d.codes, d.n, x, y, s, d.color, alpha, glow | (enemy ? Flag.Focus : 0), flash, d.wobble ? 1.2 : 0, d.t, rot);
     }
     const after = this.after;
     if (after) {

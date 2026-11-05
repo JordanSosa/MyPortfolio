@@ -106,6 +106,18 @@ export class PostFx {
   /** Glow instances per phone-sized view (80k art px²) where the limiter starts / is fully on. */
   loadFrom = 220;
   loadTo = 800;
+  /**
+   * Hero focus zone, composite half (the sprite half is SpriteBatch.focus): the glow core and bloom are cut by
+   * `focusCut` (0..1) within `focusR0` art px of (focusX, focusY), easing out by `focusR1`, so the bloom of a blast
+   * around the hero does not fog her. The renderer sets the centre and `focusCut = focusBloomCut x` the batch's
+   * busy level every frame (0 = off: a calm screen, the hub).
+   */
+  focusX = 0;
+  focusY = 0;
+  focusR0 = 12;
+  focusR1 = 34;
+  focusCut = 0;
+  focusBloomCut = 0.7;
 
   readonly waves: Wave[] = [];
   flashColor: RGB = [1, 1, 1];
@@ -250,6 +262,7 @@ export class PostFx {
     this.damageFloor = 0;
     this.dim = 0;
     this.load = 0;
+    this.focusCut = 0;
   }
 }
 
@@ -340,6 +353,8 @@ uniform vec3 u_flashColor;
 uniform float u_flash;
 uniform float u_dim;
 uniform float u_time;
+uniform vec4 u_focus;      // hero focus zone (css px): centre, r0, r1
+uniform float u_focusCut;
 out vec4 o;
 
 const vec3 LUMA = vec3(0.299, 0.587, 0.114);
@@ -426,7 +441,8 @@ void main() {
   // bloom (added after grading so glowing things stay luminous at night)
   vec3 glow = glowS.rgb;
   vec3 bloom = texture(u_bloom, min(fsc * u_bloomK, u_bloomMax)).rgb;
-  col += glow * u_glowCore + bloom * u_bloomStr;
+  float fk = u_focusCut > 0.0 ? 1.0 - u_focusCut * (1.0 - smoothstep(u_focus.z, u_focus.w, length(css - u_focus.xy))) : 1.0;
+  col += (glow * u_glowCore + bloom * u_bloomStr) * fk;
   // protected layers (low-res scene only): drawn crisp over the graded scene (premultiplied)
   if (u_topOn > 0.5) {
     vec4 tp = texture(u_top, sharpUvOf(tArt, u_topUsed, u_topInv, u_scale * u_dpr));
@@ -651,6 +667,8 @@ export class PostPipeline {
     gl.uniform1f(u.u_flash, Math.min(1, fx.flashAmount));
     gl.uniform1f(u.u_dim, Math.min(0.95, Math.max(0, fx.dim)));
     gl.uniform1f(u.u_time, fx.time);
+    gl.uniform4f(u.u_focus, (fx.focusX - f.viewX) * f.scale, (fx.focusY - f.viewY) * f.scale, fx.focusR0 * f.scale, fx.focusR1 * f.scale);
+    gl.uniform1f(u.u_focusCut, clamp(fx.focusCut, 0, 1));
     gl.drawArrays(gl.TRIANGLES, 0, 3);
     gl.bindVertexArray(null);
   }
