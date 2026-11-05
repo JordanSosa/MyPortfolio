@@ -49,7 +49,7 @@ The root causes, in order of cost:
 
 | Tool | Replaces | Target |
 | --- | --- | --- |
-| **Dev console** (in game: `?dev=1`, the `` ` `` key, or a 3-finger long-press on phones) | ad-hoc `__kk` scripts, guesswork | inspect and drive any live state in seconds, on any device |
+| **Dev console** (in game: `?dev=1`; in developer mode the `` ` `` key or a 3-finger long-press on phones) | ad-hoc `__kk` scripts, guesswork | inspect and drive any live state in seconds, on any device |
 | **Diagnostics export** ("Copy diagnostics" in Settings and in the console) | vague bug reports | one paste tells us the device, quality tier, fps/frame-time histogram, audio state (rate, latency, voices, stress, skipped notes) and the recent errors |
 | **Scenarios + deterministic stepping** (`?scenario=…`, `?step=1`, `__kk.step(n)`, `__kk.snapshot()`) | waiting on wall-clock fps | any moment reproducible in under 2 s, the same every time |
 | **`npm run scenes`** (gallery: parallel pages, contact sheet, automatic visual metrics + anomaly flags) | 426 bespoke scripts | 20+ key screens in about 1 minute, with blackouts, missing sprites and errors flagged automatically |
@@ -82,7 +82,7 @@ Measured on this container (headless Chromium + SwiftShader, 4 cores shared): `r
 `await __kk.scenario(name, { seed, hero, profile })` -> `{ ok, ms, marks, error, screen, modal, t }`.
 At boot `<html data-kk-scenario="pending|ready|error">` and `__kk.scenarioState` report progress, so a
 script waits with `page.waitForFunction(() => document.documentElement.dataset.kkScenario !== "pending")`.
-`__kk.scenarios()` lists every concrete name (86 today: parametric kinds expand over the registries).
+`__kk.scenarios()` lists every concrete name (108 today: parametric kinds expand over the registries).
 
 | Name | State |
 | --- | --- |
@@ -95,6 +95,7 @@ script waits with `page.waitForFunction(() => document.documentElement.dataset.k
 | `hud:overdrive` `hud:overdrive-ready` `hud:overdrive-pad` `hud:overdrive-tut` `hud:overdrive-swap` | the HUD's Overdrive gauge of keyboard / mouse / gamepad play (1:40 Dream Meadow): 60 % charged; full (the rainbow READY); full with the gamepad's B; a fresh account's first run with the OVERDRIVE READY bubble pointing at it; a touchscreen laptop (a touch mid-run must swap the gauge for the OVERDRIVE button, a key must swap it back: asserted, the scenario fails otherwise). On touch devices the OVERDRIVE button shows instead (the gauge must not) |
 | `speech` `speech:<stage>` | the 4 enemies nearest the hero speak from their stage's pools, plus one free bubble (default Candy Kingdom) |
 | `orbital:<weapon>` `orbital:<tea weapon>:tea` | Orbital Guard mid-Shoujo Academy (Mochi's Yarn Orbit Lv5 / Cosmic Yarn, Pudding's Teapot Tempest Lv5 / Eternal Tea Party): a 16-bullet ring fired at the hero, shown once a body breaks (film it for the reform: `orbital:yarn_orbit~150/10`); `:calm` = the same volley in the run's first seconds, the orbital alone (judge the break and the empty slot; not in `--all`); `:tea` = Warm Tea on the move (1:30, a calmer crowd) |
+| `crowd:<hero>` `crowd:<hero>:mid` (`@<stage>`) | every hero in a busy run with a full build, after 2 s of live play (the stress scenes of the `washout` check): late = a rich account at Shoujo Academy 10:00, ~level 24 bot-picked, the signature weapon evolved plus every maxed weapon whose passive is held; `:mid` = a mid account at 3:20, level 10, the signature weapon at its top level. Mid-run is the harder case: the bloom limiter and the hero beacon only switch on at high glow load. Film them: `crowd:pudding:mid~120/15` |
 | `levelup` `chest` `chest:golden` `pause` `over:death` `over:victory` | in-run modals |
 | `levelup:evo-hints` `levelup:evo-four` `levelup:evo-many` `chest:evo-hints` `pause:evo-hints` | evolution hints: a mid account that discovered 4 evolutions, a hand-picked build + offer (READY, pair-completing passive, missing passive, an undiscovered recipe; 3 / 4 / 6 cards) |
 | `results:death` `results:victory` `results:first-clear` | Episode Results of a real (sandboxed) account run, finished; first-clear = a P1 account clears Dream Meadow (unlock cards) |
@@ -134,8 +135,16 @@ reads and a few typed-array stores per frame, no allocation. `__kk.perf.phases(3
 
 ### 3.4 Dev console (`src/debug/console/`, lazy chunk)
 
-Opens with `?dev=1`, the `` ` `` key, a **3-finger long-press** (0.65 s; timed with rAF because
-Chrome defers timers during a touch), or `__kk.dev()`. Draggable header, collapses to a small pill
+Opens with `?dev=1`, or `__kk.dev()`; in **developer mode** also the `` ` `` key and a **3-finger long-press**
+(0.65 s; timed with rAF because Chrome defers timers during a touch). Developer mode (`src/debug/devmode.ts`) is
+off by default and kept per browser (`kko.devmode.v1`, core storage helpers, never the profile): `?dev=1` turns
+it on, `?dev=0` off, and Settings switches it with **7 taps on the build label** under DONE / DIAGNOSTICS (a toast
+counts down the last three; this is the way in on a phone inside the artifact viewer, where URL params can't be
+added). Why gated: the long-press opened the console in production too, so a panicking player with three fingers
+down mid-run could get it; the `` ` `` key sits right under Esc (pause) on a PC keyboard; and the console's Account
+tab can rewrite the real save. Settings' DIAGNOSTICS stays available to everyone. Proof: `tests/dev-mode.test.ts`,
+`node scripts/e2e.mjs --devmode` (real CDP 3-finger long-press and real taps on the label, ~60 s). Draggable header,
+collapses to a small pill
 (left edge, under the HUD's weapon icons) that only refreshes its fps twice a second; touches on it
 never reach the joystick (`data-no-joystick`). Tabs:
 
@@ -317,6 +326,9 @@ npm run scenes -- --baseline                     # store shots/scenes/baseline/ 
 npm run scenes -- --diff                         # perceptual pixel diff % per shot vs the baseline (+ .diff.png)
 npm run scenes -- --quick                        # 11 scenes, one device, Kuro's ult filmed: 21 shots (doctor --scenes)
 npm run scenes -- --self-test                    # inject every fault into one scene: each must be flagged
+npm run scenes -- --only crowd: --film 120/15 --devices i13      # every hero, filmed: the `washout` check's stress run
+npm run scenes -- --only "crowd:pudding:mid~60/30" --blame 12   # WHICH draws wash the hero out (see washout below)
+npm run scenes -- --only orbital:yarn_orbit --hero-dump          # <name>.hero.png: what the washout check compared
 ```
 
 **Output** (`shots/scenes/latest/`):
@@ -339,6 +351,7 @@ The exit code is 1 when a shot has an error-level flag.
 | `dark` | warning | the mean luminance is < 22 |
 | `murk` | error | an in-run frame (no modal) where more than 10 % of the pixels have no RGB channel above 56: it reads as black on a phone at low brightness |
 | `illegible` | error | bitmap text drawn in an ink whose WCAG contrast with its font's own outline is under 1.5 (dark ink on `font_main`'s dark outline) |
+| `washout` | error < 35, warning < 55 | an in-run frame (no modal, not the ult cut-in) where less than that % of the hero's own contrast survives: she is lost in glow, haze or things drawn over her |
 | `placeholder` | error | a placeholder atlas handle is drawn, or a `.px-missing` DOM icon is visible |
 | `pageError` | error | an uncaught error or a `console.error` (minus SwiftShader / Vite noise) |
 | `scroll` | error | the document or a vertical page scroller scrolls sideways |
@@ -357,6 +370,35 @@ Notes on the checks:
   violet ground (the Final Arc) has a low luminance but is not black; a dimmed grey is. By luminance (< 40) the
   Final Arc scenes scored 22-62 % and would have been false alarms. By brightest channel every in-run scene of the 70
   scores under 4 %, and Kuro's old ETERNAL ABYSS scores 12-27 % during its shadow pass.
+- **`washout`** (the hero is lost in the fx). Mochi and Pudding mid-run (Shoujo Academy 3:20, level 10) sat inside
+  a white / amber haze of hit sparks and pickup sparkles, and whole-frame checks cannot see that. Per in-run shot the
+  probe's real render records the hero's own draw calls (her Entity sprite and the hero beacon's redraw) and reads
+  the box around her back. After the screenshot, those calls alone are replayed (`HERO_FINISH`; no game or view code
+  runs): where that differs from its empty background is her silhouette, and its colours are how she looks with
+  nothing over her (same grade, dim, flash). `keep` = the least-squares slope of frame luminance on clean luminance
+  over her pixels, x 100: a haze `a x her + (1 - a) x white` gives `a`; bloom adds and clips toward white; sparks on
+  top add noise, not slope. Nothing in the run changes: seeded loads with and without the check give pixel-identical
+  shots and film frames 30 steps on (`run:late`, `crowd:pudding:mid`, `orbital:yarn_orbit`, `stage:final_arc`,
+  `ult:kuro:mid`). Also in `summary.json` (`probe.hero`): `ink` (% of her clean dark pixels still darker than 110),
+  `wash` (% of her pixels lifted to near-white), `lift` (mean luminance added), `halo` (% near-white within 20 art
+  px), `load` (the glow load that gates the bloom limiter and the hero beacon), `cover` (the beacon's blast cover),
+  her position and `ms`.
+  - Calibrated on i13 against 70 in-run scenes, the 22 `crowd:` scenes and their films, read by eye: every frame at
+    `keep` >= 70 shows her clearly; 35-55 = partly visible in haze; < 35 = gone (Mochi's Yarn Orbit 3-21, Pudding's
+    Teapot Tempest 27, Kraken-chan 19, Final Arc 25, Aoi / MG#47 mid-ult 30 / 3). `ink` and `wash` were tried as the
+    flag first and rejected: Isekai-kun and Truck-kun on a white bloom keep a grey outline that reads fine.
+  - `--blame [N]` (default 12) explains a flagged frame: one recording render notes every draw's call site (stack
+    trace -> the first frame outside `src/render/`; particles by their sprite and, from the first blamed shot on,
+    by the `ps.emit` call site that spawned them; projectiles by their weapon), then for the N sites scoring highest
+    near her: `alone` = her `keep` with only that site drawn over the ground (what it does by itself) and `dKeep` =
+    the gain from dropping it (its marginal share; with several white-hot sources each alone washes her out and
+    dropping any one barely helps). Plus whole-class variants: no bloom, no Glow flags, no FxAdd / Add, no
+    particles, no <layer>. Particle emitters are named only on shots after the first, so film it:
+    `--blame --film 60/30`. ~2N+12 extra renders per shot; they run the view's draw code again (with particle
+    spawns blocked, `Math.random`, `fxRng` and the view's `frameN` counters put back), after the screenshot.
+  - `--hero-dump` writes `<name>.hero.png` (x4: the hero-only render, the frame, her mask) to check the check.
+  - Cost: one replayed render of a few sprites + two small read-backs per in-run shot (see Measured); `--no-hero`
+    skips it.
 - **Films.** A scenario is one moment. A transient full-screen effect (an ult's shadow pass, a flash, a phase
   change) can sit between two moments: `ult:kuro:mid` never caught the old ETERNAL ABYSS, because its shadow had
   already passed. `name~frames/every` (or `--film frames/every`, default `120/15`) shoots the scenario, then
@@ -382,7 +424,8 @@ Measured on all 69 scenarios x 4 devices (before `speech`), the threshold margin
 - every atlas sprite marked as a placeholder;
 - a thrown error;
 - a dim screen with a big near-black shape over the middle (`murk`);
-- every bitmap string drawn in the outline colour (`illegible`).
+- every bitmap string drawn in the outline colour (`illegible`);
+- a soft white disc and glow drawn over the hero (`washout`).
 
 Every fault must produce its flag and the clean shot must stay clean. A clean shot must also diff 0 % against
 itself and more than 10 % against its blackout.

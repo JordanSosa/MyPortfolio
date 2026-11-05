@@ -6,7 +6,12 @@
  *                            animations are paused and advanced by the same dt)
  *   ?scenario=<name>         put the game in a named state at boot (src/debug/scenarios.ts); with
  *                            &seed= &hero= &profile=; <html data-kk-scenario="ready|error"> when done
- *   ?dev=1                   open the dev console at boot (also: the ` key, a 3-finger long-press)
+ *   ?dev=1                   open the dev console at boot and turn DEVELOPER MODE (devmode.ts) on for this
+ *                            browser (kept; ?dev=0 turns it off). Only in developer mode do the ` key and a
+ *                            3-finger long-press open the console; Settings switches it too (tap the build label
+ *                            7 times: phones in the artifact viewer cannot add URL params). Off by default, so a
+ *                            panicking player with three fingers down mid-run (or a PC player reaching for Esc,
+ *                            right above `) never gets a developer panel that can rewrite the save.
  *
  *   __kk.step(frames = 1, dt = 1/60)   run frames now (sim + fx every frame, WebGL draw on the last one only,
  *                                      synchronously: a screenshot right after is exact) -> { t, frames, screen, modal }
@@ -23,6 +28,7 @@
  * separate lazy chunk, fetched only when one of the above is used.
  */
 import type { App } from "../ui/app";
+import { setDevMode, wireTriggers } from "./devmode";
 import { diagnosticsText, trackApp } from "./diag";
 import { prof } from "./perf";
 
@@ -149,78 +155,6 @@ export function setStepMode(app: App, on: boolean): void {
   }
 }
 
-/** Long-press with three or more fingers (ms) that opens the console on touch screens. */
-const LONG_PRESS_MS = 650;
-
-function wireTriggers(app: App): void {
-  const toggle = () => void loadConsole().then((m) => m.toggleConsole(app));
-  window.addEventListener(
-    "keydown",
-    (e) => {
-      if (e.code !== "Backquote" && e.key !== "`") return;
-      const t = e.target as HTMLElement | null;
-      if (t?.closest?.("textarea, input, select, [contenteditable]")) return;
-      e.preventDefault();
-      toggle();
-    },
-    { capture: true },
-  );
-  // (Chrome defers timers while a touch sequence is active, so the hold is timed with rAF polling and
-  // also checked when the fingers lift)
-  let down = -1;
-  let fired = false;
-  let x0 = 0;
-  let y0 = 0;
-  const cancel = () => {
-    down = -1;
-  };
-  const fire = () => {
-    if (down < 0 || fired) return;
-    fired = true;
-    down = -1;
-    toggle();
-  };
-  const poll = () => {
-    if (down < 0 || fired) return;
-    if (performance.now() - down >= LONG_PRESS_MS) fire();
-    else requestAnimationFrame(poll);
-  };
-  window.addEventListener(
-    "touchstart",
-    (e) => {
-      if (e.touches.length < 3) {
-        cancel();
-        return;
-      }
-      if (down >= 0) return;
-      down = performance.now();
-      fired = false;
-      x0 = e.touches[0].clientX;
-      y0 = e.touches[0].clientY;
-      requestAnimationFrame(poll);
-    },
-    { capture: true, passive: true },
-  );
-  window.addEventListener(
-    "touchmove",
-    (e) => {
-      if (down < 0) return;
-      const t = e.touches[0];
-      if (!t || Math.hypot(t.clientX - x0, t.clientY - y0) > 30) cancel();
-    },
-    { capture: true, passive: true },
-  );
-  window.addEventListener(
-    "touchend",
-    (e) => {
-      if (down >= 0 && performance.now() - down >= LONG_PRESS_MS) fire();
-      if (e.touches.length < 3) cancel();
-    },
-    { capture: true, passive: true },
-  );
-  window.addEventListener("touchcancel", cancel, { capture: true, passive: true });
-}
-
 /** Scenario state at boot (?scenario=): also mirrored on <html data-kk-scenario>. */
 export const scenarioState: { name: string; status: "none" | "pending" | "ready" | "error"; ms: number; error: string; marks: [string, number][] } = {
   name: "",
@@ -276,9 +210,11 @@ export function installDev(app: App): void {
     perf: prof,
   };
   Object.defineProperties(kk, Object.getOwnPropertyDescriptors(api));
-  wireTriggers(app);
-  const name = q.get("scenario");
+  // ?dev=1 turns developer mode on for this browser (kept), ?dev=0 off
   const devOpen = q.get("dev") === "1";
+  if (devOpen || q.get("dev") === "0") setDevMode(devOpen);
+  wireTriggers(() => void loadConsole().then((m) => m.toggleConsole(app)));
+  const name = q.get("scenario");
   if (!name && !devOpen) return;
   // after app.start() (the screens it opens are replaced by the scenario's)
   queueMicrotask(() => {

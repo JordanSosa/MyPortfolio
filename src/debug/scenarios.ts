@@ -23,7 +23,7 @@
 import { time } from "../core/time";
 import { CFG } from "../game/config";
 import { HEROES } from "../game/heroes";
-import { BOSSES, STAGES } from "../game/registry";
+import { BOSSES, STAGES, WEAPONS } from "../game/registry";
 import type { TimelineEvent } from "../game/stage";
 import type { UpgradeCard } from "../game/types";
 import { makeOffer } from "../game/upgrades";
@@ -493,6 +493,36 @@ const ORBITALS: Record<string, { hero: string; base: string; evo?: string }> = {
   eternal_tea_party: { hero: "pudding", base: "teapot_tempest", evo: "eternal_tea_party" },
 };
 
+/**
+ * The crowd:<hero> build on top of a warp's bot-picked one: the hero's signature weapon at max level and evolved
+ * (its evolution passive added when a slot is free), and every other maxed weapon whose passive is held evolved
+ * too, as the warp's chests would. Muted: no evolution celebration in the shot.
+ */
+function evolveBuild(w: World, evolve = true): string[] {
+  w.muted = true;
+  try {
+    const sig = w.hero.weapon;
+    const evo = WEAPONS.get(sig)?.evolution;
+    // (the warp's chests may have evolved it already)
+    if (!(evo && w.hasWeapon(evo.into))) {
+      const inst = w.hasWeapon(sig) ?? w.addWeapon(sig, 1);
+      if (inst) w.setWeaponLevel(inst, inst.def.levels.length);
+      if (inst && evo && evolve) {
+        if (w.passiveLevel(evo.with) <= 0) w.addPassive(evo.with, 1);
+        w.evolveWeapon(inst);
+      }
+    }
+    if (evolve)
+      for (const x of [...w.weapons]) {
+        const e = x.def.evolution;
+        if (e && x.level >= x.def.levels.length && w.passiveLevel(e.with) > 0 && !w.hasWeapon(e.into)) w.evolveWeapon(x);
+      }
+  } finally {
+    w.muted = false;
+  }
+  return w.weapons.map((x) => `${x.def.id}${x.def.evolved ? "*" : ""}:${x.level}`);
+}
+
 // ================================================================ registry
 type Run = (c: Ctx, arg: string) => Promise<void>;
 interface Kind {
@@ -703,6 +733,25 @@ const KINDS: Record<string, Kind> = {
       }
       await c.until(() => g.breaks > b0, "an orbital to break", 120, 6);
       c.mark(`${g.blocks} blocked, ${g.breaks} broke`);
+    },
+  },
+  crowd: {
+    group: "run",
+    desc: "a hero in a busy run with a full build (the hero-readability check's stress scenes), 2 s of live play: crowd:<hero> = late, a rich account at Shoujo Academy 10:00 (~level 24, bot-picked; the signature weapon evolved plus every maxed weapon whose passive is held); crowd:<hero>:mid = a mid account at 3:20, level 10, the signature weapon at its top level (the moment of the orbital-haze reports: the bloom limiter and the hero beacon only switch on at high glow load); add @<stage> for another stage (77 % / 26 % of the way to its final boss). Film them: crowd:kuro~120/15",
+    list: () => heroIds().flatMap((h) => [h, `${h}:mid`]),
+    run: async (c, a) => {
+      const [spec, st] = a.split("@");
+      const [hero, moment] = spec.split(":");
+      if (!HEROES.some((h) => h.id === hero) || (moment && moment !== "mid")) throw new Error(`crowd:<${heroIds().join("|")}>[:mid][@stage], got '${a}'`);
+      const stage = stageOf(st || "shoujo_academy");
+      const mid = moment === "mid";
+      useProfile(c, mid ? "mid" : "rich", hero);
+      const w = startRun(c, stage, hero);
+      if (mid) warp(c, w, Math.round(finalAt(stage) * 0.26), 10);
+      else warp(c, w, Math.round(finalAt(stage) * 0.77));
+      c.mark(`build ${evolveBuild(w, !mid).join(" ")}`);
+      // (the evolutions start firing and the director refills the screen around her)
+      await c.frames(120);
     },
   },
   speech: {

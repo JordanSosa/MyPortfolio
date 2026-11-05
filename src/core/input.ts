@@ -14,6 +14,7 @@
  *   input.deny("ult")                      little shake on the button
  *   input.markTouchesStale()               fingers currently down become "stale"...
  *   input.isFresh(e)                       ...so UI can ignore them (level-up cards!)
+ *   input.ownsPointer(id)                  the joystick finger or a DASH / OVERDRIVE finger (never a UI tap)
  *
  * The joystick follows the FINGER, not the moment it went down: every stick-capable pointer is tracked
  * (position, and whether it went down on a control) from pointerdown to pointerup / pointercancel. When
@@ -212,6 +213,10 @@ export class Input {
   /** Number of pointers currently down (any type). */
   get pointersDown(): number {
     return this.activePointers.size;
+  }
+  /** The pointer is a game control right now: the joystick finger, or a finger on DASH / OVERDRIVE. */
+  ownsPointer(id: number): boolean {
+    return (id === this.stickId && id >= 0) || this.btnPointers.has(id);
   }
 
   /** Request touch controls (they only appear on touch devices unless forced). */

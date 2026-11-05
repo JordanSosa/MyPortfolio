@@ -94,7 +94,8 @@ async function boot(): Promise<void> {
     (e) => {
       const t = e.target as HTMLElement | null;
       // allow scrolling inside scrollable menus only (hub pages / sheets / strips use .kscroll / .kscroll-x)
-      if (!t?.closest(".kscroll, .kscroll-x, .tabbar, .results, .pause-panel, .settings-panel, textarea")) e.preventDefault();
+      // (a held finger's moves while another one scrolls a panel are not cancelable: Chrome logs an intervention)
+      if (e.cancelable && !t?.closest(".kscroll, .kscroll-x, .tabbar, .results, .pause-panel, .settings-panel, textarea")) e.preventDefault();
     },
     { passive: false },
   );

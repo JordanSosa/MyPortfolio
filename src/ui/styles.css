@@ -96,6 +96,12 @@ img.px,
 #ui > .hud {
   pointer-events: none;
 }
+/* `#ui > *` has an ID's weight: a layer's own `.x.out { pointer-events: none }` loses to it, so a screen / modal /
+   overlay fading out caught taps for its whole fade (the splash for 240 ms: a tap or a swipe meant for the screen
+   fading in landed on it). Anything fading out of #ui is never hit-testable. (e2e "no fading layer catches taps") */
+#ui > .out {
+  pointer-events: none;
+}
 
 /* ------------------------------------------------------------- shared bits */
 .scr {
@@ -2632,6 +2638,41 @@ img.px,
 .set-row > span {
   font-size: 1.05em;
   text-shadow: var(--ol1);
+}
+/* the build label (tap it 7 times: developer mode, src/debug/dev.ts) and its little status toast */
+.set-build {
+  align-self: center;
+  padding: 0.9em 1.6em 0.6em;
+  font-size: 0.75em;
+  letter-spacing: 0.04em;
+  opacity: 0.55;
+}
+/* (at the top: the thumb tapping the label at the bottom must not cover it, nor it the label) */
+.set-devtoast {
+  position: absolute;
+  left: 50%;
+  top: calc(12px + var(--sat));
+  z-index: 2;
+  width: max-content;
+  max-width: min(24em, calc(100% - 24px));
+  padding: 0.45em 0.9em;
+  border-radius: 12px;
+  border: 2px solid var(--lav);
+  background: rgba(20, 12, 34, 0.95);
+  box-shadow: 0 0 0 2px var(--outline);
+  font-size: 0.85em;
+  text-align: center;
+  text-shadow: var(--ol1);
+  pointer-events: none;
+  opacity: 0;
+  transform: translate(-50%, -10px);
+  transition:
+    opacity 0.2s,
+    transform 0.2s;
+}
+.set-devtoast.on {
+  opacity: 1;
+  transform: translate(-50%, 0);
 }
 /* Settings controls: every hit box is at least 44 CSS px tall (MOB-06); the visible track is a
    pseudo-element centred inside it. */

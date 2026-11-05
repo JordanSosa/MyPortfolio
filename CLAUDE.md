@@ -47,7 +47,7 @@ Further docs:
 | A transient effect (an ult, a flash, a phase change) | film it: `npm run scenes -- --only "ult:kuro~180/15"` (a checked shot every 15 frames for 180) or `--film` | ~6 s |
 | Visual regressions | `npm run scenes -- --baseline` once, then `npm run scenes -- --diff` | |
 | A specific game state | `/?scenario=<name>&step=1`, then `__kk.step(n)` and `await __kk.snapshot()` (JSON). List: `await __kk.scenarios()` | <1 s |
-| Live state on a device | dev console: `?dev=1`, the `` ` `` key, or a 3-finger long-press | |
+| Live state on a device | dev console: `?dev=1` (also turns developer mode on for that browser), or in developer mode the `` ` `` key / a 3-finger long-press. Phone in the artifact viewer: Settings, tap the build label 7 times | |
 | A balance or difficulty answer | `npm run balance:lab` and what-ifs with `--set "boss.*.hp*=0.9"` | 10 s warm, 85 s cold |
 | Publishing the artifact | `npm run check:artifact` (the CSP boot check); publish `shots/artifact/kira-kira-overdrive.html` | 18 s |
 | A change to audio | `npm run check:audio` (phone cost budget + lite-profile shape, clipping, NaN; the profile each device gets; Android focus-loss recovery) | 18 s |
@@ -104,7 +104,11 @@ around it. `docs/DEVTOOLS.md` §8 shows how each check was proven against the Se
   - A thumb held through the level-up, or put back down in its 430 ms close delay, was ignored until lifted. A
     fading modal stayed hit-testable (`#ui > *` outranks `.modal.out`), so a tap there picked a second card.
   - The first fix let a resting second thumb take the stick when the steering thumb lifted. One stick per touch.
-  - `tests/input-touch.test.ts` (`npm test`); `node scripts/e2e.mjs --joystick` (real CDP multi-touch, ~35 s).
+  - Chromium sends no click for a tap made while another finger is down: with the stick held, the other thumb could
+    not pick a card, open a chest or press RESUME / pause. In-run layers go through `secondThumbTaps`
+    (`src/ui/screens/common.ts`); a fading layer (`#ui > .out`) never catches a tap.
+  - `tests/input-touch.test.ts`, `tests/ui-taps.test.ts` (`npm test`); `node scripts/e2e.mjs --joystick` (real CDP
+    multi-touch, ~60 s).
 - **Blackouts, murk, illegible text and placeholders.**
   - Kuro's first ETERNAL ABYSS read as "just black" on the owner's phone while headless shots looked merely
     moody (mean luminance 62-98). `npm run scenes` flags `murk`: in-run frames where more than 10 % of the

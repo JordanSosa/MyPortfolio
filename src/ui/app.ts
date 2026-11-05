@@ -64,7 +64,7 @@ import { openPause } from "./screens/pause";
 import { cashClaimable, showResults } from "./screens/results";
 import { openSettings } from "./screens/settings";
 import { showSplash } from "./screens/splash";
-import { markBorn } from "./screens/common";
+import { markBorn, secondThumbTaps } from "./screens/common";
 import { Tutorial } from "./tutorial";
 import { ScreenWake } from "./wake";
 import { Hub, type PageId, type PageOpts } from "./hub/hub";
@@ -209,6 +209,9 @@ export class App implements KitHost {
     this.ui = document.getElementById("ui") ?? document.body.appendChild(Object.assign(document.createElement("div"), { id: "ui" }));
     this.input = new Input();
     this.hud = new Hud(this.ui, () => this.pause());
+    // (a second thumb can pause while the other one steers: Chromium sends that tap no click)
+    const pauseBtn = this.hud.root.querySelector<HTMLElement>(".pause-btn");
+    if (pauseBtn) secondThumbTaps(pauseBtn, this.input);
     this.fpsMeter = new FpsMeter();
     this.auto = new AutoQuality(this.tier, (t, q) => {
       this.tier = t;
@@ -777,6 +780,8 @@ export class App implements KitHost {
     this.modal = m;
     this.modalKind = kind;
     markBorn();
+    // a tap with the other thumb while one holds the stick presses the card / button (Chromium sends it no click)
+    secondThumbTaps(m.el, this.input);
     if (m.layer) this.nav.push(m.layer);
     time.paused = true;
     this.input.showTouchControls(false);
@@ -847,6 +852,7 @@ export class App implements KitHost {
     // hub toasts never cover the panel: the ones on screen come back after DONE
     suspendToasts();
     markBorn();
+    secondThumbTaps(m.el, this.input);
     if (m.layer) this.nav.push(m.layer);
   }
 

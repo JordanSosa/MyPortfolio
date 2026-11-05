@@ -1,6 +1,7 @@
 // End-to-end smoke test: desktop, mobile portrait and mobile landscape.
-//   node scripts/e2e.mjs [--only desktop|portrait|landscape] [--out shots/e2e] [--keep-going] [--serial] [--joystick]
-// (the devices run in parallel, one browser each; --serial runs them one after another; --joystick runs only D, ~35 s)
+//   node scripts/e2e.mjs [--only desktop|portrait|landscape] [--out shots/e2e] [--keep-going] [--serial] [--joystick] [--devmode]
+// (the devices run in parallel, one browser each; --serial runs them one after another; --joystick runs only D, ~60 s;
+// --devmode runs only E, ~40 s; both flags: D and E)
 //
 // Per device:
 //   A) the real Season 2 flow with real taps / clicks: splash -> tap -> HUB home -> PLAY -> episode
@@ -16,7 +17,15 @@
 //      fading backdrop or a card), a second offer, a finger held on DASH, pointercancel, a tap on the closing
 //      modal, a resting second thumb while the stick thumb repositions (it must never take the stick).
 //      After each: the held finger steers (knob under it, the hero walks); no finger down = no move and
-//      no knob. (Season 3 owner bug: "the stick gets stuck after picking an upgrade".)
+//      no knob. (Season 3 owner bug: "the stick gets stuck after picking an upgrade".) Then SECOND-THUMB TAPS
+//      with the stick thumb held (Chromium sends such a tap no click): pick a level-up card (exactly one pick), a
+//      thumb held from the first offer never picks from the next, open + collect a chest (one step per tap), the
+//      HUD pause button, SETTINGS / DONE and RESUME; a drag over the pause panel presses nothing; the narrator
+//      caption and the Plot Point toast never catch a tap.
+//   E) (mobile) developer mode: without it a 3-finger long-press and the ` key never open the dev console; 7 taps on
+//      the Settings build label switch it on (toast, kept across a reload: then the long-press opens the console)
+//      and off again; ?dev=1 turns it on (and opens the console), ?dev=0 off.
+// Every device also checks that no layer fading out of #ui (a screen, a modal: .out) is ever hit-testable.
 // Screenshots go to shots/e2e/<device>-<step>.png. Fails (exit 1) on any page error or
 // console.error, or when a step's expected state is not reached.
 import { parseArgs, startServer, launchBrowser, newPage, ensureDir } from "./lib.mjs";
@@ -27,7 +36,9 @@ const DEVICES = [
   { name: "desktop", opts: { w: 1280, h: 720 } },
   { name: "portrait", opts: { mobile: true } },
   { name: "landscape", opts: { mobile: true, landscape: true } },
-].filter((d) => (!args.only || args.only === d.name) && (!args.joystick || d.opts.mobile));
+].filter((d) => (!args.only || args.only === d.name) && ((!args.joystick && !args.devmode) || d.opts.mobile));
+/** --joystick / --devmode: run only the steps of D / E (both flags: both). */
+const ONLY_STEPS = [args.joystick && "joystick", args.devmode && "devmode"].filter(Boolean);
 const HEROES = ["hoshi", "rin", "mochi"];
 /** A progressed save v2 profile (sanitised on load like any other) for the hub-page steps. */
 const SEED = {
@@ -386,6 +397,231 @@ async function joystickSteps(browser, dev, step, rec) {
       await up(g);
       await idle("lifted");
     });
+
+    // ---- SECOND-THUMB TAPS (Chromium sends no click for a tap while another finger is down: src/ui/screens/common.ts
+    // secondThumbTaps presses the control on the fresh finger's pointerup). The stick thumb stays down throughout.
+    const centre = (sel) =>
+      page.evaluate((q) => {
+        const e = document.querySelector(q);
+        if (!e) return null;
+        const r = e.getBoundingClientRect();
+        return { x: Math.round(r.x + r.width / 2), y: Math.round(r.y + r.height / 2) };
+      }, sel);
+    /** count the cards the World is asked to apply (its own counter: (h) wrapped World.choose already) */
+    const countPicks = () =>
+      page.evaluate(() => {
+        const w = window.__kk.world;
+        if (!w.__chosenWrapped) {
+          const choose = w.choose.bind(w);
+          w.choose = (card) => {
+            w.__chosen++;
+            return choose(card);
+          };
+          w.__chosenWrapped = true;
+        }
+        w.__chosen = 0;
+      });
+    const picks = () => page.evaluate(() => window.__kk.world.__chosen);
+    await jstep("(j) the stick thumb held: a second thumb picks a level-up card, exactly once", async () => {
+      const f = await down(P1.x, P1.y);
+      await steers("before the level-up", f);
+      await levelUp();
+      await countPicks();
+      await tapAt(await cardAt(0));
+      await sleep(480);
+      await closed("level-up");
+      const n = await picks();
+      check(n === 1, `a second-thumb tap on a card applied ${n} cards (want 1)`);
+      await steers("after the pick", f, -40, 0);
+      await up(f);
+      await idle("lifted");
+    });
+    await jstep("(k) the stick thumb held: a thumb put down on the closing offer never picks from the next one", async () => {
+      const f = await down(P1.x, P1.y);
+      await drag(f, 30, 0);
+      await levelUp(2);
+      await countPicks();
+      await tapAt(await cardAt(0));
+      await sleep(150);
+      // (down during the 430 ms close delay; the second offer marks it stale)
+      const b = await down((await cardAt(1)).x, (await cardAt(1)).y);
+      await sleep(400);
+      await frames(30);
+      check((await state()).modal === "levelup", "no second offer");
+      await up(b);
+      await sleep(60);
+      await frames(3);
+      check((await picks()) === 1 && (await state()).modal === "levelup", `a thumb held from the first offer picked from the second (${await picks()} picks)`);
+      await tapAt(await cardAt(0));
+      await sleep(480);
+      await closed("level-up");
+      const n = await picks();
+      check(n === 2, `two level-ups, ${n} cards applied`);
+      await steers("after both picks", f, 0, 40);
+      await up(f);
+      await idle("lifted");
+    });
+    await jstep("(l) the stick thumb held: a second thumb opens the chest (one step per tap) and collects it", async () => {
+      const f = await down(P1.x, P1.y);
+      await drag(f, 30, 0);
+      await page.evaluate(() => window.__kk.chest(true));
+      for (let i = 0; i < 6 && (await state()).modal !== "chest"; i++) await frames(20);
+      check((await state()).modal === "chest", "no chest modal");
+      // the reels are spinning: a tap lands them and reveals the cards, but does not close the chest
+      await frames(100);
+      const mid = { x: Math.round(vp.width / 2), y: Math.round(vp.height / 2) };
+      await tapAt(mid);
+      await frames(3);
+      const rev = await page.evaluate(() => ({ modal: window.__kk.modal, revealed: !!document.querySelector(".chest-modal.revealed") }));
+      check(rev.modal === "chest" && rev.revealed, `a second-thumb tap on the spinning chest: ${JSON.stringify(rev)} (want it revealed and still open)`);
+      await frames(30);
+      await tapAt(mid);
+      await closed("chest");
+      await steers("after the chest", f, 0, -40);
+      await up(f);
+      await idle("lifted");
+    });
+    await jstep("(m) the stick thumb held: the HUD pause button, SETTINGS / DONE and RESUME by a second thumb; a drag presses nothing", async () => {
+      const f = await down(P1.x, P1.y);
+      await steers("steering", f);
+      await tapAt(await centre(".hud .pause-btn"));
+      await frames(20);
+      check((await state()).modal === "pause", "a second-thumb tap on the HUD pause button did not pause");
+      await sleep(320); // (markBorn: taps in the first 300 ms of a screen are ghost taps)
+      // a drag that starts on RESUME (a scroll of the panel) never resumes
+      const res = await centre('.pause [data-act="resume"]');
+      const g = await down(res.x, res.y);
+      for (let i = 1; i <= 4; i++) await move(g, res.x, res.y + 12 * i);
+      await flush();
+      await up(g);
+      await sleep(60);
+      await frames(3);
+      check((await state()).modal === "pause", "a drag over the pause panel resumed the run");
+      await tapAt(await centre('.pause [data-act="settings"]'));
+      await frames(3);
+      check(await page.evaluate(() => !!document.querySelector(".modal.settings:not(.out)")), "a second-thumb tap on SETTINGS did not open the settings panel");
+      await sleep(320);
+      await tapAt(await centre('.settings [data-act="done"]'));
+      await frames(3);
+      check(await page.evaluate(() => !document.querySelector(".modal.settings:not(.out)")), "a second-thumb tap on DONE did not close the settings panel");
+      await sleep(320);
+      await tapAt(await centre('.pause [data-act="resume"]'));
+      await closed("pause");
+      await steers("after the pause menu", f, 40, 0);
+      await up(f);
+      await idle("lifted");
+    });
+    await jstep("(n) the narrator caption and the Plot Point toast never catch a tap", async () => {
+      const pe = await page.evaluate(() =>
+        [".narr", ".ptoast"].map((q) => {
+          const e = document.querySelector(`#ui > ${q}`);
+          return e ? `${q} ${getComputedStyle(e).pointerEvents}` : `${q} missing`;
+        }),
+      );
+      check(pe.every((x) => x.endsWith(" none")), `display-only layers are hit-testable (or missing): ${pe.join(", ")}`);
+    });
+  } finally {
+    rec.errors.push(...page.__logs.filter((l) => l.startsWith("[pageerror]") || l.startsWith("[error]")));
+    await cdp?.detach().catch(() => {});
+    await page.context().close();
+  }
+}
+
+/**
+ * E) developer mode (src/debug/devmode.ts): the hidden dev console gestures work only once it is on. Its own context
+ * (empty storage), a phone page on run:early in step mode; the 3-finger long-press is real CDP multi-touch and the
+ * Settings build label gets real taps.
+ */
+async function devModeSteps(browser, dev, step, rec) {
+  const page = await newPage(browser, dev.opts);
+  let cdp = null;
+  try {
+    const check = (ok, msg) => {
+      if (!ok) throw new Error(msg);
+    };
+    const load = async (q = "") => {
+      await page.goto(`${url}/?scenario=run:early&step=1&mute=1${q}`, { waitUntil: "load" });
+      await waitFor(page, () => ["ready", "error"].includes(document.documentElement.dataset.kkScenario), null, 60000, "run:early");
+      await cdp?.detach().catch(() => {});
+      cdp = await page.context().newCDPSession(page);
+      await page.evaluate(() => window.__kk.step(10));
+    };
+    const consoleOpen = () =>
+      page.evaluate(() => {
+        const k = document.querySelector(".kkd");
+        return !!k && k.isConnected && k.style.display !== "none";
+      });
+    /** the console opens (lazy chunk: allow it a few seconds) / stays shut (give it 1.5 s to prove it) */
+    const expectConsole = async (open, label) => {
+      if (open) await waitFor(page, () => !!document.querySelector(".kkd") && document.querySelector(".kkd").style.display !== "none", null, 10000, `${label}: the dev console to open`);
+      else {
+        await sleep(1500);
+        check(!(await consoleOpen()), `${label}: the dev console opened`);
+      }
+    };
+    const stored = () => page.evaluate(() => localStorage.getItem("kko.devmode.v1"));
+    const longPress = async (ms = 900) => {
+      const vp = page.viewportSize();
+      const pts = [0.3, 0.5, 0.7].map((k, i) => ({ x: Math.round(vp.width * k), y: Math.round(vp.height * 0.55), id: 70 + i, radiusX: 4, radiusY: 4, force: 1 }));
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchStart", touchPoints: pts });
+      await sleep(ms);
+      await cdp.send("Input.dispatchTouchEvent", { type: "touchEnd", touchPoints: [] });
+    };
+    /** pause -> SETTINGS -> 7 taps on the build label -> the toast; DONE -> RESUME */
+    const sevenTaps = async () => {
+      await page.evaluate(() => window.__kk.pause());
+      await page.evaluate(() => window.__kk.step(5));
+      await sleep(350); // (markBorn: the first 300 ms of a screen ignore taps)
+      await page.locator('.pause [data-act="settings"]').tap();
+      await page.evaluate(() => window.__kk.step(5));
+      await sleep(350);
+      for (let i = 0; i < 7; i++) await page.locator(".settings .set-build").tap();
+      const toast = await page.evaluate(() => document.querySelector(".settings .set-devtoast.on")?.textContent ?? "");
+      await page.locator('.settings [data-act="done"]').tap();
+      await page.evaluate(() => window.__kk.step(5));
+      await sleep(350);
+      await page.locator('.pause [data-act="resume"]').tap();
+      await page.evaluate(() => window.__kk.step(20));
+      return toast;
+    };
+    await step("devmode: off by default, a 3-finger long-press / the ` key never open the console", async () => {
+      await load();
+      check((await stored()) === null, "developer mode stored in a fresh browser");
+      await longPress();
+      await expectConsole(false, "a 3-finger long-press without developer mode");
+      await page.keyboard.press("Backquote");
+      await expectConsole(false, "the ` key without developer mode");
+    });
+    await step("devmode: 7 taps on the Settings build label switch it on (toast; kept across a reload)", async () => {
+      const toast = await sevenTaps();
+      check(/Developer mode ON/.test(toast), `no "Developer mode ON" toast (got "${toast}")`);
+      check((await stored()) === "1", "developer mode was not kept");
+      await longPress();
+      await expectConsole(true, "a 3-finger long-press in developer mode");
+      await page.evaluate(() => window.__kk.dev(false));
+      await load();
+      await longPress();
+      await expectConsole(true, "a 3-finger long-press after a reload");
+      await page.evaluate(() => window.__kk.dev(false));
+      await page.keyboard.press("Backquote");
+      await expectConsole(true, "the ` key in developer mode");
+      await page.evaluate(() => window.__kk.dev(false));
+    });
+    await step("devmode: 7 more taps switch it off; ?dev=1 on (console at boot), ?dev=0 off", async () => {
+      await load();
+      const toast = await sevenTaps();
+      check(/Developer mode OFF/.test(toast), `no "Developer mode OFF" toast (got "${toast}")`);
+      check((await stored()) === null, "developer mode still stored");
+      await longPress();
+      await expectConsole(false, "a 3-finger long-press after switching it off");
+      await load("&dev=1");
+      await expectConsole(true, "?dev=1");
+      check((await stored()) === "1", "?dev=1 did not keep developer mode");
+      await load("&dev=0");
+      check((await stored()) === null, "?dev=0 did not switch developer mode off");
+      await longPress();
+      await expectConsole(false, "a 3-finger long-press after ?dev=0");
+    });
   } finally {
     rec.errors.push(...page.__logs.filter((l) => l.startsWith("[pageerror]") || l.startsWith("[error]")));
     await cdp?.detach().catch(() => {});
@@ -399,8 +635,37 @@ async function runDevice(di, browser) {
   results[di] = rec;
   const T0 = Date.now();
   const page = await newPage(browser, dev.opts);
+  // every layer that starts fading out of #ui (.out: a screen, a modal, an overlay) must stop catching taps at once:
+  // `#ui > *` has an ID's weight, so a bare `.x.out { pointer-events: none }` lost to it (the splash kept eating taps)
+  // (reported through a binding: the page navigates between the flows)
+  const fadeHits = [];
+  await page.exposeFunction("__kkFadeHit", (s) => fadeHits.push(s));
+  await page.addInitScript(() => {
+    const seen = new WeakSet();
+    // (only #ui's own children are watched, not their subtrees: the HUD changes classes every frame)
+    const kids = new MutationObserver((list) => {
+      for (const m of list) {
+        const el = m.target;
+        if (el.parentElement?.id !== "ui" || seen.has(el) || !el.classList.contains("out")) continue;
+        seen.add(el);
+        const pe = getComputedStyle(el).pointerEvents;
+        if (pe !== "none") void window.__kkFadeHit?.(`.${[...el.classList].join(".")} (pointer-events: ${pe})`);
+      }
+    });
+    const start = () => {
+      const ui = document.getElementById("ui");
+      if (!ui) return;
+      const watch = (el) => el.nodeType === 1 && kids.observe(el, { attributes: true, attributeFilter: ["class"] });
+      for (const c of ui.children) watch(c);
+      new MutationObserver((list) => {
+        for (const m of list) for (const n of m.addedNodes) watch(n);
+      }).observe(ui, { childList: true });
+    };
+    if (document.readyState === "loading") document.addEventListener("DOMContentLoaded", start);
+    else start();
+  });
   const step = async (name, fn) => {
-    if (args.joystick && !name.startsWith("joystick")) return;
+    if (ONLY_STEPS.length && !ONLY_STEPS.some((p) => name.startsWith(p))) return;
     const t0 = Date.now();
     try {
       await fn();
@@ -689,15 +954,26 @@ async function runDevice(di, browser) {
       await sleep(2600);
       await shot(page, dev.name, "16-results", rec);
     });
+    await step("no fading layer catches taps (every screen / modal that faded out of #ui above)", async () => {
+      if (fadeHits.length) throw new Error(`layers kept catching taps while fading out: ${[...new Set(fadeHits)].join(", ")}`);
+    });
   } catch {
     /* recorded */
   }
   // ---------------------------------------------------------------- D) the joystick across modals (mobile, own page)
   if (dev.opts.mobile) {
     try {
-      await joystickSteps(browser, dev, step, rec);
+      if (!ONLY_STEPS.length || ONLY_STEPS.includes("joystick")) await joystickSteps(browser, dev, step, rec);
     } catch {
       /* recorded */
+    }
+    // ---------------------------------------------------------------- E) developer mode (mobile, own page)
+    if (!ONLY_STEPS.length || ONLY_STEPS.includes("devmode")) {
+      try {
+        await devModeSteps(browser, dev, step, rec);
+      } catch {
+        /* recorded */
+      }
     }
   }
   const errs = [...rec.errors, ...page.__logs.filter((l) => l.startsWith("[pageerror]") || l.startsWith("[error]"))];

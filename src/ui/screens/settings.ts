@@ -16,15 +16,23 @@
  * DIAGNOSTICS (next to DONE, also mid-run): copies the device / fps / audio /
  * errors report of src/debug/diag.ts for a bug report (a selectable box when
  * the host blocks the clipboard).
+ * The build label under the buttons: tap it 7 times to switch DEVELOPER MODE
+ * (src/debug/devmode.ts: only then do a 3-finger long-press and the ` key open the
+ * dev console; a phone in the artifact viewer cannot add ?dev=1), with a toast.
  */
 import type { App, UiScreen } from "../app";
-import { copyText, diagnosticsText } from "../../debug/diag";
+import { devMode, setDevMode } from "../../debug/devmode";
+import { buildLabel, copyText, diagnosticsText } from "../../debug/diag";
 import { esc, fmtInt, h } from "../dom";
 import { confirmDialog } from "../kit/overlay";
 import { save, type Settings } from "../save";
 import { layer, onTap } from "./common";
 
 type Key = keyof Settings;
+
+/** Taps on the build label that switch developer mode, each within DEV_TAP_GAP ms of the last. */
+const DEV_TAPS = 7;
+const DEV_TAP_GAP = 1500;
 
 export function openSettings(app: App, onClose: () => void): UiScreen {
   const el = h("div", "modal settings");
@@ -83,7 +91,9 @@ export function openSettings(app: App, onClose: () => void): UiScreen {
       </div>
       <textarea class="ss-text" data-ta="diag" readonly hidden aria-label="Diagnostics report"></textarea>
       <div class="btn-row" style="margin-top:.6em"><button class="btn small" data-nav data-nav-default data-act="done">✓ DONE</button><button class="btn small ghost" data-nav data-act="diag" aria-label="Copy diagnostics for a bug report">⧉ DIAGNOSTICS</button></div>
-    </div>`;
+      <div class="set-build" data-tap>${esc(buildLabel())}</div>
+    </div>
+    <div class="set-devtoast" role="status" aria-live="polite"></div>`;
   app.ui.appendChild(el);
 
   /** Apply a setting live; `persist` false while a slider is being dragged (saved on release). */
@@ -334,6 +344,34 @@ export function openSettings(app: App, onClose: () => void): UiScreen {
         ta.select();
       }
     });
+  });
+
+  // ---- developer mode: 7 taps on the build label (the last 3 count down in the toast)
+  const devToast = el.querySelector(".set-devtoast") as HTMLElement;
+  let toastT: ReturnType<typeof setTimeout> | undefined;
+  const say = (text: string) => {
+    devToast.textContent = text;
+    devToast.classList.add("on");
+    clearTimeout(toastT);
+    toastT = setTimeout(() => devToast.classList.remove("on"), 2600);
+  };
+  let devTaps = 0;
+  let lastTap = -1e9;
+  onTap(el.querySelector(".set-build"), () => {
+    const now = performance.now();
+    devTaps = now - lastTap < DEV_TAP_GAP ? devTaps + 1 : 1;
+    lastTap = now;
+    const on = devMode();
+    if (devTaps >= DEV_TAPS) {
+      devTaps = 0;
+      setDevMode(!on);
+      app.sfx(on ? "uiBack" : "uiConfirm");
+      say(on ? "Developer mode OFF" : "Developer mode ON: hold 3 fingers on the screen (or press `) for the dev console");
+    } else if (devTaps > DEV_TAPS - 4) {
+      const left = DEV_TAPS - devTaps;
+      app.sfx("uiMove");
+      say(`${left} more tap${left === 1 ? "" : "s"} to turn developer mode ${on ? "off" : "on"}`);
+    }
   });
 
   const L = layer(el, close);

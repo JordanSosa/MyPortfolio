@@ -125,6 +125,13 @@ export function buildInfo(): string {
   return b ? `${b.version} · ${b.commit} · ${b.date} · ${mode}` : `${mode} (no build stamp)`;
 }
 
+/** Short build label (the Settings footer): "v0.1.0 · e96d843", plus the mode outside a production build. */
+export function buildLabel(): string {
+  const b = typeof __KK_BUILD__ !== "undefined" ? __KK_BUILD__ : undefined;
+  const mode = import.meta.env.DEV ? " · dev" : import.meta.env.MODE === "single" ? " · single-file" : "";
+  return b ? `v${b.version} · ${b.commit}${mode}` : `build${mode}`;
+}
+
 let glInfo: string | null = null;
 /** WebGL renderer string (unmasked where the browser allows), version, limits. */
 export function glString(app: App): string {

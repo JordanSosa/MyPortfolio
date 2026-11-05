@@ -208,7 +208,8 @@ src/
     perf.ts            frame profiler (always on: per-phase CPU ring + 60 s histogram; App.frame laps it)
     diag.ts            error / warning ring, context losses, the "Copy diagnostics" text + clipboard fallback
     dev.ts             developer suite entry: ?step=1 step mode (__kk.step / render / freeze), ?scenario=, ?dev=1,
-                       the ` key + 3-finger long-press, lazy loaders (docs/DEVTOOLS.md §3)
+                       lazy loaders (docs/DEVTOOLS.md §3)
+    devmode.ts         developer mode (kept per browser): only then do the ` key + 3-finger long-press open the console
     scenarios.ts       named scenarios (warp, sandboxed account runs) + snapshot.ts (__kk.snapshot JSON); lazy chunk
     profiles.ts        seeded profiles (tools/checkpoints.ts) + the save sandbox; lazy chunk
     console/           the dev console overlay (Perf / Run / Audio / Acct / Scn / Log tabs); lazy chunk
@@ -1219,7 +1220,7 @@ npm run test:slow              # tests tagged { tags: ["slow"] }: full stage run
 npm run test:all               # both (the pre-split `npm test`): unit + headless bot runs, bosses, ults, determinism,
                                # run integrity, AutoQuality / save validation / fmtNum (tests/quality.test.ts)
                                # (testTimeout 60 s, 240 s for "slow": the full-run sims take 5-9 s on a loaded machine)
-node scripts/e2e.mjs           # (~4.5 min: the 3 devices in parallel, one browser each; --joystick ~35 s)
+node scripts/e2e.mjs           # (~4.5 min: the 3 devices in parallel, one browser each; --joystick ~60 s, --devmode ~60 s)
                                # desktop + mobile portrait + mobile landscape: splash -> hub -> PLAY -> episodes -> loadout
                                # -> START EPISODE -> run -> quit -> Episode Results -> hub; hub pages (board buy, talents,
                                # pull, wiki, settings export, Android Back); autoplay level-up / chest / pause / results

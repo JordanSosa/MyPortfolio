@@ -312,6 +312,12 @@ body.reduce-flash .ept-flash {
   transition: transform 0.35s cubic-bezier(0.2, 1.3, 0.4, 1), opacity 0.25s;
   contain: layout paint;
 }
+/* (`#ui > *` has an ID's weight: without this the caption, and the Plot Point toast below, were hit-testable even
+   while invisible) */
+#ui > .narr,
+#ui > .ptoast {
+  pointer-events: none;
+}
 .narr.on {
   opacity: 1;
   transform: translate(-50%, 0);
