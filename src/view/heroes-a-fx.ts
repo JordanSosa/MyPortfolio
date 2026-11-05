@@ -385,27 +385,26 @@ export class HeroesAFx {
   }
 
   // ---------------------------------------------------------------- Kuro
-  /** A familiar's breath: a stream of flame puffs along the cone (30/s), a glow at the mouth. */
+  /**
+   * A familiar's breath: a stream of flame puffs filling the cone (36/s; the emitter's spread matches the
+   * 22 deg half-angle and its speed scales with the cone length) and a flickering glow at the mouth.
+   * (No continuous band under the puffs: a soft additive streak there bloomed into a smooth orange shaft
+   * that read as a flashlight beam, not fire - owner report.)
+   */
   private breath(p: Projectile, i: number, dt: number): void {
     if (p.a <= 0 || dt <= 0 || i >= this.breathAcc.length) return;
     const black = p.b === 1 || p.source === ABYSS;
     const mx = p.x + Math.cos(p.ang) * 5;
     const my = p.y + Math.sin(p.ang) * 5;
-    const rate = p.source === ABYSS ? 34 : 30;
+    const rate = p.source === ABYSS ? 40 : 36;
     this.breathAcc[i] += rate * dt;
     const n = Math.floor(this.breathAcc[i]);
     if (n > 0) {
       this.breathAcc[i] -= n;
       this.fx.ps.emit(black ? flameBlack : flameOrange, mx, my, n, p.ang, -1, 1, p.hh / 64);
     }
-    // the cone itself: a soft streak under the puffs so the breath reads even between them
-    const L = p.hh * 0.8;
-    const cx = mx + Math.cos(p.ang) * L * 0.5;
-    const cy = my + Math.sin(p.ang) * L * 0.5;
-    const wob = 1 + 0.12 * Math.sin(this.now * 31 + p.uid);
-    if (black) this.r.spr(Layer.FxBelow, this.hStreak, cx, cy, L / 16, 2.6 * wob, p.ang, C.darkViolet, 0.32, 0, Flag.NoSnap);
-    else this.r.spr(Layer.FxAdd, this.hStreak, cx, cy, L / 16, 2.2 * wob, p.ang, C.orange, 0.3, 0, Flag.Add | Flag.Glow | Flag.NoSnap);
-    this.r.glow(mx, my, 7, black ? C.violet : C.orange, black ? 0.3 : 0.4);
+    const flick = 0.75 + 0.25 * Math.sin(this.now * 37 + p.uid);
+    this.r.glow(mx, my, 7, black ? C.violet : C.orange, (black ? 0.3 : 0.4) * flick);
   }
 
   private drawBeam(p: Projectile, time: number): void {
