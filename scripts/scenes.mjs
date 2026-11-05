@@ -2,7 +2,7 @@
 // (--jobs, default 4); every shot is a named scenario reached in step mode (/?scenario=<name>&step=1: no
 // wall-clock waits), measured, flagged, and laid out on one contact sheet.
 //
-//   npm run scenes                                  the key screens (29, Kuro's ult filmed) on i13 + desktop
+//   npm run scenes                                  the key screens (30; Kuro's ult and a crowd filmed) on i13 + desktop
 //   npm run scenes -- --only boss:,ult:             scenarios whose name starts with one of these (or equals one)
 //   npm run scenes -- --only "ult:kuro~180/15"      a FILM: the scenario, then a checked shot every 15 frames for 180
 //                                                   (transient effects: an ult's shadow pass, a flash, a phase change)
@@ -12,7 +12,7 @@
 //                                                   scene is loaded twice and its load-to-load diff kept as its noise floor
 //   npm run scenes -- --diff                        compare against the baseline: perceptual pixel diff % per shot (a
 //                                                   <name>.diff.png per changed shot; warning > 0.5 %, error > 10 %)
-//   npm run scenes -- --quick                       an 11-scene smoke subset on one device (doctor --scenes)
+//   npm run scenes -- --quick                       a 12-scene smoke subset on one device (doctor --scenes)
 //   npm run scenes -- --self-test                   inject each fault (blackout, whiteout, overflow, sideways scroll,
 //                                                   placeholder art, page error, murk, illegible text, a white haze
 //                                                   over the hero) into one scene: all must be flagged
@@ -220,12 +220,17 @@ export const PROBE = async ({ lite = false, contrast = 1.5, heroR = 20, blame = 
     const ghosts = app.fx.ghosts;
     // her recorded draws replayed alone (bloom off: nothing glows, so its blur passes would add nothing), and the
     // same frame with nothing drawn: the empty background under the same grade, vignette, shockwaves and flash
+    // (only her own frame: the handle and scale the view drew her with this frame, as her sprite and the beacon reuse
+    // them. Final Arc's shadow clones draw her own sprites with a violet rim: one standing on her passed the position
+    // test and its squashed silhouette counted as part of her, a false error)
+    const v = g.view;
+    const own = v?.heroH ? ctx.draws.filter((d) => d[1] === v.heroH && d[4] === v.heroSx && d[5] === v.heroSy) : ctx.draws;
     const bloomWas = r.post.bloomEnabled;
     let clean, empty;
     try {
       r.post.bloomEnabled = false;
       r.beginFrame(0);
-      for (const d of ctx.draws) b.drawP(...d);
+      for (const d of own) b.drawP(...d);
       r.endFrame();
       clean = read();
       r.beginFrame(0);

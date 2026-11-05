@@ -106,6 +106,12 @@ describe("what carries Flag.Focus", () => {
     expect(by.get(Layer.FxAdd)).toBe(true);
     expect(by.get(Layer.FxBelow)).toBe(false);
     expect(by.get(Layer.Decal)).toBe(false);
+    // her own look (Kuro's familiars' breath, Warm Tea steam) opts out: drawn as is over her
+    draws.length = 0;
+    ps.clear();
+    ps.emit({ ...def, focus: false }, 0, 0, 1, NaN, -1, 1, 1, Layer.Fx);
+    ps.draw();
+    expect(draws.map((d) => (d.flags & Flag.Focus) !== 0)).toEqual([false]);
   });
 
   test("an enemy's white death pop does; the hero's dash afterimages sort under every entity instead", () => {

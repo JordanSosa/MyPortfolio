@@ -221,7 +221,9 @@ So the player's fx fade **per pixel** over her body instead:
   sparks counted by size down to a quarter): `calm` (0.6) on a quiet screen,
   `busy` (0.12) from `to` (6) on. It rises in the same frame (the load is known
   before the GPU draws, so a blast's first white frame is already faded) and
-  eases back over ~0.4 s.
+  eases back over ~0.4 s. In practice her own shots, hits, kills and pickups
+  keep the load above `to` in most of a fight: in `run:early` the busy level sat
+  above half in 75-100 % of 300 frames for every hero, so `calm` is the exception.
 - The composite cuts the glow core and bloom over her by up to
   `r.post.focusBloomCut` (0.7) x that busy level, within `focusR0` / `focusR1`
   (12 / 34 art px), so the bloom of a blast just outside the zone does not fog
@@ -233,7 +235,10 @@ So the player's fx fade **per pixel** over her body instead:
   stays crisp, so what is about to hit her reads). Not flagged: her own
   deliberate looks (orbitals such as Mochi's yarn, weapons anchored on her, the
   shield bubble, the Overdrive-ready aura, Warm Tea, ult overlays, the henshin
-  flash), telegraphs, enemy bullets and boss attacks.
+  flash) and the particles that are part of them (`EmitterDef.focus: false`:
+  Kuro's familiars' breath, which otherwise started mid-air beside her head,
+  Warm Tea's steam and heart, a teapot's pour), telegraphs, enemy bullets and
+  boss attacks.
 - Cost: one `length()` + `smoothstep` per flagged fragment (a branch skips the
   rest), one per composite pixel while busy, and a few flops per flagged draw on
   the CPU. No extra pass. On SwiftShader (CPU raster, so fragment work shows as

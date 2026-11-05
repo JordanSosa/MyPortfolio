@@ -73,6 +73,11 @@ export interface EmitterDef {
   sway?: number;
   /** Flash-to-white at birth fading over the first 30% of life (0..1). */
   flash?: number;
+  /**
+   * false: part of the hero's own look (a familiar's breath, Warm Tea steam, a teapot's pour), so never faded over
+   * her by the hero focus zone (SpriteBatch.focus) and never counted in its load. Default: faded on Fx / FxAdd.
+   */
+  focus?: boolean;
 }
 
 interface Compiled {
@@ -87,6 +92,8 @@ interface Compiled {
   end: number;
   flags: number;
   layer: number;
+  /** Fades over the hero on the fx layers (EmitterDef.focus). */
+  focus: boolean;
   sizeCurve: number;
   alphaCurve: number;
   rotMode: number; // 0 fixed 1 random 2 velocity
@@ -268,6 +275,7 @@ export class Particles {
       end: def.colorEnd ?? 0xffffff,
       flags,
       layer: def.layer ?? (def.additive ? Layer.FxAdd : Layer.Fx),
+      focus: def.focus !== false,
       sizeCurve: CURVES[def.sizeCurve ?? "linear"],
       alphaCurve: ACURVES[def.alphaCurve ?? "late"],
       rotMode: def.rot === "random" ? 1 : def.rot === "velocity" ? 2 : 0,
@@ -299,7 +307,7 @@ export class Particles {
     const lay = layer >= 0 ? layer : c.layer;
     let flags = c.flags;
     if (lay === Layer.FxAdd) flags |= F_ADD;
-    if (lay === Layer.Fx || lay === Layer.FxAdd) flags |= F_FOCUS;
+    if (c.focus && (lay === Layer.Fx || lay === Layer.FxAdd)) flags |= F_FOCUS;
     for (let k = 0; k < total; k++) {
       let i: number;
       if (this.count < this.capacity) i = this.count++;

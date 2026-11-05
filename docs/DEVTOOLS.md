@@ -377,7 +377,10 @@ Notes on the checks:
   the same frame with nothing drawn (`HERO_FINISH`; no game or view code runs): where the two differ is her
   silhouette, and the replay's colours are how she looks with nothing over her (same grade, dim, flash, shockwaves).
   The first version estimated the empty background from the box's border columns; a shockwave's bright rim
-  crossing the box became part of "her", and Final Arc frames where she reads fine scored -56 to 22. `keep` = the least-squares slope of frame luminance on clean luminance
+  crossing the box became part of "her", and Final Arc frames where she reads fine scored -56 to 22. Only the
+  calls with the frame handle and scale the view drew her with that frame are replayed: Final Arc's shadow clones
+  draw her own sprites with a violet rim, and one standing on her used to join her silhouette (a desktop
+  `boss:truck_kun_boss` frame scored 20 instead of 49, `boss:rival_chan` 46 instead of 66). `keep` = the least-squares slope of frame luminance on clean luminance
   over her pixels, x 100: a haze `a x her + (1 - a) x white` gives `a`; bloom adds and clips toward white; sparks on
   top add noise, not slope. Nothing in the run changes: seeded loads with and without the check give pixel-identical
   shots and film frames 30 steps on (`run:late`, `crowd:pudding:mid`, `orbital:yarn_orbit`, `stage:final_arc`,
@@ -395,23 +398,26 @@ Notes on the checks:
     drawn on top of her (MG#47 read as a flat pink silhouette). The glow load stayed under the bloom limiter's
     threshold, so the beacon never helped. The fix is the hero focus zone (docs/ENGINE.md: the player's fx fade per
     pixel over her body, the bloom over her is cut, afterimages go under the entities, a pile in front brings up the
-    beacon, banners start above her head). Same instrument on both trees (`keep` min / mean, errors, warnings):
+    beacon, banners start above her head). Same instrument on both trees (`keep` min / mean, frames under 35, frames
+    35-55):
 
     | Run (frames) | Before | After |
     | --- | --- | --- |
-    | `crowd:` x 11 heroes x late / mid, films 120/15, i13 (195) | 0 / 65, 30 errors, 22 warnings | 45 / 84, 0, 2 |
-    | the same on desktop (192) | -1 / 57, 47, 41 | 39 / 82, 0, 10 |
-    | `run:`, `stage:`, `boss:`, `orbital:`, films 60/15, i13 (155) | 0 / 73, 16, 20 | 42 / 88, 0, 4 |
-    | `ult:` x 22, films 240/20, i13 (286) | -2 / 73, 35, 26 | 21 / 87, 6, 13 |
-    | key set, i13 + desktop (68 in-run) | 4 / 69, 14, 3 | 59 / 90, 0, 0 |
+    | `crowd:` x 11 heroes x late / mid, films 120/15, i13 (195) | 0 / 65, 30, 22 | 45 / 83, 0, 4 |
+    | the same on desktop (192) | -1 / 57, 47, 41 | 40 / 81, 0, 11 |
+    | `run:`, `stage:`, `boss:`, `orbital:`, films 60/15, i13 (155) | 0 / 73, 16, 20 | 40 / 88, 0, 6 |
+    | `ult:` x 22 but MG#47's, films 240/20, i13 (260) | 4 / 78, 12, 25 | 23 / 88, 2, 3 |
+    | key set, i13 + desktop (68 in-run) | 4 / 69, 14, 3 | 60 / 90, 0, 0 |
 
     The share of near-white pixels within 20 art px of her (`halo`) fell from 49 % to 33 % in the i13 crowd films,
-    while the frames' mean luminance moved by 0.5 (the spectacle away from her is untouched) and the darkest in-run
-    frame stayed at 6.7 % `murk` pixels. The six ult errors left are Magical Girl #47's transformation and Isekai-kun's
-    STATUS SCREEN, which cover her on purpose, as Aoi's robot does at the end of hers; `OVERRIDES` relaxes `washout`
-    to 15 / 35 for those three ults (MG#47 and Isekai-kun scored -6 to 16 before the fix, so a regression still
-    fails). Every ult filmed to its end (`ult:<hero>~600/30`): the first frame after it ends scores 58-94 (before:
-    25-84), the rest of the film 47-90 at worst (before: 0-59).
+    while the frames' mean luminance moved by 0.5 (the spectacle away from her is untouched), and Kuro's filmed
+    ETERNAL ABYSS still peaks at 8.2 % `murk` pixels, as before. Orbitals and weapons anchored on her (Mochi's yarn,
+    Pudding's teapots) are not faded: fading them kept Mochi at 86-93 but turned her yarn into ghosts, so it was
+    reverted (she scores 70-79 with it). `OVERRIDES` treats three ults that cover her on purpose: MG#47's Episode Long
+    Transformation (a ring of her own orbiting ribbons for the whole ult: reported as a warning, never failed),
+    Isekai-kun's STATUS SCREEN and the end of Aoi's GET IN THE ROBOT (error under 15: their worst frames are 18-24).
+    Every ult filmed to its end (`ult:<hero>~600/30`): the first frame after it ends scores 58-94 (before: 25-84), the
+    rest of the film 48-88 at worst (before: 0-59).
   - Regression guard: the key set films `crowd:magical_girl_47:mid~120/15` (before the fix: 10 errors over i13 and
     desktop) and `--quick` (so `doctor --scenes`) films `crowd:kuro:mid~120/30` (before: 2 errors).
   - `--blame [N]` (default 12) explains a flagged frame: one recording render notes every draw's call site (stack

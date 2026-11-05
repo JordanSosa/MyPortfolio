@@ -92,6 +92,8 @@ const flameOrange: EmitterDef = {
   drag: 1.6,
   alphaCurve: "late",
   layer: Layer.Fx,
+  // (her familiars' breath is her look: not faded over her by the hero focus zone, or the stream started mid-air)
+  focus: false,
 };
 const flameBlack: EmitterDef = { ...flameOrange, sprite: "w_abyss_fire", size: [1, 1.9] };
 const darkSparkle: EmitterDef = { ...P.sparkle, speed: [6, 26], life: [0.4, 0.8], colors: [C.darkViolet, C.violet, C.deep], additive: false, glow: false, layer: Layer.Fx };
@@ -141,11 +143,12 @@ const teaDrop: EmitterDef = {
   alphaCurve: "late",
   layer: Layer.Fx,
 };
-const pourDrop: EmitterDef = { ...teaDrop, speed: [2, 8], angle: PI / 2, spread: 0.3, gravity: 260, life: [0.18, 0.26], bounce: undefined };
+// (the pour, the steam and the heart are her teapots' and her Warm Tea's look: focus false, never faded over her)
+const pourDrop: EmitterDef = { ...teaDrop, speed: [2, 8], angle: PI / 2, spread: 0.3, gravity: 260, life: [0.18, 0.26], bounce: undefined, focus: false };
 /** Warm Tea: amber steam curling off her shoulders while it lasts. */
-const warmSteam: EmitterDef = { ...steam, colors: [0xffe2a8, C.white], alpha: 0.5, speed: [6, 14], life: [0.6, 0.9] };
+const warmSteam: EmitterDef = { ...steam, colors: [0xffe2a8, C.white], alpha: 0.5, speed: [6, 14], life: [0.6, 0.9], focus: false };
 /** Warm Tea: a tiny tea-coloured heart floating up off her now and then. */
-const warmHeart: EmitterDef = { ...P.hearts, speed: [10, 20], spread: 0.6, life: [0.55, 0.8], size: [0.55, 0.4], colors: [0xffd27a, C.pinkLight, 0xffe2a8] };
+const warmHeart: EmitterDef = { ...P.hearts, speed: [10, 20], spread: 0.6, life: [0.55, 0.8], size: [0.55, 0.4], colors: [0xffd27a, C.pinkLight, 0xffe2a8], focus: false };
 /** Warm Tea glow centre above her feet (the feet are under her sprite and HP bar) and its fade-out (s). */
 const WARM_CY = 9;
 const WARM_FADE = 0.6;
