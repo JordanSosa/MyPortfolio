@@ -1,0 +1,15 @@
+# Matrix verify-hoshi-nerf
+
+`--cells P0:dm,P1:dm,P2:dm --heroes hoshi --seeds 1-16 --variants /tmp/claude-0/-home-user-MyPortfolio/26872faf-ce0b-5b43-87b8-c1b9eff408d5/scratchpad/verify/v-hoshi.json --name verify-hoshi-nerf` (2026-11-03, dt 0.0333, 144 runs)
+
+| cell | n | clear | death (p25-p75) | bosses: fight s median [p25-p75] (killed/reached) | 1st lv | gap 0:20-3:00 (max) | gap max | lv 1/2/3/5/10 min | hp 1:30 / 2:00 | dmg 0-1:30 / 1:30-3:00 | kills/s m1-3 | alive m1-3 | deaths by | ms |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| P0 dm | 16 | 0% | 3:04 (2:45-3:52) | king puff 11 [5-72] (3/8); nightmare teddy 56 [56-56] (1/3); lady lunatic - [---] (0/1) | 1.5 | 10.4 (34) | 41 @2:27 | 9/12/14/29/64 | 89% / 83% | 22 / 60 | 9.1/11.3/10.1 | 37/79/139 | shroomiex7 bullet:eb_orbx3 teddyx2 | 552 |
+| P0 dm [ss75] | 16 | 6% | 2:58 (2:23-3:35) | king puff 25 [17-60] (3/7); nightmare teddy 60 [50-123] (3/3); lady lunatic 121 [121-121] (1/2) | 1.7 | 13.2 (39) | 48 @2:27 | 8/10/15/39/51 | 83% / 71% | 23 / 78 | 7.3/8.1/7.6 | 44/96/140 | bullet:eb_orbx5 shroomiex4 puffx4 | 521 |
+| P0 dm [ss85] | 16 | 19% | 5:06 (2:03-8:15) | king puff 18 [14-19] (9/11); nightmare teddy 55 [49-84] (8/9); lady lunatic 93 [87-149] (3/6) | 1.5 | 9.1 (24) | 39 @4:51 | 9/16/25/41/61 | 100% / 100% | 0 / 18 | 9.8/15.2/28.7 | 35/65/85 | batbunx2 teddyx2 shroomiex2 | 1601 |
+| P1 dm | 16 | 44% | 5:03 (4:42-7:22) | king puff 75 [34-102] (12/16); nightmare teddy 65 [55-94] (9/11); lady lunatic 82 [69-131] (7/8) | 1.5 | 8.8 (26) | 35 @5:31 | 10/14/20/33/57 | 100% / 100% | 0 / 15 | 12.1/14.4/17.6 | 28/67/123 | teddyx4 bullet:eb_orbx2 king_puffx1 | 3278 |
+| P1 dm [ss75] | 16 | 38% | 5:19 (3:31-8:03) | king puff 24 [11-64] (10/15); nightmare teddy 41 [29-64] (8/11); lady lunatic 77 [63-88] (6/6) | 1.5 | 8.1 (30) | 36 @2:44 | 11/16/22/36/76 | 100% / 100% | 0 / 8 | 11.6/13.9/21.6 | 29/70/108 | bullet:eb_orbx4 boox2 nightmare_teddyx1 | 2137 |
+| P1 dm [ss85] | 16 | 25% | 4:34 (4:05-5:12) | king puff 44 [16-87] (8/15); nightmare teddy 38 [30-47] (5/5); lady lunatic 81 [79-150] (4/5) | 1.5 | 9.3 (27) | 33 @2:56 | 10/15/18/32/60 | 100% / 100% | 0 / 12 | 11.6/15.9/15.3 | 29/62/128 | teddyx4 shroomiex3 boox1 | 852 |
+| P2 dm | 16 | 75% | 8:14 (5:08-11:55) | king puff 45 [7-92] (15/16); nightmare teddy 36 [22-60] (14/14); lady lunatic 80 [52-156] (12/14) | 1.2 | 9.8 (20) | 31 @4:28 | 11/17/22/35/77 | 100% / 100% | 0 / 0 | 14.1/19.2/22.1 | 25/57/108 | teddyx1 king_puffx1 pumpkinx1 | 5181 |
+| P2 dm [ss75] | 16 | 69% | 7:40 (6:08-11:27) | king puff 40 [7-87] (16/16); nightmare teddy 32 [27-67] (13/15); lady lunatic 82 [60-98] (11/13) | 1.2 | 6.3 (20) | 29 @5:00 | 11/20/28/37/70 | 100% / 100% | 0 / 0 | 14.1/20.6/34.7 | 25/54/76 | teddyx2 bullet:eb_orbx1 boox1 | 5035 |
+| P2 dm [ss85] | 16 | 63% | 10:04 (5:51-11:07) | king puff 36 [5-88] (16/16); nightmare teddy 29 [24-82] (12/14); lady lunatic 115 [50-161] (10/14) | 1.2 | 6.9 (24) | 33 @5:00 | 12/22/28/36/72 | 100% / 100% | 0 / 0 | 14.1/21.1/33.5 | 25/50/83 | bullet:eb_orbx2 teddyx2 pumpkinx1 | 5759 |
