@@ -324,7 +324,7 @@ npm run scenes -- --all --devices i13,i13l,se,desktop,w360 --jobs 4
 npm run scenes -- --only hud: --devices desktop,fhd,laptop,half   # desktop windows: 1280x720, 1920x1080, 1366x768, 683x768
 npm run scenes -- --baseline                     # store shots/scenes/baseline/ (+ a per-scene noise floor)
 npm run scenes -- --diff                         # perceptual pixel diff % per shot vs the baseline (+ .diff.png)
-npm run scenes -- --quick                        # 11 scenes, one device, Kuro's ult filmed: 21 shots (doctor --scenes)
+npm run scenes -- --quick                        # 12 scenes, one device, Kuro's ult + a crowd filmed: 26 shots (doctor --scenes)
 npm run scenes -- --self-test                    # inject every fault into one scene: each must be flagged
 npm run scenes -- --only crowd: --film 120/15 --devices i13      # every hero, filmed: the `washout` check's stress run
 npm run scenes -- --only "crowd:pudding:mid~60/30" --blame 12   # WHICH draws wash the hero out (see washout below)
@@ -372,10 +372,12 @@ Notes on the checks:
   scores under 4 %, and Kuro's old ETERNAL ABYSS scores 12-27 % during its shadow pass.
 - **`washout`** (the hero is lost in the fx). Mochi and Pudding mid-run (Shoujo Academy 3:20, level 10) sat inside
   a white / amber haze of hit sparks and pickup sparkles, and whole-frame checks cannot see that. Per in-run shot the
-  probe's real render records the hero's own draw calls (her Entity sprite and the hero beacon's redraw) and reads
-  the box around her back. After the screenshot, those calls alone are replayed (`HERO_FINISH`; no game or view code
-  runs): where that differs from its empty background is her silhouette, and its colours are how she looks with
-  nothing over her (same grade, dim, flash). `keep` = the least-squares slope of frame luminance on clean luminance
+  probe's real render records the hero's own draw calls (her Entity sprite and the hero beacon's redraw, not her
+  dash afterimages) and reads the box around her back. After the screenshot, those calls alone are replayed, then
+  the same frame with nothing drawn (`HERO_FINISH`; no game or view code runs): where the two differ is her
+  silhouette, and the replay's colours are how she looks with nothing over her (same grade, dim, flash, shockwaves).
+  The first version estimated the empty background from the box's border columns; a shockwave's bright rim
+  crossing the box became part of "her", and Final Arc frames where she reads fine scored -56 to 22. `keep` = the least-squares slope of frame luminance on clean luminance
   over her pixels, x 100: a haze `a x her + (1 - a) x white` gives `a`; bloom adds and clips toward white; sparks on
   top add noise, not slope. Nothing in the run changes: seeded loads with and without the check give pixel-identical
   shots and film frames 30 steps on (`run:late`, `crowd:pudding:mid`, `orbital:yarn_orbit`, `stage:final_arc`,
@@ -387,6 +389,31 @@ Notes on the checks:
     `keep` >= 70 shows her clearly; 35-55 = partly visible in haze; < 35 = gone (Mochi's Yarn Orbit 3-21, Pudding's
     Teapot Tempest 27, Kraken-chan 19, Final Arc 25, Aoi / MG#47 mid-ult 30 / 3). `ink` and `wash` were tried as the
     flag first and rejected: Isekai-kun and Truck-kun on a white bloom keep a grey outline that reads fine.
+  - What it found, and the fix. `--blame` named hit sparks, explosions (a Candy Bomb blast centred on her is a
+    white disc 150 px across), kill bursts, pickup sparkles, Galaxy Barrage stars, Truck-kun's light pillars, enemy
+    numbers, a "DON!" banner on her hair, hit-flashing enemies piled in front of her, and her own dash afterimage
+    drawn on top of her (MG#47 read as a flat pink silhouette). The glow load stayed under the bloom limiter's
+    threshold, so the beacon never helped. The fix is the hero focus zone (docs/ENGINE.md: the player's fx fade per
+    pixel over her body, the bloom over her is cut, afterimages go under the entities, a pile in front brings up the
+    beacon, banners start above her head). Same instrument on both trees (`keep` min / mean, errors, warnings):
+
+    | Run (frames) | Before | After |
+    | --- | --- | --- |
+    | `crowd:` x 11 heroes x late / mid, films 120/15, i13 (195) | 0 / 65, 30 errors, 22 warnings | 45 / 84, 0, 2 |
+    | the same on desktop (192) | -1 / 57, 47, 41 | 39 / 82, 0, 10 |
+    | `run:`, `stage:`, `boss:`, `orbital:`, films 60/15, i13 (155) | 0 / 73, 16, 20 | 42 / 88, 0, 4 |
+    | `ult:` x 22, films 240/20, i13 (286) | -2 / 73, 35, 26 | 21 / 87, 6, 13 |
+    | key set, i13 + desktop (68 in-run) | 4 / 69, 14, 3 | 59 / 90, 0, 0 |
+
+    The share of near-white pixels within 20 art px of her (`halo`) fell from 49 % to 33 % in the i13 crowd films,
+    while the frames' mean luminance moved by 0.5 (the spectacle away from her is untouched) and the darkest in-run
+    frame stayed at 6.7 % `murk` pixels. The six ult errors left are Magical Girl #47's transformation and Isekai-kun's
+    STATUS SCREEN, which cover her on purpose, as Aoi's robot does at the end of hers; `OVERRIDES` relaxes `washout`
+    to 15 / 35 for those three ults (MG#47 and Isekai-kun scored -6 to 16 before the fix, so a regression still
+    fails). Every ult filmed to its end (`ult:<hero>~600/30`): the first frame after it ends scores 58-94 (before:
+    25-84), the rest of the film 47-90 at worst (before: 0-59).
+  - Regression guard: the key set films `crowd:magical_girl_47:mid~120/15` (before the fix: 10 errors over i13 and
+    desktop) and `--quick` (so `doctor --scenes`) films `crowd:kuro:mid~120/30` (before: 2 errors).
   - `--blame [N]` (default 12) explains a flagged frame: one recording render notes every draw's call site (stack
     trace -> the first frame outside `src/render/`; particles by their sprite and, from the first blamed shot on,
     by the `ps.emit` call site that spawned them; projectiles by their weapon), then for the N sites scoring highest
@@ -397,8 +424,8 @@ Notes on the checks:
     `--blame --film 60/30`. ~2N+12 extra renders per shot; they run the view's draw code again (with particle
     spawns blocked, `Math.random`, `fxRng` and the view's `frameN` counters put back), after the screenshot.
   - `--hero-dump` writes `<name>.hero.png` (x4: the hero-only render, the frame, her mask) to check the check.
-  - Cost: one replayed render of a few sprites + two small read-backs per in-run shot (see Measured); `--no-hero`
-    skips it.
+  - Cost: two replayed renders (a few sprites, then nothing) + three small read-backs per in-run shot (see
+    Measured); `--no-hero` skips it.
 - **Films.** A scenario is one moment. A transient full-screen effect (an ult's shadow pass, a flash, a phase
   change) can sit between two moments: `ult:kuro:mid` never caught the old ETERNAL ABYSS, because its shadow had
   already passed. `name~frames/every` (or `--film frames/every`, default `120/15`) shoots the scenario, then
@@ -455,6 +482,8 @@ Measured: 20/20 pass in 20.5 s; with the `washout` fault, 22/22 in 44.5 s (a hos
 | the same today (70 x 4 = 280 shots, `murk` + `illegible` included) | 290 s, 0 flagged; the 192 in-run shots score 3.1 % dark at most |
 | `--quick` (10 shots, i13) | 14 s alone, 21-30 s inside doctor |
 | `--quick` today (11 scenes + a 10-frame film = 21 shots, i13) | 14.5 s alone, 35 s inside doctor |
+| `--quick` with the crowd film (12 scenes = 26 shots, i13; host at load 12-15) | 22-31 s alone (34.7 s on the tree before the fix: same shots) |
+| `npm run scenes` with the crowd film (100 shots; host at load 12-15) | 115-146 s (154 s on the tree before the fix) |
 | one scene, one device (server + browser + shot + sheet) | 6 s |
 | `npm run scenes` with the `washout` check vs `--no-hero` (82 shots, 50 of them measured; host at load 9-18) | 121-142 s vs 138-140 s: within the noise. `HERO_FINISH` took 12-15 s of worker time (4 workers), median 0.2-0.3 s per in-run shot, nearly all of it the read-back's GPU sync |
 | `--self-test` (14 shots, 2 devices) | 16.5 s |
@@ -626,7 +655,7 @@ npm run doctor -- --only lint:css,typecheck | --skip artifact | --json | --jobs 
 | Run | Wall time | Work |
 | --- | --- | --- |
 | `npm run doctor` | **24 s** | 85 s of work over 4 lanes; audio (cost + devices) 24 s, fast tests 19 s under load, artifact 19 s, bundle 11 s, sprites 9 s, typecheck 3 s, lint 2 s |
-| `npm run doctor -- --scenes` | **35 s** | + the quick gallery (11 scenes, Kuro's ult filmed: 21 shots), the critical path |
+| `npm run doctor -- --scenes` | **35 s** | + the quick gallery (12 scenes, Kuro's ult and a crowd filmed: 26 shots), the critical path |
 | `npm run doctor -- --all` | 65 s | the full suite, 65 s under load, is the critical path |
 
 ### 7.2 Fast / slow tests (`vitest.config.ts`)

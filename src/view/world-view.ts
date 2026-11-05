@@ -15,7 +15,7 @@ import { P, TrailEmitter, type Fx } from "../fx";
 import { Flag, Layer } from "../render/layers";
 import type { Renderer } from "../render/renderer";
 import { GRADES, lerpGrade } from "../render/post";
-import { PK_FALL } from "../game/types";
+import { PK_ATTACHED, PK_FALL, PK_MANAGED } from "../game/types";
 import type { World } from "../game/world";
 import { Anims } from "./anims";
 import { Ground } from "./ground";
@@ -515,8 +515,9 @@ export class WorldView {
     const p = this.w.player;
     const load = this.r.post.load;
     this.coverT = Math.max(0, this.coverT - realDt);
-    // enemies piled in front of her (hit-flashing ones count double): one is ordinary depth, a few hide her
-    const pk = clamp((this.pile - 0.6) / 1.4, 0, 1);
+    // enemies piled in front of her (hit-flashing ones count double): one is ordinary depth, two hide her. (A steep
+    // ramp: a half-on beacon is a translucent copy over its own plum outline, which only greys her out)
+    const pk = clamp((this.pile - 0.6) / 0.6, 0, 1);
     this.pileK = pk >= this.pileK ? pk : Math.max(pk, this.pileK - realDt * 3);
     // busy screen (glow load), a big blast right on top of the hero (coverHero) even on a calm screen, or a pile
     const k = Math.max(load < 0.2 ? 0 : Math.min(1, (load - 0.2) / 0.5), Math.min(1, this.coverT / 0.2), this.pileK);
@@ -526,9 +527,10 @@ export class WorldView {
     const xf = this.heroXf;
     const y = p.y + xf.dy;
     // the hero's own current frame (dark plum outline: reads over white blasts and pink star clouds alike).
-    // Late game the evolved beams / star streams converge on her, or a pile covers her: near-opaque + a 1 px plum outline
+    // Late game the evolved beams / star streams converge on her, or a pile covers her: opaque + a 1 px plum outline
+    // (a translucent copy lets the outline pass under it show through and greys her whole body)
     const heavy = Math.max(clamp((load - 0.5) / 0.2, 0, 1), this.pileK);
-    const a = ((0.5 + 0.12 * q) * (1 - heavy) + 0.85 * heavy) * k * this.heroA;
+    const a = ((0.5 + 0.12 * q) * (1 - heavy) + heavy) * k * this.heroA;
     if (heavy > 0)
       for (let i = 0; i < 4; i++) r.spr(Layer.Bullets, this.heroH, p.x + OUT_X[i], y + OUT_Y[i], this.heroSx, this.heroSy, xf.rot, C.outline, a * heavy, 1, 0);
     r.spr(Layer.Bullets, this.heroH, p.x, y, this.heroSx, this.heroSy, xf.rot, 0xffffff, a, 0.1 * (1 - heavy), 0);
@@ -590,8 +592,11 @@ export class WorldView {
             al *= ha;
           }
         }
-        r.spr(Layer.Fx, h, p.x, y, sx, s, p.rot, p.tint, al, 0, (p.glow ? Flag.Glow : 0) | Flag.NoSnap | Flag.Focus);
-        if (p.glow && tr && tr.halo > 0) r.glow(p.x, y, tr.halo * s, tr.color, tr.haloAlpha * ha, Layer.FxAdd, Flag.Add | Flag.Glow | Flag.Focus);
+        // (shots flying out or falling fade over her: SpriteBatch.focus. Orbitals and weapons anchored on her are her
+        // signature looks - Mochi's yarn circling her - and stay as drawn)
+        const fo = p.kind === PK_MANAGED || p.kind === PK_ATTACHED ? 0 : Flag.Focus;
+        r.spr(Layer.Fx, h, p.x, y, sx, s, p.rot, p.tint, al, 0, (p.glow ? Flag.Glow : 0) | Flag.NoSnap | fo);
+        if (p.glow && tr && tr.halo > 0) r.glow(p.x, y, tr.halo * s, tr.color, tr.haloAlpha * ha, Layer.FxAdd, Flag.Add | Flag.Glow | fo);
       }
       // trails
       if (tr && !busy && (this.frameN + p.uid) % tr.every === 0) {

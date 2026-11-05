@@ -227,23 +227,27 @@ So the player's fx fade **per pixel** over her body instead:
   (12 / 34 art px), so the bloom of a blast just outside the zone does not fog
   her either.
 - Flagged: particles on `Fx` / `FxAdd` (not `FxBelow` dust or decals), the
-  view's player shots and their halos, the enemies' death pops (`fx.ghosts` on
-  the fx layers), Truck-kun's isekai light pillars, enemy damage-number glyphs,
-  and the glow halo of enemy bullets (the bullet sprite stays crisp, so what is
-  about to hit her reads). Not flagged: her own deliberate looks (shield bubble,
-  Overdrive-ready aura, Warm Tea, ult overlays, the henshin flash), telegraphs,
-  enemy bullets, boss attacks.
+  player shots that fly out or fall and their halos, the enemies' death pops
+  (`fx.ghosts` on the fx layers), Truck-kun's isekai light pillars, enemy
+  damage-number glyphs, and the glow halo of enemy bullets (the bullet sprite
+  stays crisp, so what is about to hit her reads). Not flagged: her own
+  deliberate looks (orbitals such as Mochi's yarn, weapons anchored on her, the
+  shield bubble, the Overdrive-ready aura, Warm Tea, ult overlays, the henshin
+  flash), telegraphs, enemy bullets and boss attacks.
 - Cost: one `length()` + `smoothstep` per flagged fragment (a branch skips the
   rest), one per composite pixel while busy, and a few flops per flagged draw on
-  the CPU. No extra pass.
+  the CPU. No extra pass. On SwiftShader (CPU raster, so fragment work shows as
+  time) a crowd frame with the zone forced fully busy vs off measured 422 / 418,
+  464 / 470 and 404 / 429 ms (median of 120 interleaved frames each): no
+  difference above the noise.
 
 Two neighbours of the zone: the hero's dash afterimages are drawn on
 `Layer.Entity` under every entity (`Afterimages` sorts Entity-layer ghosts
 first: on `FxBelow` the freshest one sat on top of her and turned her into a
 flat cyan / pink silhouette for the whole dash), and enemies in front of her
 that overlap her body soften their hit flash to `BOSS_FLASH` and count toward
-the hero beacon's **pile** trigger (`WorldView.pile`: a few of them, a swarm of
-white exam papers, redraw her near-opaque with the plum outline above them).
+the hero beacon's **pile** trigger (`WorldView.pile`: two or more of them, a
+swarm of white exam papers, redraw her opaque with the plum outline above them).
 Player-anchored world texts start above her head (`WorldTexts`, `HEAD_CLEAR`).
 
 ---

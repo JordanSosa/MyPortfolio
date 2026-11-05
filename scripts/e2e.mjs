@@ -21,7 +21,8 @@
 //      with the stick thumb held (Chromium sends such a tap no click): pick a level-up card (exactly one pick), a
 //      thumb held from the first offer never picks from the next, open + collect a chest (one step per tap), the
 //      HUD pause button, SETTINGS / DONE and RESUME; a drag over the pause panel presses nothing; the narrator
-//      caption and the Plot Point toast never catch a tap.
+//      caption and the Plot Point toast never catch a tap; the run ends with the stick thumb still resting and a
+//      second thumb leaves the Episode Results.
 //   E) (mobile) developer mode: without it a 3-finger long-press and the ` key never open the dev console; 7 taps on
 //      the Settings build label switch it on (toast, kept across a reload: then the long-press opens the console)
 //      and off again; ?dev=1 turns it on (and opens the console), ?dev=0 off.
@@ -520,6 +521,27 @@ async function joystickSteps(browser, dev, step, rec) {
         }),
       );
       check(pe.every((x) => x.endsWith(" none")), `display-only layers are hit-testable (or missing): ${pe.join(", ")}`);
+    });
+    // (last: it ends the run)
+    await jstep("(o) the stick thumb still resting when the run ends: a second thumb leaves the Episode Results", async () => {
+      const f = await down(P1.x, P1.y);
+      await steers("steering", f);
+      await page.evaluate(() => window.__kk.endRun());
+      const screen = () => page.evaluate(() => window.__kk.app.screen);
+      for (let i = 0; i < 20 && (await screen()) !== "results"; i++) await frames(5);
+      check((await screen()) === "results", "endRun did not show the Episode Results");
+      await sleep(320); // (markBorn)
+      await frames(5);
+      await tapAt(await centre('.results [data-act="hub"]'));
+      let s = null;
+      for (let i = 0; i < 30; i++) {
+        s = await page.evaluate(() => ({ screen: window.__kk.app.screen, cover: !!document.querySelector(".kover:not(.out)") }));
+        if (s.screen !== "results" || s.cover) break;
+        await frames(5);
+        await sleep(30);
+      }
+      check(s.screen !== "results" || s.cover, `a second-thumb tap on HUB did not leave the Episode Results (${JSON.stringify(s)})`);
+      await up(f);
     });
   } finally {
     rec.errors.push(...page.__logs.filter((l) => l.startsWith("[pageerror]") || l.startsWith("[error]")));

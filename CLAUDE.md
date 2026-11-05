@@ -39,10 +39,10 @@ Further docs:
 
 | You need | Run | Time |
 | --- | --- | --- |
-| Confidence before a commit | `npm run doctor` (add `--scenes` for visuals, `--all` for the slow tests too) | ~25 s (35 s with `--scenes`) |
+| Confidence before a commit | `npm run doctor` (add `--scenes` for visuals, `--all` for the slow tests too) | ~25 s (~40 s with `--scenes`) |
 | Unit tests while iterating | `npm test` (the fast suite); `npm run test:slow` / `npm run test:all` for long headless runs | 8 s / 40 s / 50 s |
 | Type errors | `npm run typecheck` | 2 s |
-| To *see* the game (any change to UI, art, fx or layout) | `npm run scenes`, then open `shots/scenes/latest/contact.png` | ~70 s for 82 shots |
+| To *see* the game (any change to UI, art, fx or layout) | `npm run scenes`, then open `shots/scenes/latest/contact.png` | ~85 s for 100 shots |
 | A narrower visual check | `npm run scenes -- --only boss:,ult: --devices i13,se`; `--all` covers all 108 scenarios | seconds |
 | A transient effect (an ult, a flash, a phase change) | film it: `npm run scenes -- --only "ult:kuro~180/15"` (a checked shot every 15 frames for 180) or `--film` | ~6 s |
 | Is the hero still visible in a busy fight? | `npm run scenes -- --only crowd: --film 120/15 --devices i13` (`washout`); what buries her: add `--blame` | ~1-2 min |
@@ -106,8 +106,8 @@ around it. `docs/DEVTOOLS.md` §8 shows how each check was proven against the Se
     fading modal stayed hit-testable (`#ui > *` outranks `.modal.out`), so a tap there picked a second card.
   - The first fix let a resting second thumb take the stick when the steering thumb lifted. One stick per touch.
   - Chromium sends no click for a tap made while another finger is down: with the stick held, the other thumb could
-    not pick a card, open a chest or press RESUME / pause. In-run layers go through `secondThumbTaps`
-    (`src/ui/screens/common.ts`); a fading layer (`#ui > .out`) never catches a tap.
+    not pick a card, open a chest or press RESUME / pause. In-run layers and the Episode Results go through
+    `secondThumbTaps` (`src/ui/screens/common.ts`); a fading layer (`#ui > .out`) never catches a tap.
   - `tests/input-touch.test.ts`, `tests/ui-taps.test.ts` (`npm test`); `node scripts/e2e.mjs --joystick` (real CDP
     multi-touch, ~60 s).
 - **Blackouts, murk, illegible text and placeholders.**

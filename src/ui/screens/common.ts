@@ -101,10 +101,14 @@ function controlOf(root: HTMLElement, n: Element): Element | null {
 function wireTaps(): void {
   if (wired || typeof window === "undefined") return;
   wired = true;
-  // a finger going down makes every press already in flight a multi-touch one
+  // a finger going down makes every press already in flight a multi-touch one; it also starts a new tap, so a click
+  // without a pointerId after it is that tap's own (a browser click for a tap handled here follows its pointerup at
+  // once): otherwise, on a browser whose click carries no pointerId, the 800 ms window would also eat the next lone
+  // tap's click (a card tapped just after a second-thumb REROLL would do nothing)
   window.addEventListener(
     "pointerdown",
     (e) => {
+      handledAny = 0;
       for (const [id, p] of presses) {
         if (!p.root.isConnected) presses.delete(id);
         else if (id !== e.pointerId) p.multi = true;
@@ -137,9 +141,9 @@ function wireTaps(): void {
 
 /**
  * SECOND-THUMB TAPS for a layer shown during a run (the level-up, chest, pause, game-over modals, the settings panel,
- * the HUD pause button). Chromium sends no click for a finger that taps while another finger is down (or was down
- * at any moment of the tap): a player holding the stick could not pick a card, open the chest or press RESUME with
- * the other thumb. Here such a tap presses the control itself: on the pointerup of a FRESH finger (not the stick,
+ * the HUD pause button) and the Episode Results right after it. Chromium sends no click for a finger that taps while
+ * another finger is down (or was down at any moment of the tap): a player holding the stick could not pick a card,
+ * open the chest or press RESUME with the other thumb. Here such a tap presses the control itself: on the pointerup of a FRESH finger (not the stick,
  * not DASH / OVERDRIVE) that went down on the same control and barely moved, a click (detail 1, the finger's
  * pointerId) is dispatched where it went down, so every handler's own guards still run (isFresh, markBorn /
  * tooSoon, the level-up's open GUARD, busy); a click the browser sends after all is swallowed (one press per tap).

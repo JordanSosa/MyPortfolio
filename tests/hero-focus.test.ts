@@ -8,6 +8,7 @@ import type { Atlas } from "../src/render/atlas";
 import type { Renderer } from "../src/render/renderer";
 import { Particles, type EmitterDef } from "../src/fx/particles";
 import { Afterimages } from "../src/fx/trails";
+import { WorldTexts } from "../src/view/texts";
 
 /** A 3-frame atlas: 0 = an 8 px spark, 1 = a 16 px hit, 2 = a 64 px blast (no GL needed to queue draws). */
 function fakeAtlas(): Atlas {
@@ -127,5 +128,20 @@ describe("what carries Flag.Focus", () => {
     // (the Entity-layer ghost sorts above the view's top edge: under every visible entity)
     expect(keys[1]).toBeLessThan(0);
     expect(b.sortKey).toBeNaN();
+  });
+});
+
+describe("player-anchored banners clear her head (WorldTexts HEAD_CLEAR)", () => {
+  test('"DON!" asked for at -30 starts above her hair, pop-in included', () => {
+    const r = { text: { lineHeight: 10, measure: (s: string) => s.length * 6 } } as unknown as Renderer;
+    const texts = new WorldTexts(r);
+    texts.add("DON!", 0, -30, { anchor: 1, scale: 2, rise: 12 });
+    // (hero at 0, 0: her head reaches 24 px above her feet)
+    expect(texts.covers(0, -24, 0, 0)).toBe(false);
+    expect(texts.covers(0, -42, 0, 0)).toBe(true);
+    // a text already asked for higher up keeps its place
+    texts.clear();
+    texts.add("LEVEL UP!", 0, -60, { anchor: 1, scale: 2 });
+    expect(texts.covers(0, -60, 0, 0)).toBe(true);
   });
 });

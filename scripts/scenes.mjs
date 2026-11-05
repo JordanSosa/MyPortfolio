@@ -126,6 +126,14 @@ const OVERRIDES = [
   // e.g. { when: /^ult:kuro/, dark: null }  (a scene meant to be that dark: drop or loosen one check for it).
   // None needed today: across all 69 scenarios x 4 devices the darkest shot has mean luminance 30 (gacha:mythic),
   // the most near-black 58 %, the most near-white 18 %, the flattest a luminance spread of 30.
+  // Ults that hide the hero on purpose, because the ult is the show. Magical Girl #47's Episode Long Transformation
+  // spins her inside a ring of her own ribbons (orbiting shots: her look, like Mochi's yarn, never faded by the hero
+  // focus zone), the henshin flash and a kotatsu for the whole ult: reported, never failed (she is back within 0.5 s
+  // of its end; film ult:magical_girl_47~600/30).
+  { when: /^ult:magical_girl_47\b/, washout: { level: "warning", keep: 15, keepWarn: 35 } },
+  // Isekai-kun's STATUS SCREEN fills the view with 9999s for a moment; Aoi climbs into her robot at the end of GET IN
+  // THE ROBOT. Their worst frames score 18-24 with the hero focus zone (Isekai-kun 4-16 before it): a lower error.
+  { when: /^ult:(isekai_kun|aoi)\b/, washout: { keep: 15, keepWarn: 35 } },
 ];
 
 /**

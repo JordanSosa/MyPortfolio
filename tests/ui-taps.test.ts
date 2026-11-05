@@ -288,6 +288,24 @@ describe("second-thumb taps", () => {
     expect(rootClicks).toBe(1);
   });
 
+  test("a browser whose click has no pointerId: the click right after the tap is swallowed, the next tap's own is not", () => {
+    holdStick();
+    down(2, card);
+    up(2, card);
+    expect(presses).toHaveLength(1);
+    expect(nativeClick(undefined, card).defaultPrevented).toBe(true);
+    expect(presses).toHaveLength(1);
+    // another second-thumb tap, then (the stick thumb lifted) a lone tap well inside the old 800 ms window
+    down(3, card);
+    up(3, card);
+    expect(presses).toHaveLength(2);
+    input.down.delete(1);
+    down(4, card);
+    up(4, card);
+    nativeClick(undefined, card);
+    expect(presses).toHaveLength(3);
+  });
+
   test("keyboard / gamepad clicks (detail 0) and a mouse click still act while a swallow is armed", () => {
     holdStick();
     down(2, card);

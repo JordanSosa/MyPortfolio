@@ -675,7 +675,10 @@ export class App implements KitHost {
     this.wake.release();
     this.input.showTouchControls(false);
     clearRunToasts();
-    this.setScreen("results", showResults(this, summary, report, this.episode));
+    const res = showResults(this, summary, report, this.episode);
+    // (the stick thumb often still rests here after the game over card: the other thumb's taps must work too)
+    secondThumbTaps(res.el, this.input);
+    this.setScreen("results", res);
     this.music(summary.victory ? "victory" : "gameover", 1);
   }
 
