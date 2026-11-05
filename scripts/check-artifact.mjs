@@ -68,7 +68,8 @@ export async function checkArtifact(args = {}) {
   const T0 = Date.now();
   // --root <dir>: check another checkout (e.g. an old commit exported with `git archive`, node_modules linked)
   ROOT = args.root && args.root !== true ? resolve(args.root) : REPO;
-  const out = join(REPO, args.out && args.out !== true ? args.out : "shots/artifact");
+  // (resolve, not join: an absolute --out /tmp/x used to land in <repo>/tmp/x)
+  const out = resolve(REPO, args.out && args.out !== true ? args.out : "shots/artifact");
   mkdirSync(out, { recursive: true });
   const problems = [];
   const timings = {};

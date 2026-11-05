@@ -687,7 +687,8 @@ export const FAULTS = {
   pageError: { expect: "pageError" },
   murk: { expect: "murk" },
   illegible: { expect: "illegible" },
-  washout: { expect: "washout" },
+  // (error level: a warning-level washout would mean the haze no longer buries her, so the check went soft)
+  washout: { expect: "washout", level: "error" },
 };
 const INJECT = async (fault) => {
   const box = (bg) => {
@@ -919,7 +920,8 @@ export async function runScenes(args = {}) {
   if (existsSync(out) && !args.keep) rmSync(out, { recursive: true, force: true });
   mkdirSync(out, { recursive: true });
   const srv = await startServer();
-  const browser = await launchBrowser();
+  // (let: worker 0 swaps in a fresh browser if its Chromium crashes; the contact sheet and the cleanup use the live one)
+  let browser = await launchBrowser();
   const tBoot = Date.now() - T0;
   const shots = [];
   const noiseShots = [];
@@ -941,11 +943,25 @@ export async function runScenes(args = {}) {
     const browsers = [browser];
     const worker = async (wi) => {
       const slots = new Map();
-      const br = wi === 0 ? browser : await launchBrowser();
+      let br = wi === 0 ? browser : await launchBrowser();
       if (wi > 0) browsers.push(br);
       try {
         for (let job = queue.shift(); job; job = queue.shift()) {
+          // a crashed Chromium (SwiftShader took a whole browser down once in an --all run) gets a fresh one, a crashed
+          // page a fresh context: before, every later job of that worker failed, its next newContext threw, Promise.all
+          // gave up while the other workers ran on, and the run hung in its cleanup with nothing printed
+          if (!br.isConnected()) {
+            slots.clear();
+            br = await launchBrowser();
+            if (wi === 0) browser = br;
+            else browsers.push(br);
+          }
           let slot = slots.get(job.device);
+          if (slot && (slot.crashed || slot.page.isClosed())) {
+            await settle(slot.context.close(), 10000);
+            slots.delete(job.device);
+            slot = null;
+          }
           if (!slot) {
             const desc = DEVICE_LIST[job.device]();
             // CSS-pixel shots (the default) render at DPR 1: the same layout, a ninth of the SwiftShader work of a
@@ -957,6 +973,10 @@ export async function runScenes(args = {}) {
             const cdp = await context.newCDPSession(page);
             slot = { context, page, cdp, desc, logs: [] };
             page.on("pageerror", (e) => slot.logs.push(`[pageerror] ${e.message}`));
+            page.on("crash", () => {
+              slot.crashed = true;
+              slot.logs.push("[crash] the page crashed");
+            });
             page.on("console", (m) => {
               if (m.type() === "error" && !BENIGN.some((re) => re.test(m.text()))) slot.logs.push(`[console.error] ${m.text()}`);
             });
@@ -1097,11 +1117,11 @@ export async function runScenes(args = {}) {
           }
         }
       } finally {
-        for (const s of slots.values()) await s.context.close().catch(() => {});
+        for (const s of slots.values()) await settle(s.context.close(), 10000);
       }
     };
     await Promise.all(Array.from({ length: Math.min(jobsN, queue.length) }, (_, i) => worker(i)));
-    for (const b of browsers.slice(1)) await b.close().catch(() => {});
+    for (const b of browsers.slice(1)) await settle(b.close(), 10000);
     if (!args.json && !args.quiet && process.stdout.isTTY) process.stdout.write("\r".padEnd(100) + "\r");
 
     // order like the request, then the contact sheet (rendered by the same browser) + gallery + summary
@@ -1145,8 +1165,9 @@ export async function runScenes(args = {}) {
     if (args["self-test"]) {
       selfTest = shots.map((x) => {
         const want = FAULTS[x.fault]?.expect;
+        const lvl = FAULTS[x.fault]?.level;
         const errs = x.flags.filter((f) => f.level === "error" || f.kind === want).map((f) => f.kind);
-        const ok = want ? errs.includes(want) : errs.length === 0;
+        const ok = want ? x.flags.some((f) => f.kind === want && (!lvl || f.level === lvl)) : errs.length === 0;
         return { device: x.device, fault: x.fault, expect: want ?? "clean", got: errs, ok };
       });
       // the --diff path: a clean shot against its own blackout must be an error-size diff, against itself 0
@@ -1184,9 +1205,15 @@ export async function runScenes(args = {}) {
     writeFileSync(join(out, "summary.json"), JSON.stringify(summary, null, 1));
     return summary;
   } finally {
-    await browser.close().catch(() => {});
-    await srv.close().catch(() => {});
+    await settle(browser.close(), 10000);
+    await settle(srv.close(), 10000);
   }
+}
+
+/** Wait for a cleanup call, but never forever (and never throw): a crashed browser's close() can stay pending. */
+function settle(p, ms) {
+  let t;
+  return Promise.race([Promise.resolve(p).catch(() => {}), new Promise((r) => (t = setTimeout(r, ms)))]).finally(() => clearTimeout(t));
 }
 
 function printSummary(s) {

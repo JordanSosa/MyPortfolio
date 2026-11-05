@@ -409,6 +409,10 @@ Notes on the checks:
     | `ult:` x 22 but MG#47's, films 240/20, i13 (260) | 4 / 78, 12, 25 | 23 / 88, 2, 3 |
     | key set, i13 + desktop (68 in-run) | 4 / 69, 14, 3 | 60 / 90, 0, 0 |
 
+    (These were measured before the shadow-clone mask fix above. Re-measured with it, the Final Arc scenes
+    `stage:final_arc`, `boss:cancel_sama`, `boss:rival_chan` and `boss:truck_kun_boss`, films 60/30 on i13, se and
+    desktop (36 frames): before 12 frames under 35 and 6 at 35-55, after 0 and 1.)
+
     The share of near-white pixels within 20 art px of her (`halo`) fell from 49 % to 33 % in the i13 crowd films,
     while the frames' mean luminance moved by 0.5 (the spectacle away from her is untouched), and Kuro's filmed
     ETERNAL ABYSS still peaks at 8.2 % `murk` pixels, as before. Orbitals and weapons anchored on her (Mochi's yarn,
@@ -458,7 +462,7 @@ Measured on all 69 scenarios x 4 devices (before `speech`), the threshold margin
 - a thrown error;
 - a dim screen with a big near-black shape over the middle (`murk`);
 - every bitmap string drawn in the outline colour (`illegible`);
-- a soft white disc and glow drawn over the hero (`washout`).
+- a soft white disc and glow drawn over the hero (`washout`, at error level: a warning would mean the check went soft).
 
 Every fault must produce its flag and the clean shot must stay clean. A clean shot must also diff 0 % against
 itself and more than 10 % against its blackout.
