@@ -8,8 +8,8 @@
  *              the Abyssal Gaze eye, Crimson Eye Beam / ABYSSAL LORD'S JUDGEMENT beams, the ult's
  *              colossal shadow sweep + dim grade + vignette, the flashlight / stadium-floodlight reveal
  *     Pudding  teacups (tipping; hidden while broken by the Orbital Guard, popping back in), tea puddles
- *              (splash / rest / dry + steam), Warm Tea (an amber ring at her feet whose 8 dots count the
- *              seconds left, steam off her shoulders, a blink as it cools), the tea moat, the flying
+ *              (splash / rest / dry + steam), Warm Tea (a warm glow, steam off her shoulders, a tiny
+ *              rising heart now and then, fading as it cools; no ring), the tea moat, the flying
  *              teapot pouring, the omurice (plop, ketchup heart)
  *     Aoi      tangled 1-px spaghetti trails (white -> blue; the evolution's 2-px noodles on fire), sauce
  *              decals, Jet Dash flames, the C6 drone, the falling fists' speed lines, the ROCKET PUNCH
@@ -144,12 +144,11 @@ const teaDrop: EmitterDef = {
 const pourDrop: EmitterDef = { ...teaDrop, speed: [2, 8], angle: PI / 2, spread: 0.3, gravity: 260, life: [0.18, 0.26], bounce: undefined };
 /** Warm Tea: amber steam curling off her shoulders while it lasts. */
 const warmSteam: EmitterDef = { ...steam, colors: [0xffe2a8, C.white], alpha: 0.5, speed: [6, 14], life: [0.6, 0.9] };
-/** Warm Tea dots around her feet (seconds left) and its ring. */
-const WARM_DOTS = 8;
-/** Warm Tea aura around her body (centre 9 px above her feet: the feet are under her sprite and HP bar). */
-const WARM_RX = 13;
-const WARM_RY = 14;
+/** Warm Tea: a tiny tea-coloured heart floating up off her now and then. */
+const warmHeart: EmitterDef = { ...P.hearts, speed: [10, 20], spread: 0.6, life: [0.55, 0.8], size: [0.55, 0.4], colors: [0xffd27a, C.pinkLight, 0xffe2a8] };
+/** Warm Tea glow centre above her feet (the feet are under her sprite and HP bar) and its fade-out (s). */
 const WARM_CY = 9;
+const WARM_FADE = 0.6;
 const shard: EmitterDef = { ...P.debris, colors: [C.white, 0xf3e6ff, C.pinkLight] };
 const heartOut: EmitterDef = {
   sprite: "fx_heart",
@@ -232,7 +231,6 @@ export class HeroesAFx {
   private readonly hHeart: number;
   private readonly hStreak: number;
   private readonly hFlashlight: number;
-  private readonly hRing: number;
   // Kuro
   private readonly breathAcc = new Float32Array(32);
   private shadowT = -1;
@@ -288,7 +286,6 @@ export class HeroesAFx {
     this.hHeart = r.atlas.handle("fx_heart");
     this.hStreak = r.atlas.handle("fx_streak");
     this.hFlashlight = r.atlas.handle("ult_flashlight");
-    this.hRing = r.atlas.handle("fx_ring");
     for (let i = 0; i < MAX_POPS; i++) this.pops.push({ on: false, kind: 0, text: "", heart: false, frame: 0, x: 0, y: 0, t: 0, life: POP_LIFE, scale: 1, color: C.white });
   }
 
@@ -631,8 +628,9 @@ export class HeroesAFx {
   }
 
   /**
-   * Warm Tea (teapot-tempest.ts warmTea): a thin two-tone aura ring around her body with WARM_DOTS dots counting
-   * the seconds left (lit = left / full), a warm glow, steam off her shoulders; it blinks in its last 0.6 s.
+   * Warm Tea (teapot-tempest.ts warmTea): a soft warm glow on her, steam curling off her shoulders and a tiny tea-
+   * coloured heart floating up now and then; it fades out over its last WARM_FADE s. No ring, rim or countdown dots
+   * (owner feedback: the two-tone brown ring around her looked silly, and timers are clutter in the chaos).
    */
   private drawWarmTea(time: number): void {
     const w = this.w as World;
@@ -641,25 +639,14 @@ export class HeroesAFx {
     const left = inst.data.warm ?? 0;
     const full = inst.data.warmMax ?? 0;
     if (left <= 0 || full <= 0 || w.player.dead) return;
-    const r = this.r;
     const p = w.player;
-    const k = Math.min(1, left / 0.25);
-    const blink = left < 0.6 ? 0.55 + 0.45 * Math.sin(time * 26) : 1;
-    const a = k * blink;
-    const pulse = 1 + 0.06 * Math.sin(time * 5);
-    // a warm halo on her and a thin aura ring around her body with its seconds-left dots
-    const cy = p.y - WARM_CY;
-    r.glow(p.x, cy, 18, C.paleYellow, 0.16 * a);
-    // (two tones from her band colours: a cream ring inside a warm-brown rim reads on white floors and orange carpets)
-    r.batch.drawP(Layer.Fx, this.hRing, p.x, cy, (WARM_RX * pulse) / 16, (WARM_RY * pulse) / 16, 0, 0xffd27a, 0.85 * a, 0, Flag.NoSnap, 16, 16);
-    r.batch.drawP(Layer.Fx, this.hRing, p.x, cy, (WARM_RX * pulse + 1) / 16, (WARM_RY * pulse + 1) / 16, 0, 0xa6683f, 0.8 * a, 0, Flag.NoSnap, 16, 16);
-    const lit = Math.ceil((left / full) * WARM_DOTS);
-    for (let i = 0; i < lit; i++) {
-      // (clockwise from the top: the last seconds sit at the top)
-      const ang = -PI / 2 + (i / WARM_DOTS) * TAU;
-      r.spr(Layer.Fx, this.hPx, p.x + Math.cos(ang) * WARM_RX * pulse, cy + Math.sin(ang) * WARM_RY * pulse, 2.2, 2.2, 0, 0xffb84a, a, 0, Flag.NoSnap);
-    }
-    if ((this.frameN & 15) === 0) this.fx.ps.emit(warmSteam, p.x + (this.frameN & 16 ? 5 : -5), p.y - 15, 1);
+    const a = Math.min(1, left / WARM_FADE);
+    const pulse = 0.85 + 0.15 * Math.sin(time * 4);
+    this.r.glow(p.x, p.y - WARM_CY, 17, C.paleYellow, 0.2 * a * pulse);
+    // (thinning out as it cools: no particles in the last moments of the fade)
+    if (a < 0.35) return;
+    if (this.frameN % 10 === 0) this.fx.ps.emit(warmSteam, p.x + (this.frameN % 20 ? 5 : -5), p.y - 15, 1);
+    if (this.frameN % 28 === 14) this.fx.ps.emit(warmHeart, p.x + (Math.random() - 0.5) * 12, p.y - 18, 1);
   }
 
   /** Eternal Tea Party: the flying teapot hovering above Pudding, pouring after every fling. */

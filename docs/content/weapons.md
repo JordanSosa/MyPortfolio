@@ -128,9 +128,10 @@ L5 1207 -> 1208.) A Lv5 Teapot on Pudding (healMul 1.15) heals 3.45 HP/s while w
 **Visuals.** `w_teacup` (10×10×2: f0 upright with saucer, f1 tipping; scale 0 while broken, popping back in),
 puddles `w_tea_puddle` (24×14×3: f0 splash, f1 resting, f2 drying — last 0.5 s) on the ground-decal layer, 2
 steam wisps (`fx_puff` tinted white, alpha 0.4) rising per puddle per second. A spill splashes drops at the cup
-and where the tea lands. Warm Tea: an amber ring at her feet whose 8 dots count the seconds left (it blinks in
-its last 0.6 s), a soft warm glow, amber steam off her shoulders; warming up from cold pops an amber ring and
-"warm tea~♡" (at most every 6 s).
+and where the tea lands. Warm Tea: a soft warm glow on her, amber steam curling off her shoulders and a tiny
+tea-coloured heart floating up now and then, fading out over its last 0.6 s (no ring or countdown dots: owner
+feedback, the brown-rimmed ring looked silly); warming up from cold pops an amber ring and "warm tea~♡" (at most
+every 6 s).
 
 ### 2.3 Micro Missile Swarm — `micro_missile_swarm` (Aoi signature)
 `icon_micro_missile_swarm` · `C.blue` · sfx `missile` (once per salvo)
