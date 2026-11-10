@@ -194,7 +194,7 @@ export const idolLightstickWave: WeaponDef = {
     { dmg: 18, cd: 0.857, amount: 2, every: 2, arc: 150, range: 96, knock: 46, chorus: 3 },
   ],
   upgrades: ["Both sides wave", "Damage +4, waves reach farther", "Waves on every 2nd beat", "Damage +4, wider waves, the Chorus deals double"],
-  evolution: { into: "sold_out_dome_tour", with: "twin_charm" },
+  evolutions: [{ into: "sold_out_dome_tour", with: "twin_charm" }],
   // mastery Limit Breaks (docs/content/weapons.md §4): a Limit Break amount = +1 arc
   limitBreak: [
     { dmg: 0.2, area: 0.15, text: "LIMIT BREAK — Front Row: +20% damage, +15% reach" },

@@ -98,7 +98,7 @@ describe.each(GROUP)("$hero", ({ hero, weapon, evo, passive, ult }) => {
     expect(h.cutinLine && h.cutinLine.length).toBeGreaterThan(5);
     expect(h.band?.length).toBe(3);
     expect(h.constellations?.length).toBe(6);
-    expect(WEAPONS.get(weapon)?.evolution).toEqual({ into: evo, with: passive });
+    expect(WEAPONS.get(weapon)?.evolutions?.[0]).toEqual({ into: evo, with: passive });
     expect(WEAPONS.get(evo)?.evolved).toBe(true);
     expect(ULTIMATES.get(ult)?.hero).toBe(hero);
     const tree = TALENT_TREES.get(hero);

@@ -57,7 +57,8 @@ describe("known rule", () => {
     expect(cardEvoHints(b, wcard("yarn_orbit", 2), NONE_KNOWN)).toEqual([]);
     expect(cardEvoHints(b, wcard("yarn_orbit", 2), knownFrom(["galaxy_barrage"]))).toEqual([]);
     expect(cardEvoHints(b, wcard("yarn_orbit", 2), knowsYarn)).toHaveLength(1);
-    expect(cardEvoHints(b, wcard("yarn_orbit", 2), ALL_KNOWN)).toHaveLength(1);
+    // (Yarn Orbit has two evolutions: every recipe known = one hint each)
+    expect(cardEvoHints(b, wcard("yarn_orbit", 2), ALL_KNOWN).map((h) => h.into.id)).toEqual(["cosmic_yarn", "meowteor_hammer"]);
   });
   test("knownFrom merges the codex and this run's evolutions", () => {
     const k = knownFrom(["star_shot", "cosmic_yarn"], ["galaxy_barrage"]);
@@ -154,7 +155,7 @@ describe("passive cards", () => {
 });
 
 describe("several evolutions per weapon (data normalised to a list)", () => {
-  const multi: WeaponDef = { ...W("yarn_orbit"), id: "test_multi_yarn", evolution: [{ into: "cosmic_yarn", with: "magnet_star" }, { into: "galaxy_barrage", with: "wish_charm" }] as unknown as WeaponDef["evolution"] };
+  const multi: WeaponDef = { ...W("yarn_orbit"), id: "test_multi_yarn", evolutions: [{ into: "cosmic_yarn", with: "magnet_star" }, { into: "galaxy_barrage", with: "wish_charm" }] };
   test("one hint per recipe, each with its own state", () => {
     expect(evolutionsOf(multi)).toHaveLength(2);
     const hints = cardEvoHints(build([[multi, 4]], ["magnet_star"]), wcard("test_multi_yarn", 4), ALL_KNOWN);
@@ -205,6 +206,7 @@ describe("chest reveals (read after the chest)", () => {
     const after = build([["galaxy_barrage", 1], ["yarn_orbit", 2]], ["wish_charm"]);
     expect(cardEvoHints(after, wcard("star_shot", 4), ALL_KNOWN)).toEqual([]);
     expect(cardEvoHints(after, pcard("wish_charm"), ALL_KNOWN)).toEqual([]);
-    expect(buildEvoHints(after, ALL_KNOWN).map((h) => h.into.id)).toEqual(["cosmic_yarn"]);
+    expect(buildEvoHints(after, ALL_KNOWN).map((h) => h.into.id)).toEqual(["cosmic_yarn", "meowteor_hammer"]);
+    expect(buildEvoHints(after, knowsYarn).map((h) => h.into.id)).toEqual(["cosmic_yarn"]);
   });
 });

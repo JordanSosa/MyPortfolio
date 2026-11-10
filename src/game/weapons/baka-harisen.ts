@@ -184,7 +184,7 @@ export const bakaHarisen: WeaponDef = {
     { dmg: 40, cd: 1.25, amount: 2, area: 1.4, knock: 260, stun: 0.5 },
   ],
   upgrades: ["Backhand: also smacks behind you", "Damage +8, bigger fan", "Cooldown −17%, longer daze", "Damage +10, even bigger fan, every 5th smack is a MEGA BAKA"],
-  evolution: { into: DERE, with: "friendship_bracelet" },
+  evolutions: [{ into: DERE, with: "friendship_bracelet" }],
   // mastery Limit Breaks (docs/content/weapons.md §4): Lv6 at rank 5, Lv7 at rank 10
   limitBreak: [
     { dmg: 0.25, area: 0.1, text: "LIMIT BREAK — Thicker Paper: +25% damage, +10% fan size" },

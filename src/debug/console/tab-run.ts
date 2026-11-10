@@ -166,7 +166,7 @@ export function runTab(h: ConsoleHost): Tab {
         const bot = new Bot(w.level * 31 + 7);
         for (let i = 0; i < 5; i++) {
           w.addXp(w.xpNext - w.xp + 0.01);
-          while (w.pendingLevels > 0) bot.resolve(w);
+          while (w.pendingPicks > 0) bot.resolve(w);
         }
         toast(`level ${w.level}`);
       }, "sm"),

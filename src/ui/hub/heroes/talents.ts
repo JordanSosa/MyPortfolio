@@ -10,7 +10,7 @@
  */
 import type { TalentNode, TalentTree } from "../../../game/defs";
 import type { HeroDef } from "../../../game/types";
-import { ULTIMATES, WEAPONS } from "../../../game/registry";
+import { ULTIMATES, WEAPONS, evolvedFormsOf } from "../../../game/registry";
 import { branchPointsBelow, canAllocate, tierRequirement, type TalentBlock } from "../../../meta/heroes";
 import type { Profile } from "../../../meta/profile";
 import { esc, fmtInt, hasArt, img } from "../../dom";
@@ -45,8 +45,8 @@ export function talentIcon(hd: HeroDef, n: TalentNode, tint: string): string {
   const d = n.desc(1);
   if (n.tier === 5 && capKind(hd, n) === "ULT") return portrait(hd.portrait, 1, "pimg");
   const wd = WEAPONS.get(hd.weapon);
-  const evo = wd?.evolution ? WEAPONS.get(wd.evolution.into) : undefined;
-  if (wd && (d.includes(wd.name) || (evo && d.includes(evo.name)) || (n.tier === 5 && capKind(hd, n) === "WPN")) && hasArt(wd.icon)) return img(wd.icon, "px");
+  const evos = wd ? evolvedFormsOf(wd) : [];
+  if (wd && (d.includes(wd.name) || evos.some((evo) => d.includes(evo.name)) || (n.tier === 5 && capKind(hd, n) === "WPN")) && hasArt(wd.icon)) return img(wd.icon, "px");
   const g = textGlyph(d);
   return glyphImg(g === G.special ? G.special : g, tint, "px gly");
 }

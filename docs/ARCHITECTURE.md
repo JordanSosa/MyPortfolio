@@ -39,12 +39,14 @@ src/
                        `install(w, inst)` for run-state effects such as Friendship Bracelet's per-weapon statMod)
     meta.ts            legacy Dream Shop ranks (WorldOptions.meta; tests / balance probe)
     upgrades.ts        level-up card generation / application (pools, banish, Limit Break cards, Light Novel
-                       titles), chest rewards (chest luck)
+                       titles), chest rewards (chest luck); one evolution card per ready route, a chest's
+                       ROUTE SPLIT card hands a two-route choice to the player (World.pendingChoices)
     evo-hints.ts       evolution hints for the level-up / chest cards and the pause list: a known recipe's state
-                       (ready / have / missing / blocked), pair-completing and READY-making picks; `evolution`
-                       normalised to a list (several evolutions per weapon); the known rule comes in as input
+                       (ready / have / missing / blocked), pair-completing and READY-making picks; one hint per
+                       known recipe (several evolutions per weapon); the known rule comes in as input
     registry.ts        auto-registry (import.meta.glob) of weapons / enemies / bosses / ultimates / stages /
-                       relics / talent trees / twists (+ registerStage for tests / tools, twistHeat, stageInfos)
+                       relics / talent trees / twists (+ registerStage for tests / tools, twistHeat, stageInfos);
+                       a weapon's evolutions: evolutionsOf / evolutionWith / evolvesInto / baseWeaponOf / isWeaponOf
     stages/*.ts        one file per stage (dream-meadow.ts = the original slice, timeline included); candy-kingdom.ts
                        (stage 2: the pinata's coins + gumdrop snack in onStart), shoujo-academy.ts (stage 3: the
                        vending machine's chilled can in onStart); beach-episode.ts
@@ -123,6 +125,8 @@ src/
                        the charge ring, the ult turntable + narrator subtitle; burning craters, STATUS SCREEN window
                        slams + fake "9999999" numbers; truck lean / exhaust, HONK waves + pops, isekai'd light
                        pillars (no confetti), ghost trucks on their lanes
+    evo2-fx.ts         SECOND evolutions: the hub (Evo2Module contract) that picks up evo2/<package>.ts (import.meta.glob):
+                       per-run bind, per-frame draw per held instance; evo2/pilot.ts = Meowteor Hammer's slam
     arsenal2-fx.ts     Bubble Tea / Paper Cranes / Idol Lightsticks / Kotatsu (+ evolutions): crane flock drawing (flap,
                        facing, crumple, fold glow, paper trail), tapered lightstick crescents + the Chorus ring, the
                        ENCORE! crowd, the kotatsu (aura, quilt frames, steam, Zzz over the hero and sleeping enemies),
@@ -485,7 +489,7 @@ export const heartBoomerang: WeaponDef = {
   desc: "Thrown at the nearest enemy, flies out and returns, piercing.",
   levels: [ { dmg: 12, cd: 1.4, amount: 1, speed: 150, pierce: Infinity, knock: 40 }, /* ... 5 entries */ ],
   upgrades: ["+1 heart", "Damage +5", "...", "..."],          // text for Lv2..Lv5
-  evolution: { into: "love_tornado", with: "twin_charm" },   // optional
+  evolutions: [{ into: "love_tornado", with: "twin_charm" }], // optional; one entry per passive, the first = its first evolution
   update(w, inst, dt) {
     const S = wstats(w, inst);                               // dmg/cd/amount/area... with stats applied
     inst.timer -= dt;
@@ -503,7 +507,9 @@ export const weapons: WeaponDef[] = [heartBoomerang, loveTornado];
 ```
 
 It is automatically offered as a NEW card, levels up, shows in the HUD/pause/
-results, and evolves via the card/chest system. New trail looks: add a key to
+results, and evolves via the card/chest system. Read a weapon's evolutions through `evolutionsOf(def)`
+(`registry.ts`; also `evolutionWith`, `evolvesInto`, `evolvedFormsOf`, `baseWeaponOf`, and
+`isWeaponOf(source, base)` for "this weapon or any of its evolutions"): never through the field. New trail looks: add a key to
 `src/view/trails.ts`. Hit sound override: `hitSfx`.
 
 Looks the projectile list can't express (lightning, area blasts, heals, auras,
@@ -529,6 +535,63 @@ rate, the Amount stat's extra bodies and a second guarding weapon; knobs in `CFG
 frame: a broken body is empty space until it reforms, no cooldown marker by design); blocks count in
 `RunStats.orbitalBlocks`. A new orbital weapon adds `block` / `mend` to its levels and the three calls (the cues
 come for free).
+
+### Adding a second evolution
+
+Every base weapon gets a second evolution through a different passive (design, status and work packages:
+`docs/content/weapons.md` §8). The data model, the choice (two cards on a level-up, a chest's ROUTE SPLIT ->
+`World.pendingChoices`), hints, Wiki, hero pages, bot, relics, mastery and the account layer already handle
+any number of evolutions per weapon; the pilot is Meowteor Hammer (`weapons/yarn-orbit.ts`). A new one is
+mechanical, and touches **no shared file** except its own cells of the §8 table:
+
+1. **Sim** - `src/game/weapons/<base>.ts` (re-read it right before editing: the balance lab may be tuning its
+   level tables). Add the evolved `WeaponDef` (`evolved: true`, one `levels` entry, `icon: "icon_<id>"`,
+   `desc` starting with "EVOLUTION! ", `upgrades: []`, a `dispose` that kills what it owns), append it to
+   the file's `weapons` export, and add `{ into: "<id>", with: "<passive id>" }` as the **second** entry of
+   the base weapon's `evolutions`. Id, name and passive are the §8.1 row's. Keep `src/game` pure. Use the
+   new id as the damage `source`. Cues the view needs: `wfx()` / `heroFx()` from `weapons/_fx.ts`.
+2. **Family lists** - `grep -rn "<first evolution id>" src` and decide, hit by hit, whether the new id
+   belongs next to it (e.g. `enemies/_candy.ts` FIRE_SOURCES, `weapons/_truck.ts` / `_charm.ts` /
+   `_hb.ts` lookups, `ui/hud-arsenal2.ts`, `debug/bot.ts`, a hero's per-frame drawer in
+   `view/heroes-*-fx.ts`). Talents, traits and Plot Points that mean "the weapon and its evolutions" should
+   ask `isWeaponOf(source, "<base>")` (sim) or `baseWeaponId(id, ctx)` (meta) instead of listing ids.
+3. **Art** - `src/art/sprites/evo2-<package>.ts`: palette-grid sprites in `sprites` **and** their rows in
+   `manifest` (`row()` / `iconRow()` from `evo2-util.ts`; `manifest.ts` and `icons.ts` are not edited; copy
+   `evo2-pilot.ts`). Always the 16×16 `icon_<id>` with the gold twinkle. Then `npm run sprites -- --filter
+   <id> --scale 10` and READ the PNG; `npm run sprites -- --validate` must report 0 missing / 0 errors.
+4. **View** - `src/view/evo2/<package>.ts`: an `Evo2Module` (`ids`, `bind`, `frame`, `draw`, `reset`;
+   contract and rules in `src/view/evo2-fx.ts`; copy `evo2/pilot.ts`). `world-view.ts`, `feedback.ts` and
+   the existing `*-fx.ts` files are not edited, unless an existing per-frame drawer keyed on the weapon id
+   must also draw the new id (step 2). Particles on the fx layers fade over the hero by themselves; a sprite
+   you draw that can land on her passes `Flag.Focus`. No cooldown markers or status rings on the hero.
+   Sound: reuse existing `SfxId`s (the def's `sfx` / `hitSfx`, or `o.sfx(...)` rate-limited).
+5. **Docs** - in `docs/content/weapons.md` §8: set the row's Status to `done` and bring its §8.2 entry in
+   line with what shipped (`levels[0]`, the gauge numbers against the first evolution). Nothing else: the
+   Wiki text is the def's `desc`; `docs/content/art-manifest.md` is Season 2 only.
+6. **Tests** - `tests/evo2-<package>.test.ts` for the mechanic (copy the pilot's block in
+   `tests/evo2.test.ts`; tag anything that simulates for long `slow`). `tests/coverage.test.ts` and
+   `tests/evo2.test.ts` check the rest from the registry and the §8.1 table: the row matches (id, name,
+   base, passive), the passive differs from the first evolution's, no passive gates more than 3, the def
+   shape, base mapping for mastery / the account layer. A new recipe changes which passives complete a
+   pair, so level-up weights and bot picks move for runs that hold the base weapon: run `npm run test:slow`
+   and, if a frozen line of `tests/fixtures/meadow-parity.ts` moved (only the original 8 weapons are in
+   that pool), re-record that one line (the failure prints it) and add your weapon to the header note.
+7. **Check** - `npm run typecheck`, `npm test`, then look at it:
+   `npm run scenes -- --only "evo2:<id>~180/15,evo2:<id>:calm~160/20" --devices i13` (the generic scenario:
+   the base weapon's hero mid-Shoujo Academy with that route taken; `washout` / `murk` are checked on every
+   frame) and READ the PNGs; balance on the gauge against the first evolution (crowd DPS within about
+   0.8-1.4×, it is a sidegrade): `npm run balance:lab -- --job '{"kind":"gauge","hero":"hoshi","cp":null,"weapons":[["<id>",1]],"T":6}'`;
+   `npm run check:bundle` (about 3-5 KB raw / 1-1.5 KB gzip per evolution is normal) and, before handing
+   over, `npm run doctor -- --scenes`.
+
+Parallel packages (A-D in §8.3) share only: `docs/content/weapons.md` §8 (own rows and entries: re-read,
+then edit one cell / one entry at a time), `tests/fixtures/meadow-parity.ts` (packages A and B only: one line
+at a time, re-read first; if two packages move the same line, the later one re-records it), and - only if
+step 2 demands it - the family files named there.
+Everything else is one file per package (`evo2-<package>.ts`, `evo2/<package>.ts`, `evo2-<package>.test.ts`)
+or one file per weapon. Do not edit `tests/coverage.test.ts`, `tests/evo2.test.ts`, `src/art/manifest.ts`,
+`src/view/evo2-fx.ts`, `src/game/registry.ts`, `src/game/upgrades.ts` or `scripts/check-*.mjs` budgets from
+a package: report what is missing instead.
 
 ### Enemy (`src/game/enemies/<name>.ts`)
 
@@ -1532,7 +1595,7 @@ from it) fails there with the exact id.
 | --- | --- | --- | --- |
 | `hoshi` | `star_shot` -> `galaxy_barrage` (+ `wish_charm`) | `supernova_shower` | start |
 | `rin` | `petal_slash` -> `sakura_tempest` (+ `big_ribbon`) | `thousand_blossom_cut` | defeat King Puff |
-| `mochi` | `yarn_orbit` -> `cosmic_yarn` (+ `magnet_star`) | `nyan_stampede` | 3,000 lifetime kills |
+| `mochi` | `yarn_orbit` -> `cosmic_yarn` (+ `magnet_star`) or `meowteor_hammer` (+ `power_bow`) | `nyan_stampede` | 3,000 lifetime kills |
 | `kuro` | `dark_flame_dragon` -> `unsealed_abyss_dragon` (+ `inner_monologue`) | `eternal_abyss` | survive 6:00 in Dream Meadow |
 | `pudding` | `teapot_tempest` -> `eternal_tea_party` (+ `bento_box`) | `omurice_of_love` | clear Dream Meadow |
 | `aoi` | `micro_missile_swarm` -> `al_dente_armageddon` (+ `speed_lines`) | `get_in_the_robot` | clear Candy Kingdom |

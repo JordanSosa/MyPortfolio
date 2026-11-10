@@ -10,7 +10,7 @@
  * Overdrive with a mini cut-in PREVIEW.
  */
 import type { HeroDef } from "../../../game/types";
-import { PASSIVES } from "../../../game/passives";
+import { recipesOf } from "../../../game/evo-hints";
 import { ULTIMATES, WEAPONS } from "../../../game/registry";
 import type { HeroProgress } from "../../../meta/profile";
 import { esc, fmtInt, fmtTime, hasArt, img } from "../../dom";
@@ -80,8 +80,8 @@ export function profileHtml(hd: HeroDef, hp: HeroProgress, unlocked: boolean, fa
   const bio = parseBio(hd.id, hd.name);
   const wd = WEAPONS.get(hd.weapon);
   const ud = ULTIMATES.get(hd.ult);
-  const evo = wd?.evolution ? WEAPONS.get(wd.evolution.into) : undefined;
-  const partner = wd?.evolution ? PASSIVES.find((x) => x.id === wd.evolution?.with) : undefined;
+  // (one line per evolution: the signature weapon may have several routes)
+  const evos = wd ? recipesOf(wd) : [];
   if (!unlocked) {
     return `
       <div class="fan locked">
@@ -140,7 +140,7 @@ export function profileHtml(hd: HeroDef, hp: HeroProgress, unlocked: boolean, fa
             <small class="hk-k">SIGNATURE WEAPON</small>
             <b>${esc(wd?.name ?? hd.weapon)}</b>
             <small>${esc(wd?.desc ?? "")}</small>
-            ${evo ? `<span class="hk-evo">${partner && hasArt(partner.icon) ? img(partner.icon, "px") : ""}<span>+ ${esc(partner?.name ?? "its partner")} ▶</span>${hasArt(evo.icon) ? img(evo.icon, "px") : ""}<b>${esc(evo.name)}</b></span>` : ""}
+            ${evos.map(({ passive: partner, into: evo }) => `<span class="hk-evo">${hasArt(partner.icon) ? img(partner.icon, "px") : ""}<span>+ ${esc(partner.name)} ▶</span>${hasArt(evo.icon) ? img(evo.icon, "px") : ""}<b>${esc(evo.name)}</b></span>`).join("")}
           </span>
           ${tag("START", "gold")}
         </div>

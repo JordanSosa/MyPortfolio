@@ -129,8 +129,11 @@ export class Session {
     }
     if (this.bot && w.phase === "play") this.bot.think(w, w.input, Math.max(simDt, 1e-3));
     if (this.attract) {
-      while (w.pendingLevels > 0) w.choose(this.bot!.pick(w, w.offer()));
-      while (w.pendingChests.length > 0) w.openChest();
+      // (twice: a chest may hand over an evolution choice, World.pendingChoices)
+      for (let k = 0; k < 2; k++) {
+        while (w.pendingPicks > 0) w.choose(this.bot!.pick(w, w.offer()));
+        while (w.pendingChests.length > 0) w.openChest();
+      }
       if (w.phase !== "play" || w.t > 240) {
         this.restartAttract();
         return;

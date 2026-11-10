@@ -6,7 +6,7 @@
 //   npm run scenes -- --only boss:,ult:             scenarios whose name starts with one of these (or equals one)
 //   npm run scenes -- --only "ult:kuro~180/15"      a FILM: the scenario, then a checked shot every 15 frames for 180
 //                                                   (transient effects: an ult's shadow pass, a flash, a phase change)
-//   npm run scenes -- --all                         every scenario __kk.scenarios() lists (108)
+//   npm run scenes -- --all                         every scenario __kk.scenarios() lists (116)
 //   npm run scenes -- --devices i13,i13l,se,desktop,w360 --jobs 4   (also fhd 1920x1080, laptop 1366x768, half 683x768)
 //   npm run scenes -- --baseline                    store these shots as the visual baseline (shots/scenes/baseline/); every
 //                                                   scene is loaded twice and its load-to-load diff kept as its noise floor

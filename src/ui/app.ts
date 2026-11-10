@@ -52,7 +52,6 @@ import { AutoQuality, guessTier, isQualityTier, QUALITY, Renderer, type QualityT
 import { showCutin, type CutinHandle } from "./cutin";
 import { cutinLine } from "../game/heroes-b";
 import { prewarmSprites, setAtlas } from "./dom";
-import { MANIFEST } from "../art/manifest";
 import { Hud } from "./hud";
 import { Nav, type NavLayer } from "./nav";
 import { save, type Settings } from "./save";
@@ -281,10 +280,12 @@ export class App implements KitHost {
     const icons: [string, number][] = [];
     const portraits: [string, number][] = [];
     const idles: [string, number][] = [];
-    for (const m of MANIFEST) {
-      if (m.id.startsWith("icon_") || m.id === "chest") for (let f = 0; f < m.frames; f++) icons.push([m.id, f]);
+    // (the atlas knows every sprite and its frame count: the art manifest itself stays out of the game bundle)
+    for (const m of this.r.atlas.sprites.values()) {
+      if (m.placeholder) continue;
+      if (m.id.startsWith("icon_") || m.id === "chest") for (let f = 0; f < m.count; f++) icons.push([m.id, f]);
       else if (m.id.startsWith("portrait_")) portraits.push([m.id, 0], [m.id, 1]);
-      else if (m.id.endsWith("_idle")) for (let f = 0; f < m.frames; f++) idles.push([m.id, f]);
+      else if (m.id.endsWith("_idle")) for (let f = 0; f < m.count; f++) idles.push([m.id, f]);
     }
     prewarmSprites([...icons, ...portraits, ...idles], () => this.screen !== "game" && !this.modal && !this.sub && overlaysOpen() === 0 && performance.now() - this.changedAt > PREWARM_SETTLE_MS);
     // (the Training Arc's glyph pretint, started at boot, waits out a run the same way)
@@ -993,7 +994,7 @@ export class App implements KitHost {
           if (inp.pressed("dash")) w.input.dash = true;
           if (inp.pressed("ult")) {
             // a level-up / chest is about to open: the cut-in must not start under it
-            const queued = this.lvIntro >= 0 || w.pendingLevels > 0 || w.pendingChests.length > 0;
+            const queued = this.lvIntro >= 0 || w.pendingPicks > 0 || w.pendingChests.length > 0;
             if (!queued) {
               if (w.ultReady) w.input.ult = true;
               else if (!w.ult && w.phase === "play") {
@@ -1037,7 +1038,8 @@ export class App implements KitHost {
       time.easeTo(1, 0.2);
     }
     if (!this.modal && w.phase === "play" && !cut && !hold) {
-      if (w.pendingLevels > 0) {
+      // (pendingPicks: level-ups, and the evolution choice a chest handed over - the same card picker)
+      if (w.pendingPicks > 0) {
         if (this.lvIntro < 0) {
           this.lvIntro = 0;
           time.easeTo(0.2, 0.3);

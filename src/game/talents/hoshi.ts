@@ -15,8 +15,8 @@ import { PK_MANAGED, ROT_SPIN, type Projectile } from "../types";
 import { miniStar, starInst } from "../weapons/star-shot";
 import type { World } from "../world";
 import { Budget, byRank, node } from "./_node";
+import { isWeaponOf } from "../registry";
 
-const STAR_SOURCES = new Set(["star_shot", "galaxy_barrage"]);
 
 /** Guardian Stars: two orbiting stars that block enemy bullets and fire back. */
 function installGuardians(w: World): void {
@@ -127,7 +127,7 @@ export const hoshiTree: TalentTree = {
         const frac = byRank([0.3, 0.4, 0.5], r);
         const budget = new Budget(16);
         w.hooks.on("hit", (h) => {
-          if (!h.crit || !STAR_SOURCES.has(h.source) || !budget.take(w)) return;
+          if (!h.crit || !isWeaponOf(h.source, "star_shot") || !budget.take(w)) return;
           const e = h.enemy;
           const dmg = (h.dmg / Math.max(1, w.stats.critMult)) * frac;
           const a0 = w.rng.angle();

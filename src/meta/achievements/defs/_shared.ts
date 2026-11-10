@@ -55,14 +55,17 @@ export function weaponSeen(c: AchCtx, id: string): boolean {
   return c.p.codex.weapons.includes(id) || !!c.run?.weaponsUsed?.includes(id);
 }
 
-/** Number of discovered codex weapons that are base weapons (`evolved = false`) or evolutions (`true`). */
-export function codexWeapons(c: AchCtx, evolved: boolean): number {
+/**
+ * Number of discovered codex weapons that are base weapons (`evolved = false`) or evolutions (`true`).
+ * `evoIndex`: only evolutions at that position of their base weapon's list (0 = first evolutions, 1 = second).
+ */
+export function codexWeapons(c: AchCtx, evolved: boolean, evoIndex?: number): number {
   const seen = new Set(c.p.codex.weapons);
   for (const id of c.run?.weaponsUsed ?? []) seen.add(id);
   let n = 0;
   for (const id of seen) {
     const w = c.ctx.weapons.get(id);
-    if (w && w.evolved === evolved) n++;
+    if (w && w.evolved === evolved && (evoIndex === undefined || (w.evoIndex ?? 0) === evoIndex)) n++;
   }
   return n;
 }

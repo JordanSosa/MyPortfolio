@@ -12,7 +12,7 @@
 import type { RelicDef, StageInfo, TalentTree, TwistDef } from "../game/defs";
 import { HEROES } from "../game/heroes";
 import { PASSIVES } from "../game/passives";
-import { BOSSES, ENEMIES, RELICS, stageInfos, TALENT_TREES, TWISTS, WEAPONS } from "../game/registry";
+import { BOSSES, ENEMIES, RELICS, stageInfos, TALENT_TREES, TWISTS, WEAPONS, evolutionsOf } from "../game/registry";
 
 export interface HeroInfo {
   id: string;
@@ -30,10 +30,12 @@ export interface WeaponInfo {
   name: string;
   icon: string;
   evolved: boolean;
-  /** Base weapons: the evolution's id and the passive it needs. */
-  evolution?: { into: string; with: string };
+  /** Base weapons: each evolution's id and the passive it needs (the first entry = the first evolution). */
+  evolutions?: readonly { into: string; with: string }[];
   /** Evolved weapons: the base weapon id (mastery is tracked on the base). */
   baseOf?: string;
+  /** Evolved weapons: which of the base weapon's evolutions this is (0 = the first, 1 = the second ...). */
+  evoIndex?: number;
 }
 
 export interface NamedInfo {
@@ -95,10 +97,14 @@ export function makeContent(parts: ContentParts): MetaContent {
   for (const w of parts.weapons ?? []) weapons.set(w.id, { ...w });
   // evolved -> base links
   for (const w of weapons.values()) {
-    if (!w.evolved && w.evolution) {
-      const evo = weapons.get(w.evolution.into);
-      if (evo && !evo.baseOf) evo.baseOf = w.id;
-    }
+    if (w.evolved) continue;
+    (w.evolutions ?? []).forEach((e, i) => {
+      const evo = weapons.get(e.into);
+      if (evo && !evo.baseOf) {
+        evo.baseOf = w.id;
+        evo.evoIndex = i;
+      }
+    });
   }
   const stages = [...(parts.stages ?? [])].sort((a, b) => a.order - b.order || (a.id < b.id ? -1 : 1));
   const talents = new Map<string, TalentTree>();
@@ -132,7 +138,7 @@ let cached: MetaContent | null = null;
 export function gameContent(): MetaContent {
   if (cached) return cached;
   const weapons: WeaponInfo[] = [];
-  for (const w of WEAPONS.values()) weapons.push({ id: w.id, name: w.name, icon: w.icon, evolved: !!w.evolved, evolution: w.evolution ? { ...w.evolution } : undefined });
+  for (const w of WEAPONS.values()) weapons.push({ id: w.id, name: w.name, icon: w.icon, evolved: !!w.evolved, evolutions: evolutionsOf(w).map((e) => ({ ...e })) });
   const enemies: NamedInfo[] = [];
   for (const e of ENEMIES.values()) if (!e.prop && !e.boss && !e.noCodex) enemies.push({ id: e.id, name: e.name, icon: e.sprite });
   const bosses: NamedInfo[] = [];

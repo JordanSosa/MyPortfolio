@@ -165,7 +165,7 @@ export const cheatFireball: WeaponDef = {
     { dmg: 52, cd: 1.5, amount: 3, speed: 120, blast: 28, overdo: 4, knock: 110 },
   ],
   upgrades: ["Damage +6, bigger boom", "+1 fireball", "Damage +10, cooldown −17%, bigger boom", "Damage +8, +1 fireball, overdoes it every 4th cast"],
-  evolution: { into: EVO, with: "training_montage" },
+  evolutions: [{ into: EVO, with: "training_montage" }],
   limitBreak: [
     { amount: 1, dmg: 0.1, text: "LIMIT BREAK — Dual Cast (Accidentally): +1 fireball, +10% damage" },
     { dmg: 0.25, area: 0.2, text: "MASTERED — Lv.10000: +25% damage, +20% blast" },

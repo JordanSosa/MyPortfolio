@@ -42,7 +42,7 @@ import { heroDef } from "./heroes";
 import type { HitHook, KillHook, LethalHook, SimHooks, Buff, HurtHook, PickupHook, DashHook } from "./hooks";
 import { applyMeta, type MetaRanks } from "./meta";
 import { PASSIVE_BY_ID } from "./passives";
-import { RELICS, TALENT_TREES, TWISTS, ULTIMATES, WEAPONS, baseWeaponOf, enemyDef, stageDef, twistHeat } from "./registry";
+import { RELICS, TALENT_TREES, TWISTS, ULTIMATES, WEAPONS, baseWeaponOf, enemyDef, evolutionsOf, stageDef, twistHeat } from "./registry";
 import { defaultRunConfig, type RunConfig, type RunStatCounter, type RunStats } from "./run-config";
 import { RunStatsCollector } from "./run-stats";
 import type { StageDef, StageScaling } from "./stage";
@@ -2446,9 +2446,13 @@ export class World {
     return !pool || pool.includes(id);
   }
 
-  /** Replace a maxed base weapon with its evolution (same slot, keeps damage stats). */
-  evolveWeapon(inst: WeaponInstance): WeaponInstance | null {
-    const evo = inst.def.evolution ? WEAPONS.get(inst.def.evolution.into) : undefined;
+  /**
+   * Replace a maxed base weapon with one of its evolutions (same slot, keeps damage stats): `into` names
+   * which (an id that is not an evolution of this weapon: null); omitted = its first evolution.
+   */
+  evolveWeapon(inst: WeaponInstance, into?: string): WeaponInstance | null {
+    const spec = into === undefined ? evolutionsOf(inst.def)[0] : evolutionsOf(inst.def).find((e) => e.into === into);
+    const evo = spec ? WEAPONS.get(spec.into) : undefined;
     if (!evo) return null;
     inst.def.dispose?.(this, inst);
     for (let i = 0; i < inst.projs.length; i++) if (inst.projs[i].uid === inst.uids[i]) inst.projs[i].dead = true;
@@ -2534,16 +2538,55 @@ export class World {
 
   // ================================================================ upgrades & chests
   private currentOffer: UpgradeCard[] | null = null;
+  /**
+   * Evolution choices a chest handed over (a weapon with several evolutions ready, upgrades.ts ROUTE SPLIT):
+   * each entry is the evolution cards to pick one from. They come before level-ups in offer() / choose()
+   * and cost no level; reroll, banish and skip do not apply to them.
+   */
+  readonly pendingChoices: UpgradeCard[][] = [];
 
-  /** Cards for the pending level-up (stable until chosen or rerolled). */
+  /** Picks waiting for the player: queued level-ups plus chest evolution choices. */
+  get pendingPicks(): number {
+    return this.pendingLevels + this.pendingChoices.length;
+  }
+
+  /** The offer in front of the player is a chest's evolution choice (not a level-up). */
+  get choosing(): boolean {
+    this.pruneChoices();
+    return this.pendingChoices.length > 0;
+  }
+
+  /** Queue an evolution choice (applyCard: a chest's ROUTE SPLIT card). */
+  queueChoice(cards: UpgradeCard[]): void {
+    if (cards.length > 0) this.pendingChoices.push(cards.slice());
+  }
+
+  /** A choice for this base weapon is already queued (its evolution cards are not offered a second time). */
+  choiceQueued(base: string): boolean {
+    for (const c of this.pendingChoices) if (c[0]?.base === base) return true;
+    return false;
+  }
+
+  /** Drop queued choices that can no longer be made (the weapon is gone or evolved since). */
+  private pruneChoices(): void {
+    const q = this.pendingChoices;
+    while (q.length > 0) {
+      const base = q[0][0]?.base;
+      if (base && this.hasWeapon(base)) break;
+      q.shift();
+    }
+  }
+
+  /** Cards for the pending pick: a chest's evolution choice first, else the level-up (stable until chosen or rerolled). */
   offer(): UpgradeCard[] {
+    if (this.choosing) return this.pendingChoices[0];
     if (!this.currentOffer) this.currentOffer = makeOffer(this, this.stats.cards);
     return this.currentOffer;
   }
 
   /** Spend a reroll; returns the new offer, or null when none are left. */
   reroll(): UpgradeCard[] | null {
-    if (!this.difficulty.rerolls) return null;
+    if (!this.difficulty.rerolls || this.choosing) return null;
     if (this.rerolls <= 0 && !this.freeRerolls) return null;
     // a maxed build only gets the Heal / Star Pouch fallbacks: rerolling can't change anything, keep the reroll
     if (!this.canReroll) return this.offer();
@@ -2565,7 +2608,7 @@ export class World {
    * new offer, or null when no banish is left / the card can't be banished.
    */
   banish(card: UpgradeCard): UpgradeCard[] | null {
-    if (this.banishes <= 0 || !this.canBanish(card)) return null;
+    if (this.banishes <= 0 || !this.canBanish(card) || this.choosing) return null;
     const offer = this.offer();
     const i = offer.indexOf(card);
     if (i < 0) return null;
@@ -2587,7 +2630,7 @@ export class World {
    * Returns false when no skip is left.
    */
   skipLevelUp(): boolean {
-    if (this.skips <= 0 || this.pendingLevels <= 0) return false;
+    if (this.skips <= 0 || this.pendingLevels <= 0 || this.choosing) return false;
     this.skips--;
     const lv = this.level - this.pendingLevels + 1;
     this.currentOffer = null;
@@ -2604,8 +2647,13 @@ export class World {
     return canChangeOffer(this);
   }
 
-  /** Apply a level-up card and consume one pending level. */
+  /** Apply a level-up card and consume one pending level (a chest's evolution choice: no level is consumed). */
   choose(card: UpgradeCard): void {
+    if (this.choosing) {
+      const q = this.pendingChoices.shift();
+      applyCard(this, q && q.includes(card) ? card : (q?.[0] ?? card));
+      return;
+    }
     applyCard(this, card);
     // a SEASON FINALE level-up (Season Finale Manga): pick a second card from the same offer
     const offer = this.currentOffer;
@@ -2613,6 +2661,9 @@ export class World {
       const rest = offer.filter(
         (c) =>
           c !== card &&
+          // (the other evolution of the weapon that just evolved is gone with it)
+          !(c.kind === "evolution" && !(c.base && this.hasWeapon(c.base))) &&
+          !(c.kind === "weapon" && c.from > 0 && !this.hasWeapon(c.id)) &&
           !(c.kind === "weapon" && !this.hasWeapon(c.id) && this.weapons.length >= this.weaponSlots) &&
           !(c.kind === "passive" && this.passiveLevel(c.id) <= 0 && this.passives.length >= this.passiveSlots),
       );

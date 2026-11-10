@@ -7,11 +7,14 @@
 // docs/ARCHITECTURE.md section 6.7; shots/verify/parity.sim.ts prints the lines) and by the orbital pass (Yarn Orbit's
 // balls block bullets and hit harder from Lv3: only the mochi line moved; docs/content/weapons.md section 7) and its
 // reviewer pass (the guard's mend time takes the cooldown stat at half rate: the mochi line again - this chaotic seed
-// died at 2:17 with the first guard rule, survives to 3:20 with this one). If a future balance pass changes Dream Meadow
+// died at 2:17 with the first guard rule, survives to 3:20 with this one) and by the second-evolution pass (a new recipe
+// changes which passives complete a pair, so the level-up weights and the bot's picks of the heroes holding that weapon
+// move: Yarn Orbit + Power Bow -> Meowteor Hammer moved the mochi line only; every further second evolution re-records
+// the lines of the runs that hold its base weapon - docs/content/weapons.md section 8). If a future balance pass changes Dream Meadow
 // on purpose, regenerate these lines with the generator in tests/stages.test.ts (fingerprint()).
 export const MEADOW_PARITY: readonly string[] = [
   "hoshi|1|200|200.033|play|904|12|-88.673|-766.936|76|5|96|supernova_shower:26010,star_shot:17469,petal_slash:5239,bubble_aura:2672|wave:swarm@105.03 spawn:king_puff@183.03",
   "rin|2|200|68.367|dead|429|7|421.114|-61.505|91|4|121|thousand_blossom_cut:14139,candy_bomb:5708,petal_slash:3365,yarn_orbit:1160|",
-  "mochi|3|200|200.033|play|1044|12|-490.959|-1392.747|160|6|155|nyan_stampede:34234,heart_boomerang:31366,yarn_orbit:4025,bubble_aura:2520|wave:swarm@105.03 spawn:king_puff@183.03",
+  "mochi|3|200|200.033|play|391|10|1840.759|-2189.787|181|6|92|nyan_stampede:10460,petal_slash:4514,yarn_orbit:2768,bubble_aura:1435|wave:swarm@105.03 spawn:king_puff@183.03",
   "hoshi|7|700|200.800|dead|1326|16|-744.352|-1446.355|162|6|121|thunder_bell:22522,star_shot:20740,supernova_shower:19137,prism_beam:5403,bubble_aura:2782|wave:swarm@105.03 spawn:king_puff@183.03",
 ];

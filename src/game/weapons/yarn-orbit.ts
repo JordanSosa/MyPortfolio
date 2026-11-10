@@ -2,10 +2,14 @@
  * Yarn Orbit (Mochi): yarn balls circle the player (3 s on / 1.3 s off),
  * each enemy can be bonked every 0.4 s (0.34 s from Lv3, 0.28 s at Lv5).
  * Evolution: Cosmic Yarn (+ Magnet Star) - 6 permanent planets (bonk every 0.26 s) that also pull gems.
+ * Second evolution: Meowteor Hammer (+ Power Bow) - 4 permanent spiked yarn balls on a ring that swings
+ *   in and out (`rIn`..`rOut`, one swing per `cd` s) and SLAMS at the top of every swing (a blast per ball).
+ *   The aggressive route: far more ground covered and burst, but no gem pull, and its balls guard like the
+ *   base weapon's (`block` 1) while spending half the swing away from her.
  *
  * ORBITAL GUARD (weapons/_orbital.ts): every ball / planet eats the enemy bullets it touches. A
  * ball breaks on its first (`block` 1) and is back its mend time later (`mend` s, scaled: _orbital.ts); a planet soaks
- * `block` 3 and mends faster. Boss beams / slams / telegraphed blasts are not bullets: never blocked.
+ * `block` 3 and mends faster; a Meowteor ball breaks on its first, like a yarn ball (a broken one does not slam). Boss beams / slams / telegraphed blasts are not bullets: never blocked.
  *
  * Mochi's Infinite Yarn talent (+2 balls, never off) and C6 (never off, pulls
  * gems like Cosmic Yarn) read here.
@@ -99,7 +103,10 @@ export const yarnOrbit: WeaponDef = {
     { dmg: 20, cd: 1.1, amount: 5, area: 1.3, duration: 3.5, speed: 4.2, knock: 55, every: 0.28, block: 1, mend: 2.2 },
   ],
   upgrades: ["+1 yarn ball", "Damage +4, area +15%, bonks faster", "+1 yarn ball, bigger, lasts longer", "Damage +6, area +10%, spins and bonks faster"],
-  evolution: { into: "cosmic_yarn", with: "magnet_star" },
+  evolutions: [
+    { into: "cosmic_yarn", with: "magnet_star" },
+    { into: "meowteor_hammer", with: "power_bow" },
+  ],
   // mastery Limit Breaks (docs/content/weapons.md §4): Lv6 at rank 5, Lv7 at rank 10
   limitBreak: [
     { amount: 1, dmg: 0.15, text: "LIMIT BREAK — Spare Yarn: +1 ball, +15% damage" },
@@ -198,4 +205,56 @@ export const cosmicYarn: WeaponDef = {
   },
 };
 
-export const weapons: WeaponDef[] = [yarnOrbit, cosmicYarn];
+/** Meowteor Hammer: how far out the ring is (0 = `rIn`, 1 = `rOut`) at swing phase `ph` (0..1, the slam at 0.5). */
+export function meowteorSwing(ph: number): number {
+  return 0.5 - 0.5 * Math.cos(ph * TAU);
+}
+
+export const meowteorHammer: WeaponDef = {
+  id: "meowteor_hammer",
+  name: "Meowteor Hammer",
+  icon: "icon_meowteor_hammer",
+  color: C.orange,
+  hitSfx: "orbitHit",
+  evolved: true,
+  desc: "EVOLUTION! 4 spiked yarn wrecking balls swing far out and SLAM on every swing. Blocking is somebody else's arc.",
+  levels: [{ dmg: 28, cd: 2.6, amount: 4, area: 1.15, speed: 4.4, knock: 90, every: 0.3, block: 1, mend: 2.2, rIn: 26, rOut: 74, slam: 26, slamDmg: 90 }],
+  upgrades: [],
+  update(w, inst, dt) {
+    const S = wstats(w, inst);
+    const d = inst.data;
+    const g = guardOf(inst);
+    guardTick(w, g, S.L.mend ?? 2.2, inst.def.color, dt);
+    const want = Math.min(10, S.amount);
+    if (prune(inst) !== want) {
+      killOwned(inst);
+      for (let i = 0; i < want; i++) spawnBall(w, inst, S, Infinity, "w_meowteor", 8, S.L.every ?? 0.3);
+      fired(w, inst, w.player.x, w.player.y);
+    }
+    for (const p of inst.projs) {
+      p.dmg = S.dmg;
+      p.knock = S.knock;
+      p.hitEvery = S.L.every ?? 0.3;
+    }
+    d.ang = ((d.ang ?? 0) + (S.L.speed ?? 4.4) * w.stats.projSpeed * dt) % TAU;
+    // the swing: in -> out -> in once per `cd` s (the cooldown stat swings it faster); the slam at the far point
+    const before = d.ph ?? 0;
+    const ph = before + dt / Math.max(0.6, S.cd);
+    d.ph = ph % 1;
+    const rIn = (S.L.rIn ?? 26) * S.area;
+    const R = rIn + ((S.L.rOut ?? 74) * S.area - rIn) * meowteorSwing(d.ph);
+    placeRing(w, inst, R, d.ang, 0.85);
+    guardRing(w, inst, g, S, R, 8);
+    if (before < 0.5 && ph >= 0.5) {
+      const r = (S.L.slam ?? 26) * S.area;
+      const dmg = (S.L.slamDmg ?? 70) * (S.dmg / Math.max(1e-6, S.L.dmg));
+      // (a broken ball is not there to slam)
+      for (const p of inst.projs) if (p.r > 0) w.explode(p.x, p.y, r, dmg, inst, S.knock * 1.6, inst.def.id, inst.def.color);
+    }
+  },
+  dispose(_w, inst) {
+    killOwned(inst);
+  },
+};
+
+export const weapons: WeaponDef[] = [yarnOrbit, cosmicYarn, meowteorHammer];

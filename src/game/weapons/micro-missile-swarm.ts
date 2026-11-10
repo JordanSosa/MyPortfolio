@@ -202,7 +202,7 @@ export const microMissileSwarm: WeaponDef = {
     { dmg: 12, cd: 1.4, amount: 10, speed: 150, turn: 5, blast: 16, knock: 34 },
   ],
   upgrades: ["+2 missiles", "Damage +2, bigger blasts", "+2 missiles, cooldown −12%", "Damage +3, +2 missiles, sharper homing"],
-  evolution: { into: "al_dente_armageddon", with: "speed_lines" },
+  evolutions: [{ into: "al_dente_armageddon", with: "speed_lines" }],
   // mastery Limit Breaks (docs/content/weapons.md §4): a Limit Break amount = +2 missiles
   limitBreak: [
     { amount: 1, dmg: 0.1, text: "LIMIT BREAK — More Pasta: +2 missiles, +10% damage" },

@@ -180,7 +180,7 @@ export const darkFlameDragon: WeaponDef = {
     { dmg: 9, cd: 1.9, amount: 2, duration: 1.1, len: 72, angle: 28, burnDps: 6, burn: 3, knock: 10 },
   ],
   upgrades: ["Damage +1, longer flames", "+1 dragon (the sequel)", "Damage +2, cooldown −14%, burns last longer", "Damage +2, a bigger, longer, hotter breath"],
-  evolution: { into: "unsealed_abyss_dragon", with: "inner_monologue" },
+  evolutions: [{ into: "unsealed_abyss_dragon", with: "inner_monologue" }],
   // mastery Limit Breaks (docs/content/weapons.md §4): Lv6 at rank 5, Lv7 at rank 10
   limitBreak: [
     { dmg: 0.2, area: 0.15, text: "LIMIT BREAK — Seal Weakening: +20% damage, +15% flame size" },

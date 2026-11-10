@@ -19,7 +19,9 @@ export type Owner =
   | "s2-stages-a"
   | "s2-stages-b"
   | "s2-bosses"
-  | "s2-items";
+  | "s2-items"
+  // ---- second evolutions (docs/content/weapons.md §8): rows live next to the art, see EVO2 below
+  | "evo2";
 export type Pivot = "feet" | "center";
 
 export interface ManifestEntry {
@@ -155,6 +157,15 @@ const S2_TWIST_ICONS: [string, string][] = [
   ["sequel_hook", "Twist Sequel Hook: a 'TO BE CONTINUED' arrow"],
   ["simulcast_delay", "Twist Simulcast Delay: a buffering spinner"],
 ];
+
+/**
+ * Second evolutions: every art file src/art/sprites/evo2-*.ts exports its own `manifest` rows next to its
+ * `sprites` (src/art/sprites/evo2-util.ts), so a new second evolution never edits this file.
+ */
+const evo2Mods = import.meta.glob<{ manifest?: ManifestEntry[] }>("./sprites/evo2-*.ts", { eager: true });
+const EVO2: ManifestEntry[] = Object.keys(evo2Mods)
+  .sort()
+  .flatMap((k) => evo2Mods[k].manifest ?? []);
 
 export const MANIFEST: ManifestEntry[] = [
   // ---------------------------------------------------------------- heroes
@@ -506,6 +517,8 @@ export const MANIFEST: ManifestEntry[] = [
   E("board_keystone", 24, 24, 4, "center", "s2-items", "Board keystone: big ornate star with a ribbon banner; f0 locked, f1 available, f2 affordable, f3 owned"),
   E("board_center", 32, 32, 2, "center", "s2-items", "Board centre 'Episode 1' node: clapperboard inside a star; f1 glow"),
   E("board_glyph", 8, 8, 24, "center", "s2-items", "Board node glyphs (white, tinted), frame order: 0 might, 1 max HP, 2 regen, 3 armor, 4 move, 5 cooldown, 6 area, 7 amount, 8 proj speed, 9 duration, 10 pickup, 11 crit, 12 crit dmg, 13 luck, 14 XP, 15 coins, 16 gem find, 17 dash cd, 18 curse, 19 reroll/banish/skip/cards, 20 slot, 21 revive, 22 dash charge, 23 overdrive/chest/elite"),
+  // ---------------------------------------------------------------- second evolutions (src/art/sprites/evo2-*.ts)
+  ...EVO2,
 ];
 
 /** Required fonts. */

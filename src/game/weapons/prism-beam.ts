@@ -109,7 +109,7 @@ export const prismBeam: WeaponDef = {
     { dmg: 14, cd: 1.7, amount: 3, duration: 0.75, area: 1, len: 160, width: 4.5, tick: 0.1, knock: 12 },
   ],
   upgrades: ["Damage +2", "+1 beam", "Damage +2, a longer beam that lasts 35% longer", "Damage +3, +1 beam, cooldown -15%"],
-  evolution: { into: "rainbow_cannon", with: "swift_shoes" },
+  evolutions: [{ into: "rainbow_cannon", with: "swift_shoes" }],
   // mastery Limit Breaks (docs/content/weapons.md §4): Lv6 at rank 5, Lv7 at rank 10
   limitBreak: [
     { amount: 1, dmg: 0.1, text: "LIMIT BREAK — Spare Prism: +1 beam, +10% damage" },

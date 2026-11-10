@@ -11,8 +11,8 @@
  *
  * READY mirrors the sim's rule without changing it (upgrades.ts evolutionCards): the base weapon
  * at its last regular level (levels.length; Limit Break levels past it still count), the passive
- * held at any level, the evolution not banished. A WeaponDef's `evolution` is normalised to a list
- * here (evolutionsOf), so a weapon that gains several evolutions gets one hint per recipe.
+ * held at any level, the evolution not banished. A weapon with several evolutions (WeaponDef.evolutions,
+ * read through registry.ts evolutionsOf) gets one hint per known recipe.
  *
  * Per card:
  *  - WEAPON card (NEW or level-up): one hint per known recipe of that weapon. State after the pick:
@@ -27,7 +27,7 @@
  *    weapon); `readies`: the pick makes the evolution ready when it was not. Either one = the card glows.
  */
 import { PASSIVE_BY_ID } from "./passives";
-import { WEAPONS } from "./registry";
+import { WEAPONS, evolutionsOf } from "./registry";
 import type { PassiveDef, UpgradeCard, WeaponDef } from "./types";
 
 /** One evolution recipe: base weapon + passive -> evolved weapon (resolved defs). */
@@ -82,15 +82,7 @@ export function knownFrom(...lists: readonly (readonly string[])[]): Known {
   return (id) => s.has(id);
 }
 
-type EvoSpec = { readonly into: string; readonly with: string };
-
-/** A weapon's evolutions as a list (today one `{ into, with }`; ready for several). Evolved weapons: none. */
-export function evolutionsOf(def: WeaponDef): readonly EvoSpec[] {
-  if (def.evolved) return [];
-  const raw = (def as { evolution?: EvoSpec | readonly EvoSpec[] }).evolution;
-  if (!raw) return [];
-  return Array.isArray(raw) ? (raw as readonly EvoSpec[]) : [raw as EvoSpec];
-}
+export { evolutionsOf };
 
 /** A weapon's recipes with resolved defs (entries naming a missing weapon / passive are skipped). */
 export function recipesOf(def: WeaponDef): EvoRecipe[] {

@@ -10,12 +10,15 @@
  *   boss     a boss fight from a snapshot just before the boss's timeline event
  *   full     a whole run (the matrix's ground truth, for --full and validation)
  *   progression  a quick account progression sample (tools/progression.sim.ts under Vitest, with the overrides)
+ *   weapon   one fixed build (a weapon alone, or a reference kit with / without the weapon) on a stage: a wave to
+ *            clear, a slice of the real director, a boss fight (the weapon bench, tools/balance-lab/weapons.ts)
  */
 import { stageDef } from "../../src/game/registry";
 import { runGauge } from "./job-gauge";
 import { runProgression } from "./job-prog";
 import { playRun } from "./job-run";
 import { runBoss, runCensus, runPath, runSlice } from "./job-snap";
+import { runWeapon } from "./job-weapon";
 import { applyOverrides, type Override } from "./overrides";
 import type { CellSpec } from "./snapshot";
 
@@ -210,7 +213,62 @@ export interface ProgressionJob {
   hours: number;
 }
 
-export type Job = GaugeJob | PathJob | WindowJob | SliceJob | BossJob | FullJob | CensusJob | ProgressionJob;
+/** The weapon bench's job (tools/balance-lab/job-weapon.ts): a fixed build on the real World + director + bot. */
+export interface WeaponJob {
+  kind: "weapon";
+  mode: "arena" | "slice" | "boss";
+  hero: string;
+  /** Account checkpoint (null = a default run: base stats, the "solo" measurements). */
+  cp: string | null;
+  stage: string;
+  seed: number;
+  bot?: string;
+  /**
+   * Who plays: the bot (default), or `camp` = a player who stands their ground (the bot's dash / Overdrive, but the
+   * hero stands still and takes a short step every 4 s): what auras, orbitals and the Kotatsu are built for.
+   */
+  play?: "camp";
+  /** The whole build ([id, level]; an evolution is its own id at level 1), the tested weapon included. */
+  weapons: [string, number][];
+  passives: [string, number][];
+  /** The weapon whose own damage is recorded ("" = a baseline: the kit without it). */
+  test: string;
+  /** Hero level (boss HP scales with it). */
+  level: number;
+  /** Run time the measurement starts at (s; boss: ignored, its timeline event), its length, the god-mode warm-up before it. */
+  at: number;
+  len: number;
+  warm: number;
+  /** arena: enemies in the wave to clear first (0 = none) and the seconds it may take. */
+  wave?: number;
+  waveCap?: number;
+  boss?: string;
+}
+
+export interface WeaponRec {
+  /** Seconds measured. */
+  T: number;
+  /** Damage dealt by every held weapon / by the tested one over T. */
+  dealt: number;
+  test: number;
+  kills: number;
+  /** Damage the hero took (after armour) / healing that landed / hits / bullets eaten by orbiting bodies. */
+  taken: number;
+  healed: number;
+  hits: number;
+  blocks: number;
+  /** Times the hero dropped under 40 % HP and was refilled (a real run would be in trouble). */
+  refills: number;
+  /** Mean enemies alive. */
+  alive: number;
+  /** arena: seconds to kill 90 % of the wave (-1 = not within the cap) and the share of it left. */
+  ttc?: number;
+  waveLeft?: number;
+  /** boss: fight length to the kill (-1 = alive after `len`), HP share left, weapon damage on the boss (all / tested). */
+  boss?: { ttk: number; left: number; dealt: number; test: number };
+}
+
+export type Job = GaugeJob | PathJob | WindowJob | SliceJob | BossJob | FullJob | CensusJob | ProgressionJob | WeaponJob;
 
 // ---------------------------------------------------------------- entry
 
@@ -234,6 +292,8 @@ export function runJob(job: Job, set: Override[] = []): unknown {
         return runBoss(job);
       case "census":
         return runCensus(job);
+      case "weapon":
+        return runWeapon(job);
     }
   } finally {
     undo();

@@ -27,6 +27,7 @@ import { RelicFx } from "./relic-fx";
 import { HeroesAFx } from "./heroes-a-fx";
 import { HeroesBFx } from "./heroes-b-fx";
 import { Arsenal2Fx } from "./arsenal2-fx";
+import { Evo2Fx } from "./evo2-fx";
 import { Speech } from "./speech";
 import { BULLET_LOOKS } from "./bullet-looks";
 import { CandyFx } from "./candy-fx";
@@ -74,6 +75,8 @@ export class WorldView {
   readonly heroesB: HeroesBFx;
   /** Season 2 general weapons: paper cranes, lightstick waves + ENCORE!, the kotatsu + Zzz, boba cues. */
   readonly arsenal2: Arsenal2Fx;
+  /** Second evolutions (src/view/evo2-fx.ts: one module file per work package in ./evo2/). */
+  readonly evo2: Evo2Fx;
   /** Enemy speech bubbles (satire.md §5-6; ambient + the sim's `enemySay`). */
   readonly speech: Speech;
   /** Candy Kingdom / Shoujo Academy content looks (stage enemies + bosses, stageCue candy_* / academy_*). */
@@ -151,6 +154,7 @@ export class WorldView {
     this.heroesA = new HeroesAFx(r, fx, this.anims);
     this.heroesB = new HeroesBFx(r, fx, this.anims, this.texts, this);
     this.arsenal2 = new Arsenal2Fx(r, fx, this.anims, this.texts);
+    this.evo2 = new Evo2Fx(r, fx, this.anims, this.texts);
     this.speech = new Speech(r);
     this.candy = new CandyFx(r, fx, this.anims, this.texts, this.speech);
     this.academy = new AcademyFx(r, fx, this.anims, this.texts, this.speech);
@@ -190,6 +194,7 @@ export class WorldView {
     this.heroesA.setWorld(w);
     this.heroesB.setWorld(w);
     this.arsenal2.setWorld(w);
+    this.evo2.setWorld(w);
     this.speech.setWorld(w);
     this.candy.setWorld(w);
     this.academy.setWorld(w);
@@ -257,6 +262,7 @@ export class WorldView {
     this.heroesA.draw(time, dt, realDt);
     this.heroesB.draw(time, dt, realDt);
     this.arsenal2.draw(time, dt, realDt);
+    this.evo2.draw(time, dt, realDt);
     this.candy.draw(time, dt, realDt);
     this.academy.draw(time, dt, realDt);
     this.s45.draw(time, dt, realDt);

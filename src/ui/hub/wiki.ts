@@ -109,7 +109,10 @@ export function wikiPage(hub: Hub, o: PageOpts): HubPage {
   }
   const el = h("div", "wiki");
   const layer = pageLayer(hub);
-  let tab: Tab = (TABS as string[]).includes(o.tab ?? "") ? (o.tab as Tab) : unclaimedCount(save.profile) > 0 ? "plot" : "heroes";
+  // (`tab` may name an entry too, "weapons/yarn_orbit": the page opens on that article - scenarios, deep links)
+  const [tab0, entry0] = (o.tab ?? "").split("/");
+  let tab: Tab = (TABS as string[]).includes(tab0) ? (tab0 as Tab) : unclaimedCount(save.profile) > 0 ? "plot" : "heroes";
+  const deepEntry = entry0 ?? "";
   const plot: PlotState = { cat: "all", filter: "all" };
   const filter: Record<string, string> = {};
   let query = "";
@@ -514,6 +517,11 @@ export function wikiPage(hub: Hub, o: PageOpts): HubPage {
   });
 
   render();
+  if (deepEntry && tab !== "plot") {
+    // (once the page is on the hub's stack: the article sheet opens over it)
+    const t = tab;
+    queueMicrotask(() => openEntry(t, deepEntry));
+  }
   return {
     id: "wiki",
     el,

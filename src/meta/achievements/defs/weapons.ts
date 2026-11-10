@@ -24,7 +24,7 @@ export const achievements: AchievementDef[] = [
   counter("mastery_all", "Arsenal: MASTERED", "Reach mastery rank 10 with all 20 weapons.", "weapons", 20, (c) => masteryAtLeast(c, 10), { gems: 1000, title: "Weapon Encyclopedia" }),
   counter("arsenal_8", "Arsenal Otaku", "Discover 8 weapons in the codex.", "weapons", 8, (c) => c.p.codex.weapons.length, { gems: 50 }),
   counter("arsenal_20", "Full Arsenal", "Discover all 20 base weapons.", "weapons", 20, (c) => codexWeapons(c, false), { gems: 150 }),
-  counter("evolutions_all", "Evolution Encyclopedia", "Discover all 20 evolutions.", "weapons", 20, (c) => codexWeapons(c, true), { gems: 400 }),
+  counter("evolutions_all", "Evolution Encyclopedia", "Discover all 20 evolutions.", "weapons", 20, (c) => codexWeapons(c, true, 0), { gems: 400 }),
   counter("passives_all", "Fully Accessorised", "Discover all 16 passives.", "weapons", 16, (c) => c.p.codex.passives.length, { gems: 100 }),
   counter("seven_weapons", "Seven-Weapon Sampler", "Hold 7 weapons at once.", "weapons", 7, (c) => c.run?.maxWeaponsHeld ?? 0, { gems: 80 }),
   evo("galaxy_barrage", "Galaxy Brain", "Evolve Galaxy Barrage.", 40),

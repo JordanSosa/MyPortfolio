@@ -5,11 +5,12 @@
 import { cpus } from "node:os";
 import { CHECKPOINTS, checkpointRun } from "../checkpoints";
 import { cacheGet, cachePut, sha } from "./cache";
-import { engineHash, idsHash, metaHash, runFingerprint, stageHash, stageIds } from "./deps";
+import { engineHash, idsHash, metaHash, runFingerprint, stageHash, stageIds, weaponFilesHash } from "./deps";
 import type { Job } from "./jobs";
 import { cpId, relevant, type Override } from "./overrides";
 import { runPool, setPoolSize, type PoolTask } from "./pool";
-import { WEAPONS } from "../../src/game/registry";
+import { HERO_BY_ID } from "../../src/game/heroes";
+import { WEAPONS, evolutionsOf, evolvesInto } from "../../src/game/registry";
 
 /** Bump when a job's measurement code changes in a way the file hashes would not catch. */
 const JOB_VERSION = 3;
@@ -43,12 +44,17 @@ const GAUGE_DUMMIES = ["puff", "king_puff"];
 
 /** The weapon ids a gauge job measures (with their evolution / base, for override relevance). */
 function gaugeWeapons(job: Extract<Job, { kind: "gauge" }>): Set<string> {
+  return relatives(job.weapons.map(([id]) => id));
+}
+
+/** Weapon ids with their evolutions / base weapons. */
+function relatives(ids: string[]): Set<string> {
   const out = new Set<string>();
-  for (const [id] of job.weapons) {
+  for (const id of ids) {
     out.add(id);
     const d = WEAPONS.get(id);
-    if (d?.evolution) out.add(d.evolution.into);
-    for (const w of WEAPONS.values()) if (w.evolution?.into === id) out.add(w.id);
+    if (d) for (const e of evolutionsOf(d)) out.add(e.into);
+    for (const w of WEAPONS.values()) if (evolvesInto(w, id)) out.add(w.id);
   }
   return out;
 }
@@ -69,6 +75,17 @@ export function jobKey(job: Job, set: readonly Override[]): string {
       });
       const fp = job.cp ? fingerprint(job.cp, job.hero, "dream_meadow", null, tag) : "";
       return sha("v", JOB_VERSION, job, engineHash(job.kind), idsHash(GAUGE_DUMMIES), fp, rel.map((o) => o.text));
+    }
+    case "weapon": {
+      // keyed on the files of the weapons held (+ the hero's signature weapon: traits / talents import from it),
+      // not on every weapon file: tuning one weapon recomputes the jobs that hold it
+      const held = job.weapons.map(([id]) => id);
+      const ws = relatives(held);
+      const ids = stageIds(job.stage);
+      const rel = set.filter((o) => (o.path[0] === "weapon" ? o.path[1] === "*" || ws.has(o.path[1]) : relevant(o, job.stage, ids)));
+      const sig = HERO_BY_ID.get(job.hero)?.weapon;
+      const fp = job.cp ? fingerprint(job.cp, job.hero, job.stage, null, tag) : "";
+      return sha("v", JOB_VERSION, job, engineHash(job.kind), weaponFilesHash([...held, ...(sig ? [sig] : [])]), stageHash(job.stage), fp, rel.map((o) => o.text));
     }
     case "path": {
       const rel = set.filter((o) => relevant(o, null, null));
@@ -113,6 +130,8 @@ function costOf(job: Job): number {
       return 12 * stageMul[job.stage] * stageMul[job.stage] * cpMul(job.cp);
     case "census":
       return job.at.length * 0.5 * stageMul[job.stage];
+    case "weapon":
+      return ((job.len + job.warm + (job.wave ? 20 : 0)) / 60) * (stageMul[job.stage] ?? 1.5) * cpMul(job.cp);
   }
 }
 

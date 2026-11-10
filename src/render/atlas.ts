@@ -19,7 +19,7 @@
  * imports the sprite registry: src/render/atlas-source.ts picks the source.
  */
 import { rasterizeFont, rasterizeSprite, type FontDef, type RasterSprite, type SpriteDef } from "../art/format";
-import { FONT_MANIFEST, MANIFEST } from "../art/manifest";
+import type { ManifestEntry } from "../art/manifest";
 import { FALLBACK_FONT } from "./fallback-font";
 import type { GL } from "./gl";
 
@@ -65,6 +65,14 @@ export interface AtlasOptions {
   fonts: readonly FontDef[];
   /** More defs after `sprites` (registered ids win; tools/engine-test stand-ins). */
   extraSprites?: readonly SpriteDef[];
+  /**
+   * The required sprites / fonts (src/art/manifest.ts MANIFEST / FONT_MANIFEST): an entry nobody drew gets a
+   * placeholder. Passed in by the callers that paint an atlas (dev boot, the bake, tools) instead of imported
+   * here: the manifest is ~40 KB of art direction that the production build, which only loads the baked atlas,
+   * never reads (check:bundle).
+   */
+  manifest: readonly ManifestEntry[];
+  fontManifest: readonly { readonly id: string }[];
 }
 
 export interface SpriteInfo {
@@ -221,7 +229,7 @@ export class Atlas {
       }
     }
     // placeholders for manifest entries not drawn yet
-    for (const m of MANIFEST) {
+    for (const m of opts.manifest) {
       const have = this.sprites.get(m.id);
       if (have) continue;
       this.missing.push(m.id);
@@ -237,7 +245,7 @@ export class Atlas {
     for (const f of fonts) fontDefs.set(f.id, f);
     fontDefs.set(FALLBACK_FONT.id, FALLBACK_FONT);
     const missingFonts: string[] = [];
-    for (const fm of FONT_MANIFEST) if (!fontDefs.has(fm.id)) missingFonts.push(fm.id);
+    for (const fm of opts.fontManifest) if (!fontDefs.has(fm.id)) missingFonts.push(fm.id);
     const fontEntries: [string, FontDef, boolean][] = [...fontDefs].map(([id, d]) => [id, d, false]);
     for (const id of missingFonts) fontEntries.push([id, FALLBACK_FONT, true]);
     for (const [id, def, placeholder] of fontEntries) {

@@ -49,8 +49,8 @@ async function load(): Promise<Atlas> {
   }
   // (never reached in a production build: `baked` is always set there, and this import is dropped)
   if (!import.meta.env.PROD) {
-    const { ALL_SPRITES, ALL_FONTS } = await import("../art/sprites/index");
-    return new Atlas({ sprites: ALL_SPRITES, fonts: ALL_FONTS, extraSprites: extras });
+    const [{ ALL_SPRITES, ALL_FONTS }, { MANIFEST, FONT_MANIFEST }] = await Promise.all([import("../art/sprites/index"), import("../art/manifest")]);
+    return new Atlas({ sprites: ALL_SPRITES, fonts: ALL_FONTS, extraSprites: extras, manifest: MANIFEST, fontManifest: FONT_MANIFEST });
   }
   throw new Error("[atlas] no baked atlas in this build");
 }

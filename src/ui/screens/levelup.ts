@@ -88,7 +88,11 @@ export function cardHtml(c: UpgradeCard, i: number, interactive = true, hints: r
   const max = maxLevel(c);
   let tag = "";
   let line = "";
-  if (c.kind === "evolution") {
+  if (c.kind === "evolution" && c.choices) {
+    // (a chest's ROUTE SPLIT: several evolutions are ready - the pick follows the chest)
+    tag = `<span class="tag">CHOOSE!</span>`;
+    line = `${esc(WEAPONS.get(c.base ?? "")?.name ?? "")} · ${c.choices.length} EVOLUTIONS READY`;
+  } else if (c.kind === "evolution") {
     tag = `<span class="tag">EVOLVE!</span>`;
     const base = WEAPONS.get(c.base ?? "");
     const pas = PASSIVE_BY_ID.get(c.with ?? "");
@@ -142,6 +146,8 @@ export function openLevelUp(app: App, w: World): UiScreen {
   app.ui.appendChild(el);
   const cardsEl = el.querySelector(".cards") as HTMLElement;
   const sub = el.querySelector(".lu-sub") as HTMLElement;
+  const titleEl = el.querySelector(".lu-title") as HTMLElement;
+  let titleText = "LEVEL UP!";
   const rerollBtn = el.querySelector('[data-act="reroll"]') as HTMLButtonElement;
   const banishBtn = el.querySelector('[data-act="banish"]') as HTMLButtonElement | null;
   const skipBtn = el.querySelector('[data-act="skip"]') as HTMLButtonElement | null;
@@ -161,6 +167,16 @@ export function openLevelUp(app: App, w: World): UiScreen {
   /** The first card of a SEASON FINALE level-up (Season Finale Manga: w.doublePicks) was taken: one more from the rest. */
   let bonusPick = false;
   const updateSub = () => {
+    const title = w.choosing ? "ROUTE SPLIT!" : "LEVEL UP!";
+    if (title !== titleText) {
+      titleText = title;
+      titleEl.innerHTML = letters(title, "ltr", 0.05);
+    }
+    if (w.choosing) {
+      // (a chest handed over an evolution choice: no level, no reroll / banish / skip)
+      sub.textContent = `${w.offer().length} EVOLUTIONS READY  ·  CHOOSE ONE`;
+      return;
+    }
     const lv = w.level - w.pendingLevels + 1;
     const choose = bonusPick ? "SEASON FINALE · PICK 1 MORE" : w.doublePicks.has(lv) ? "SEASON FINALE · PICK 2" : "CHOOSE ONE";
     sub.textContent = banishing ? "TAP A CARD TO BANISH IT FOR THE RUN" : `LV ${lv}${w.pendingLevels > 1 ? `  ·  +${w.pendingLevels - 1} MORE` : ""}  ·  ${choose}`;
@@ -169,14 +185,15 @@ export function openLevelUp(app: App, w: World): UiScreen {
     const left = w.rerollsLeft;
     rerollBtn.innerHTML = `${img("icon_reroll")} REROLL ${left === Infinity ? "FREE" : `×${left}`}`;
     // (a maxed build only gets the Heal / Star Pouch fallbacks: a reroll could not change them)
-    rerollBtn.disabled = left <= 0 || !w.canReroll;
+    const choosing = w.choosing;
+    rerollBtn.disabled = left <= 0 || !w.canReroll || choosing;
     if (banishBtn) {
       banishBtn.textContent = `✕ BANISH ×${w.banishes}`;
-      banishBtn.disabled = w.banishes <= 0 || !cards.some((c) => w.canBanish(c));
+      banishBtn.disabled = choosing || w.banishes <= 0 || !cards.some((c) => w.canBanish(c));
     }
     if (skipBtn) {
       skipBtn.textContent = `» SKIP ×${w.skips}`;
-      skipBtn.disabled = w.skips <= 0;
+      skipBtn.disabled = choosing || w.skips <= 0;
     }
   };
 
@@ -238,14 +255,14 @@ export function openLevelUp(app: App, w: World): UiScreen {
 
   /** Skip this level-up: no card, an XP + coin refund (the next queued level, or back to the game). */
   const skip = () => {
-    if (busy || openT < GUARD || w.skips <= 0) return;
+    if (busy || openT < GUARD || w.skips <= 0 || w.choosing) return;
     if (!w.skipLevelUp()) return;
     bonusPick = false;
     busy = true;
     app.sfx("coin");
     cardsEl.querySelectorAll<HTMLElement>(".card").forEach((b) => b.classList.add("gone"));
     setTimeout(() => {
-      if (w.pendingLevels > 0) {
+      if (w.pendingPicks > 0) {
         busy = false;
         app.input.markTouchesStale();
         app.sfx("levelUp", 0.6);
@@ -267,13 +284,13 @@ export function openLevelUp(app: App, w: World): UiScreen {
     // evolutions play their "evolve" fanfare in the deferred celebration (view/feedback.ts) once the modal closes
     app.sfx(c.kind === "evolution" ? "powerup" : "cardPick");
     const lv = w.level - w.pendingLevels + 1;
-    const double = w.doublePicks.has(lv);
+    const double = !w.choosing && w.doublePicks.has(lv);
     const pending = w.pendingLevels;
     w.choose(c);
     // (World.choose kept the rest of the offer for a second pick when the level is still pending)
     bonusPick = double && w.pendingLevels === pending;
     setTimeout(() => {
-      if (w.pendingLevels > 0) {
+      if (w.pendingPicks > 0) {
         busy = false;
         app.input.markTouchesStale();
         app.sfx("levelUp", 0.6);
@@ -287,7 +304,7 @@ export function openLevelUp(app: App, w: World): UiScreen {
   };
 
   onTapGuarded(rerollBtn, () => {
-    if (busy || openT < GUARD || w.rerollsLeft <= 0 || !w.canReroll) return;
+    if (busy || openT < GUARD || w.rerollsLeft <= 0 || !w.canReroll || w.choosing) return;
     const next = w.reroll();
     if (next) {
       app.sfx("reroll");
@@ -296,7 +313,7 @@ export function openLevelUp(app: App, w: World): UiScreen {
   });
   if (banishBtn)
     onTapGuarded(banishBtn, () => {
-      if (busy || openT < GUARD || w.banishes <= 0) return;
+      if (busy || openT < GUARD || w.banishes <= 0 || w.choosing) return;
       app.sfx(banishing ? "uiBack" : "uiConfirm", 0.8);
       setBanishing(!banishing);
     });

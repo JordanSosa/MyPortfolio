@@ -190,7 +190,7 @@ export const bubbleTeaCannon: WeaponDef = {
     { dmg: 21, cd: 1.15, amount: 3, speed: 160, bounce: 6, knock: 36, split: 1 },
   ],
   upgrades: ["+1 pearl", "Damage +4, +1 bounce", "+1 pearl, cooldown −12%", "Damage +5, +2 bounces, pearls split into 2 mini pearls on their last bounce"],
-  evolution: { into: "tapioca_tsunami", with: "big_ribbon" },
+  evolutions: [{ into: "tapioca_tsunami", with: "big_ribbon" }],
   // mastery Limit Breaks (docs/content/weapons.md §4): Lv6 at rank 5, Lv7 at rank 10
   limitBreak: [
     { amount: 1, dmg: 0.1, text: "LIMIT BREAK — Extra Pearls: +1 pearl, +10% damage" },

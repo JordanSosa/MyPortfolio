@@ -11,8 +11,8 @@ import type { TalentTree } from "../defs";
 import { proc } from "../relics/_util";
 import { PK_FREE, ROT_SPIN, SHAPE_CIRCLE } from "../types";
 import { byRank, node } from "./_node";
+import { isWeaponOf } from "../registry";
 
-const SLASH_SOURCES = new Set(["petal_slash", "sakura_tempest"]);
 
 /** Sacred Ground: shrine circle radius / duration / regen / damage per tick. */
 const SHRINE_R = 70;
@@ -97,7 +97,7 @@ export const rinTree: TalentTree = {
         const th = byRank([0.1, 0.15, 0.2], r);
         w.hooks.on("hit", (h) => {
           const e = h.enemy;
-          if (e.dead || e.hp <= 0 || e.def.boss || e.def.prop || !SLASH_SOURCES.has(h.source) || e.hp > e.maxHp * th) return;
+          if (e.dead || e.hp <= 0 || e.def.boss || e.def.prop || !isWeaponOf(h.source, "petal_slash") || e.hp > e.maxHp * th) return;
           w.killEnemy(e, h.owner, h.source);
         });
       },

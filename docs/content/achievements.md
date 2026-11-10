@@ -159,7 +159,7 @@ current table — update `UNLOCK_RULES`):
 | `clear_rin` | Blade of the Shrine | Clear a stage as Rin. | `has rin` | 60 ♦ |
 | `rin_blossoms` | Thousand Blossom Accountant | Deal 1,000,000 damage with Petal Slash (or Sakura Tempest). | `life.damageByWeapon.petal_slash ≥ 1,000,000` | 80 ♦ |
 | `clear_mochi` | Cat's Out of the Bag | Clear a stage as Mochi. | `has mochi` | 60 ♦ |
-| `mochi_yarn_only` | Loyal to the Yarn | Clear a stage as Mochi using no weapon but Yarn Orbit / Cosmic Yarn. | `run.stageCleared && run.hero = mochi && run.weaponsUsed ⊆ {yarn_orbit, cosmic_yarn}` | 120 ♦ · hidden |
+| `mochi_yarn_only` | Loyal to the Yarn | Clear a stage as Mochi using no weapon but Yarn Orbit (and its evolutions). | `run.stageCleared && run.hero = mochi && run.weaponsUsed ⊆ {yarn_orbit, cosmic_yarn, meowteor_hammer}` | 120 ♦ · hidden |
 | `clear_kuro` | The Abyss Gazes Back | Clear a stage as Kuro. | `has kuro` | 60 ♦ |
 | `kuro_overdrive` | Chuuni Overload | Use Overdrive 8 times in one run as Kuro. | `run.hero = kuro && run.ults ≥ 8` | 80 ♦ |
 | `clear_pudding` | Order Up! | Clear a stage as Pudding. | `has pudding` | 60 ♦ |

@@ -131,7 +131,7 @@ export const hornOfReincarnation: WeaponDef = {
     { dmg: 36, cd: 1.5, amount: 2, len: 88, angle: 38, knock: 200, ram: 30 },
   ],
   upgrades: ["Louder honk, harder ram", "Damage +8, wider honk", "Cooldown −17%, ram damage +6", "Damage +10, longer honk, HONK-HONK"],
-  evolution: { into: EVO, with: "swift_shoes" },
+  evolutions: [{ into: EVO, with: "swift_shoes" }],
   limitBreak: [
     { dmg: 0.2, area: 0.15, text: "LIMIT BREAK — Air Horn Upgrade: +20% damage, +15% honk" },
     { cd: 0.85, dmg: 0.2, text: "MASTERED — Rush Hour: −15% cooldown, +20% damage" },

@@ -82,7 +82,7 @@ Measured on this container (headless Chromium + SwiftShader, 4 cores shared): `r
 `await __kk.scenario(name, { seed, hero, profile })` -> `{ ok, ms, marks, error, screen, modal, t }`.
 At boot `<html data-kk-scenario="pending|ready|error">` and `__kk.scenarioState` report progress, so a
 script waits with `page.waitForFunction(() => document.documentElement.dataset.kkScenario !== "pending")`.
-`__kk.scenarios()` lists every concrete name (108 today: parametric kinds expand over the registries).
+`__kk.scenarios()` lists every concrete name (116 today: parametric kinds expand over the registries).
 
 | Name | State |
 | --- | --- |
@@ -94,9 +94,12 @@ script waits with `page.waitForFunction(() => document.documentElement.dataset.k
 | `ult:<hero>` `ult:<hero>:mid` | the anime cut-in / 1 s into the active ultimate |
 | `hud:overdrive` `hud:overdrive-ready` `hud:overdrive-pad` `hud:overdrive-tut` `hud:overdrive-swap` | the HUD's Overdrive gauge of keyboard / mouse / gamepad play (1:40 Dream Meadow): 60 % charged; full (the rainbow READY); full with the gamepad's B; a fresh account's first run with the OVERDRIVE READY bubble pointing at it; a touchscreen laptop (a touch mid-run must swap the gauge for the OVERDRIVE button, a key must swap it back: asserted, the scenario fails otherwise). On touch devices the OVERDRIVE button shows instead (the gauge must not) |
 | `speech` `speech:<stage>` | the 4 enemies nearest the hero speak from their stage's pools, plus one free bubble (default Candy Kingdom) |
-| `orbital:<weapon>` `orbital:<tea weapon>:tea` | Orbital Guard mid-Shoujo Academy (Mochi's Yarn Orbit Lv5 / Cosmic Yarn, Pudding's Teapot Tempest Lv5 / Eternal Tea Party): a 16-bullet ring fired at the hero, shown once a body breaks (film it for the reform: `orbital:yarn_orbit~150/10`); `:calm` = the same volley in the run's first seconds, the orbital alone (judge the break and the empty slot; not in `--all`); `:tea` = Warm Tea on the move (1:30, a calmer crowd) |
+| `orbital:<weapon>` `orbital:<tea weapon>:tea` | Orbital Guard mid-Shoujo Academy (Mochi's Yarn Orbit Lv5 / Cosmic Yarn / Meowteor Hammer, Pudding's Teapot Tempest Lv5 / Eternal Tea Party): a 16-bullet ring fired at the hero, shown once a body breaks (film it for the reform: `orbital:yarn_orbit~150/10`); `:calm` = the same volley in the run's first seconds, the orbital alone (judge the break and the empty slot; not in `--all`); `:tea` = Warm Tea on the move (1:30, a calmer crowd) |
 | `crowd:<hero>` `crowd:<hero>:mid` (`@<stage>`) | every hero in a busy run with a full build, after 2 s of live play (the stress scenes of the `washout` check): late = a rich account at Shoujo Academy 10:00, ~level 24 bot-picked, the signature weapon evolved plus every maxed weapon whose passive is held; `:mid` = a mid account at 3:20, level 10, the signature weapon at its top level. Mid-run is the harder case: the bloom limiter and the hero beacon only switch on at high glow load. Film them: `crowd:pudding:mid~120/15` |
 | `levelup` `chest` `chest:golden` `pause` `over:death` `over:victory` | in-run modals |
+| `evo2:<evolved id>` `evo2:<id>:calm` (`@<stage>`) | a SECOND evolution in play (weapons.md §8): its base weapon's hero (Hoshi for a general weapon) mid-Shoujo Academy with that route taken, 2 s of live play; `:calm` = the run's first seconds, the weapon alone. Film it: `evo2:meowteor_hammer~180/15` |
+| `levelup:evo-lines` `levelup:evo-two` `levelup:route-split` `chest:route-split` | a weapon card with two known recipes (two hint lines); a weapon with two evolutions ready: one card per route on a level-up; the choice a chest hands over (the ROUTE SPLIT card in the chest, then the card picker without reroll / banish / skip) |
+| `article:<tab>/<id>` `article:weapons/<id>+evo` `+evo1` | a Wiki article with its entry discovered (`+evo`: a weapon's evolutions discovered too, `+evo1`: only the first - one recipe, one stub); `wiki:<tab>/<id>` opens an article on any account |
 | `levelup:evo-hints` `levelup:evo-four` `levelup:evo-many` `chest:evo-hints` `pause:evo-hints` | evolution hints: a mid account that discovered 4 evolutions, a hand-picked build + offer (READY, pair-completing passive, missing passive, an undiscovered recipe; 3 / 4 / 6 cards) |
 | `results:death` `results:victory` `results:first-clear` | Episode Results of a real (sandboxed) account run, finished; first-clear = a P1 account clears Dream Meadow (unlock cards) |
 | `gacha:pull-x10` `gacha:mythic` | a Merch Machine x10 pull 3.6 s in; a forced MYTHIC (needs the dev server's `__kkGacha`) |
@@ -303,6 +306,74 @@ dies at 3:00 or at 9:00 depending on the seed. Use `--full` for exact numbers in
 - Their first bosses (Gingerbread Golem, Council President) kill the hero in about two of three
   sampled fights.
 - P0 dies in Dream Meadow at 1:10-1:40 (Kuro / Rin) against the 2:00-3:30 target.
+
+### 4.1 Weapon bench (`npm run balance:lab -- --weapons`, `tools/balance-lab/weapons.ts`)
+
+Is every weapon pulling its weight? The bench ranks every base weapon at Lv1, at Lv5 and as **each of its
+evolutions** against the median weapon of its tier, so a quietly weak or broken weapon is found by measurement
+(Yarn Orbit and Teapot Tempest were found by the owner in play). It writes
+`shots/balance-lab/weapons/report.html` / `report.json` / `report.md` and prints the flags.
+
+```
+npm run balance:lab -- --weapons                                   # all weapons: ~2.5 min cold, ~4 s warm
+npm run balance:lab -- --weapons --set "weapon.yarn_orbit.dmg*=1.3"   # what-if: before -> after per row (~20-45 s)
+npm run balance:lab -- --weapons --set "weapon.kotatsu_of_sloth.levels.4.dmg=26"   # one level's number
+npm run balance:lab -- --weapons --seeds 1-5 | --only yarn_orbit,meowteor_hammer | --bot good | --json
+```
+
+**What is measured.** Signature weapons run on their hero (`*` in the table), general weapons on Hoshi. Every
+number comes from the real `World`, director and bot (job `weapon`, `tools/balance-lab/job-weapon.ts`): a fixed
+build whose level-ups and chests are thrown away, so every weapon is measured next to the same kit.
+
+| Measurement | Setup | Numbers |
+| --- | --- | --- |
+| gauge | the weapon alone, base stats, a dense immortal crowd and a pinned boss (the lab's gauge) | `gauge crowd / boss` DPS: ideal conditions |
+| solo | the weapon alone, base stats, the mid bot on Dream Meadow at 0:20 / 2:30 / 4:30 | `wave s` (seconds to clear 90 % of a fixed wave from the stage mix), `solo kills/min` under the real director |
+| build | a **reference build**: a kit of three general weapons (Heart Boomerang, Thunder Bell, Candy Bomb; Prism Beam stands in when one of them is tested) + passives at the tier's levels, on the tier's checkpoint x stage, 45 s | `share` of the build's weapon damage, own `DPS`, `kills x` and `taken x` against the same kit **without** the weapon |
+| boss | the same build against the tier's boss (a charged Overdrive, 90 s at most) | `boss share`, `boss DPS`, the fight's length with / without |
+| camp | the build slice again with a player who **stands their ground** (still for 4 s, a short step, repeat) | `camp` (DPS as a ratio to the tier median), `camp taken x` |
+
+Tiers: Lv1 = P2 x Dream Meadow at 1:30 vs King Puff (kit Lv3); Lv5 = P3 x Candy Kingdom at 5:00 vs the
+Gingerbread Golem (kit Lv5); evolutions = P4 x Shoujo Academy at 8:00 vs the Council President (kit evolved).
+`taken` is damage taken **net of healing** over the slice and the boss fight together, so Warm Tea, Henshin
+heals and the Kotatsu's regen count; `blocks` (Orbital Guard) and `refills` are in the JSON. The hero cannot die:
+HP floats as in a real run and is refilled under 40 %.
+
+**Reading it.** `crowd` (build DPS x solo kills / min), `boss` (boss DPS in the build) and `power` (their
+mean) are ratios to the **median of the tier** (a robust centre; the tier's MAD is printed). Flags:
+
+- `WEAK`: power < 0.6x, and it neither protects (`taken x` <= 0.6 with the bot or standing ground: `SUPPORT`
+  instead) nor is a stand-your-ground weapon (`camp` >= 0.6x).
+- `STRONG`: power > 1.6x.
+- `SIBLINGS`: two evolutions of one weapon more than 1.6x apart. The last table lists every evolution of a
+  weapon next to its Lv5 form (`vs best sibling`): use it to balance a second evolution against the first.
+- Notes: "crowd / boss specialist", "plays far below its gauge" (strong in ideal conditions, weak in play:
+  reach, targeting or the bot), "cannot clear the wave alone", "hero takes N % more damage with it".
+
+**Tuning loop.** `--set` re-runs only the jobs that hold the weapon and prints `before -> after` per row; a
+weapon file edit does the same (jobs key on the files of the weapons they hold, `deps.weaponFilesHash`). Then
+check the stages with the default report: `npm run balance:lab -- --set ...` (before -> after matrix), and
+`--heroes <hero>` for a signature weapon.
+
+**Limits.**
+
+- It is a rough-ranges tool. Between two seed sets `power` moves ~8 % (median; 30 % at worst), `taken x`
+  ~15 %: a single 0.55 or 1.7 is not a finding, a 0.2 or a 4 is. `--seeds 1-5` tightens it.
+- One reference kit and one cell per tier. A weapon that shines with a particular partner, stat or relic
+  (Twin Charm on an amount weapon, a fold streak the bot keeps losing) is under-rated; the kit's own weapons are
+  measured next to a slightly different kit (the spare).
+- The mid bot kites. Contact weapons (auras, orbitals, the Harisen) look weaker than in the hands of a player who
+  dives in: read `camp` and `taken x` before calling one weak. The Kotatsu only works standing still: the
+  bot-played numbers are ~0 by construction, `camp` is its row.
+- Signature weapons run with their hero's trait, talents and (higher) signature mastery at the checkpoint, so
+  `power` rates the weapon **on its hero**, not the level table alone. A hero-wide answer needs
+  `npm run balance:lab -- --heroes <hero>`.
+- Utility is not scored: gem pull (Cosmic Yarn), slows, knock-back, the Thousand Crane Wish's full heal, XP.
+- Boss DPS in a real fight is far below the pinned-boss gauge (adds soak hits, the bot dodges): Paper Crane
+  Flock is 2x the median on the pinned boss and 0.14x in the fight (its darts pick the nearest enemy).
+
+**First run** (Season 3 content, 20 weapons, 21 evolutions): see the report; the pass that followed is in
+`docs/content/weapons.md` §9.
 
 ## 5. Scene gallery (`npm run scenes`, `scripts/scenes.mjs`)
 

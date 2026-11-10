@@ -4,6 +4,7 @@
  */
 import { C } from "../art/palette";
 import type { ConstellationDef } from "./defs";
+import { isWeaponOf } from "./registry";
 import { Budget } from "./talents/_node";
 import type { HeroDef, HeroId } from "./types";
 import { miniStar } from "./weapons/star-shot";
@@ -47,7 +48,7 @@ function hoshiC6(w: World): void {
   w.ultMeter = Math.max(w.ultMeter, 60);
   const budget = new Budget(12);
   w.hooks.on("kill", (k) => {
-    if ((k.source !== "star_shot" && k.source !== "galaxy_barrage") || !k.owner || !budget.take(w)) return;
+    if (!isWeaponOf(k.source, "star_shot") || !k.owner || !budget.take(w)) return;
     const L = k.owner.def.levels[Math.min(k.owner.level, k.owner.def.levels.length) - 1];
     const dmg = L.dmg * w.stats.might * (k.owner.dmgMul ?? 1) * 0.5;
     const a0 = w.rng.angle();
@@ -105,7 +106,7 @@ export const HEROES: HeroDef[] = [
       [
         'Petal Slash always crits enemies above 80% HP ("first cut")',
         undefined,
-        (w) => void w.critRules.push((e, src) => (src === "petal_slash" || src === "sakura_tempest") && e.hp > e.maxHp * 0.8),
+        (w) => void w.critRules.push((e, src) => isWeaponOf(src, "petal_slash") && e.hp > e.maxHp * 0.8),
       ],
     ]),
   },

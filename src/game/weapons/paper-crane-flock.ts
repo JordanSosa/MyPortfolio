@@ -394,7 +394,7 @@ export const paperCraneFlock: WeaponDef = {
     { dmg: 15, cd: 1.0, amount: 6, speed: 190, range: 115, pierce: 2, knock: 30 },
   ],
   upgrades: ["+1 crane", "Damage +3, wider patrol", "+1 crane, darts more often", "Damage +3, +1 crane, darts pierce 2"],
-  evolution: { into: "thousand_crane_wish", with: "wish_charm" },
+  evolutions: [{ into: "thousand_crane_wish", with: "wish_charm" }],
   // mastery Limit Breaks (docs/content/weapons.md §4): Lv6 at rank 5, Lv7 at rank 10
   limitBreak: [
     { amount: 1, dmg: 0.1, text: "LIMIT BREAK — Another Fold: +1 crane, +10% damage" },

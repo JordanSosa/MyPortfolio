@@ -69,7 +69,7 @@ function bibleContent(): MetaContent {
   return makeContent({
     heroes: ROSTER.map((h) => ({ id: h.id, name: h.name, title: "", weapon: SIGNATURE[h.id], portrait: "" })),
     weapons: EVOS.flatMap(([b, e]) => [
-      { id: b, name: b, icon: "", evolved: false, evolution: { into: e, with: "wish_charm" } },
+      { id: b, name: b, icon: "", evolved: false, evolutions: [{ into: e, with: "wish_charm" }] },
       { id: e, name: e, icon: "", evolved: true },
     ]),
     passives: PASSIVES.map((id) => ({ id, name: id })),

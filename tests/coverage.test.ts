@@ -10,7 +10,7 @@
  * added to the bible without its content - or content that drifts from the
  * bible's name / rarity / numbers - fails here with the exact id.
  */
-import { readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, test } from "vitest";
 import { MANIFEST } from "../src/art/manifest";
@@ -103,6 +103,8 @@ const newWeaponHeads = section(WEAPONS_MD, /^## 2\. The 12 new weapons/)
   .filter((m): m is RegExpExecArray => !!m)
   .map((m) => ({ name: m[1], id: m[2] }));
 const newEvoRows = rows(section(WEAPONS_MD, /^## 3\. The 12 new evolutions/)).map((r) => ({ id: tick(r[0]), name: r[1] }));
+/** §8.1: one row per base weapon's SECOND evolution (status `done` = implemented, `designed` = to do). */
+const evo2Rows = rows(section(WEAPONS_MD, /^### 8\.1 The table/)).map((r) => ({ base: r[0], file: tick(r[1]), first: r[2], name: r[3], id: tick(r[4]), passive: r[5], pkg: r[6], status: r[7] }));
 
 const bibleEnemies = ENEMIES_MD.split("\n")
   .map((l) => /^### (?!5\.)(.+?) — `([a-z0-9_]+)`(?: \(\+ split `([a-z0-9_]+)`\))?/.exec(l))
@@ -288,7 +290,8 @@ describe("weapons, evolutions, Limit Breaks, passives", () => {
     const bases = [...WEAPONS.values()].filter((w) => !w.evolved).map((w) => w.id).sort();
     const evos = [...WEAPONS.values()].filter((w) => w.evolved).map((w) => w.id).sort();
     expect(bases).toEqual(lbRows.map((r) => r.id).sort());
-    expect(evos).toEqual(evoRows.map((r) => r.id).sort());
+    // (first evolutions: §1; second evolutions: the `done` rows of §8.1)
+    expect(evos).toEqual([...evoRows.map((r) => r.id), ...evo2Rows.filter((r) => r.status === "done").map((r) => r.id)].sort());
     expect(PASSIVES.map((p) => p.id).sort()).toEqual([...ORIGINAL_PASSIVES, ...newPassiveRows.map((r) => r.id)].sort());
     for (const id of ORIGINAL_WEAPONS) expect(bases).toContain(id);
   });
@@ -305,12 +308,53 @@ describe("weapons, evolutions, Limit Breaks, passives", () => {
       const passive = passiveByName(r.passive);
       expect(base, `base weapon '${r.base}'`).toBeTruthy();
       expect(passive, `passive '${r.passive}'`).toBeTruthy();
-      expect(base!.evolution, r.base).toEqual({ into: r.id, with: passive!.id });
+      expect(base!.evolutions?.[0], r.base).toEqual({ into: r.id, with: passive!.id });
       const evo = WEAPONS.get(r.id);
       expect(evo?.evolved, r.id).toBe(true);
       expect(lower(evo!.name), r.id).toBe(lower(r.evo));
       // exactly one base evolves into it
-      expect([...WEAPONS.values()].filter((w) => w.evolution?.into === r.id)).toHaveLength(1);
+      expect([...WEAPONS.values()].filter((w) => w.evolutions?.some((e) => e.into === r.id))).toHaveLength(1);
+    }
+  });
+
+  test("second evolutions (§8.1): one row per base weapon, a different passive, no passive gating more than 3", () => {
+    expect(evo2Rows).toHaveLength(20);
+    expect(new Set(evo2Rows.map((r) => r.id)).size).toBe(20);
+    expect(new Set(evo2Rows.map((r) => r.base)).size).toBe(20);
+    const load = new Map<string, number>();
+    for (const r of evoRows) load.set(r.passive, (load.get(r.passive) ?? 0) + 1);
+    for (const r of evo2Rows) {
+      const first = evoRows.find((e) => e.base === r.base);
+      expect(first, `§1 row of '${r.base}'`).toBeTruthy();
+      expect(r.first, r.base).toBe(`${first!.evo} (${first!.passive})`);
+      expect(r.passive, `${r.id}: a different passive from the first evolution`).not.toBe(first!.passive);
+      expect(passiveByName(r.passive), `passive '${r.passive}'`).toBeTruthy();
+      expect(byName(r.base), r.base).toBeTruthy();
+      expect(existsSync(join(ROOT, "src/game/weapons", r.file)), r.file).toBe(true);
+      expect(["done", "designed"]).toContain(r.status);
+      expect(evoRows.some((e) => e.id === r.id), `${r.id} is a first evolution's id`).toBe(false);
+      load.set(r.passive, (load.get(r.passive) ?? 0) + 1);
+    }
+    for (const [p, n] of load) expect(n, p).toBeLessThanOrEqual(3);
+    expect([...load.values()].reduce((a, b) => a + b, 0)).toBe(40);
+  });
+
+  test("every implemented second evolution is its §8.1 row (id, name, base, passive), and every `done` row is implemented", () => {
+    for (const b of [...WEAPONS.values()].filter((w) => !w.evolved)) {
+      const evos = b.evolutions ?? [];
+      expect(evos.length, `${b.id}: at most two evolutions`).toBeLessThanOrEqual(2);
+      const row = evo2Rows.find((r) => lower(r.base) === lower(b.name));
+      expect(row, `§8.1 row of ${b.name}`).toBeTruthy();
+      const second = evos[1];
+      expect(row!.status, `${b.id}: §8.1 status`).toBe(second ? "done" : "designed");
+      if (!second) continue;
+      expect(second, b.id).toEqual({ into: row!.id, with: passiveByName(row!.passive)!.id });
+      const evo = WEAPONS.get(second.into);
+      expect(evo?.evolved, second.into).toBe(true);
+      expect(evo?.name, second.into).toBe(row!.name);
+      expect(evo?.icon, second.into).toBe(`icon_${second.into}`);
+      expect(evo?.desc.startsWith("EVOLUTION! "), `${second.into}: card desc`).toBe(true);
+      expect(src(join("game/weapons", row!.file)), row!.file).toContain(`"${second.into}"`);
     }
   });
 

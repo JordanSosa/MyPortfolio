@@ -20,6 +20,9 @@ export const BUDGET = { raw: 1_575_000, gzip: 530_000 };
 const LAZY_ONLY = [
   { what: "dev console (src/debug/console)", re: /kkd-panel/ },
   { what: "scenarios (src/debug/scenarios.ts)", re: /results:first-clear|gacha:pull-x10/ },
+  // (~40 KB of art direction: only the atlas painters read it - the dev boot, the bake, tools - never the game)
+  { what: "art manifest (src/art/manifest.ts)", re: /Stampede cat \(Mochi ult\)|Yarn Orbit ball: pink yarn ball/ },
+  { what: "sprite sources (src/art/sprites)", re: /OOoooyz/ },
 ];
 
 export function checkBundle(args = {}) {

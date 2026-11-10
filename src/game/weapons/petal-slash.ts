@@ -139,7 +139,7 @@ export const petalSlash: WeaponDef = {
     { dmg: 30, cd: 0.9, amount: 2, area: 1.3, knock: 85 },
   ],
   upgrades: ["Also slashes behind you", "Damage +6, area +15%", "Cooldown -18%", "Damage +8, area +15%"],
-  evolution: { into: "sakura_tempest", with: "big_ribbon" },
+  evolutions: [{ into: "sakura_tempest", with: "big_ribbon" }],
   // mastery Limit Breaks (docs/content/weapons.md §4): Lv6 at rank 5, Lv7 at rank 10
   limitBreak: [
     { dmg: 0.2, area: 0.15, text: "LIMIT BREAK — Whetstone: +20% damage, +15% area" },

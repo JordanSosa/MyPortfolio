@@ -62,7 +62,7 @@ describe.each(ARSENAL)("$base -> $evo", ({ base, evo, with: passive }) => {
     expect(def.levels.length).toBe(CFG.maxLevel);
     expect(def.upgrades.length).toBe(CFG.maxLevel - 1);
     for (const t of def.upgrades) expect(t.length).toBeGreaterThan(4);
-    expect(def.evolution).toEqual({ into: evo, with: passive });
+    expect(def.evolutions?.[0]).toEqual({ into: evo, with: passive });
     const e = WEAPONS.get(evo)!;
     expect(e.evolved).toBe(true);
     expect(e.levels.length).toBe(1);

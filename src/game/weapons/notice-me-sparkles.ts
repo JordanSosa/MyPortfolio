@@ -131,7 +131,7 @@ export const noticeMeSparkles: WeaponDef = {
     { dmg: 7, cd: 0.45, amount: 1, radius: 48, charm: 0.14, duration: 4, max: 10, knock: 8 },
   ],
   upgrades: ["Wider aura, more charming", "Damage +2, up to 6 admirers", "Charm lasts longer, ticks faster", "Damage +2, bigger aura, up to 10 admirers; heartbreak explodes"],
-  evolution: { into: EVO, with: "main_character_aura" },
+  evolutions: [{ into: EVO, with: "main_character_aura" }],
   limitBreak: [
     { area: 0.15, dmg: 0.2, text: "LIMIT BREAK — Extra Sparkle: +15% aura, +20% damage" },
     { dmg: 0.2, cd: 0.88, text: "MASTERED — Unbearable Charisma: +20% damage, ticks 12% faster" },

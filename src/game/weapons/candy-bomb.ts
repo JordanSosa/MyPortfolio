@@ -188,7 +188,7 @@ export const candyBomb: WeaponDef = {
     { dmg: 42, cd: 1.7, amount: 3, area: 1.3, radius: 28, knock: 130 },
   ],
   upgrades: ["+1 bomb", "Damage +7, blast radius +15%", "+1 bomb, cooldown -15%", "Damage +10, blast radius +15%"],
-  evolution: { into: "sugar_nuke", with: "lucky_clover" },
+  evolutions: [{ into: "sugar_nuke", with: "lucky_clover" }],
   // mastery Limit Breaks (docs/content/weapons.md §4): Lv6 at rank 5, Lv7 at rank 10
   limitBreak: [
     { area: 0.2, dmg: 0.15, text: "LIMIT BREAK — Family Size: +20% blast, +15% damage" },

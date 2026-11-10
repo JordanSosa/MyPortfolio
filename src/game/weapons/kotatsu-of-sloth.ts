@@ -393,7 +393,7 @@ export const kotatsuOfSloth: WeaponDef = {
     { dmg: 9, cd: 0.5, amount: 1, radius: 52, slow: 0.5, deploy: 0.4, armor: 2, regen: 1.0, comfy: 5, knock: 0, sleep: 1 },
   ],
   upgrades: ["Damage +1, bigger blanket", "Cosier: stronger slow, more regen", "Damage +2, deploys faster, +1 armor inside", "Damage +2, bigger; enemies inside 3 s fall asleep and take +25% damage"],
-  evolution: { into: "eternal_winter_break", with: "chibi_charm" },
+  evolutions: [{ into: "eternal_winter_break", with: "chibi_charm" }],
   // mastery Limit Breaks (docs/content/weapons.md §4): a Limit Break amount = +8% radius
   limitBreak: [
     { area: 0.2, dmg: 0.15, text: "LIMIT BREAK — Bigger Blanket: +20% area, +15% damage" },

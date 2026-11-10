@@ -70,7 +70,7 @@ const pct = (x: number) => (Number.isFinite(x) ? `${Math.round(x * 100)}%` : "-"
 const f0 = (x: number) => (Number.isFinite(x) ? String(Math.round(x)) : "-");
 const r1 = (x: number) => (Number.isFinite(x) ? Math.round(x * 10) / 10 : null);
 const r2 = (x: number) => (Number.isFinite(x) ? Math.round(x * 100) / 100 : null);
-const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+export const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
 export interface CellOut {
   cp: string;
@@ -444,11 +444,11 @@ function matrixHtml(cells: CellOut[], vcells: CellOut[] | null, o: LabOpts, name
   return `${h}</tbody></table></div>`;
 }
 
-function table(head: string[], rows: string[][], cls = ""): string {
+export function table(head: string[], rows: string[][], cls = ""): string {
   return `<div class="tw"><table class="${cls}"><thead><tr>${head.map((x) => `<th>${x}</th>`).join("")}</tr></thead><tbody>${rows.map((r) => `<tr>${r.map((c) => `<td>${c}</td>`).join("")}</tr>`).join("")}</tbody></table></div>`;
 }
 
-const CSS = `
+export const CSS = `
 :root{color-scheme:light;--bg:#fcfcfb;--panel:#f4f3f0;--ink:#0b0b0b;--ink2:#52514e;--ink3:#8a8984;--grid:#e3e2de;--s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;--lo2:#e34948;--lo1:#f2a5a1;--mid:#f0efec;--hi1:#9ec5f4;--hi2:#3987e5;--warn:#d03b3b;--info:#52514e;--ring:#0b0b0b}
 @media (prefers-color-scheme:dark){:root:not([data-theme="light"]){color-scheme:dark;--bg:#1a1a19;--panel:#242422;--ink:#f0efec;--ink2:#c3c2b7;--ink3:#8f8e86;--grid:#383835;--s1:#3987e5;--s2:#d95926;--s3:#199e70;--lo2:#c93b3b;--lo1:#6e3533;--mid:#383835;--hi1:#1c5cab;--hi2:#3987e5;--warn:#e66767;--info:#c3c2b7;--ring:#f0efec}}
 :root[data-theme="dark"]{color-scheme:dark;--bg:#1a1a19;--panel:#242422;--ink:#f0efec;--ink2:#c3c2b7;--ink3:#8f8e86;--grid:#383835;--s1:#3987e5;--s2:#d95926;--s3:#199e70;--lo2:#c93b3b;--lo1:#6e3533;--mid:#383835;--hi1:#1c5cab;--hi2:#3987e5;--warn:#e66767;--info:#c3c2b7;--ring:#f0efec}

@@ -21,13 +21,32 @@ import { CFG } from "../game/config";
 import type { UpgradeCard } from "../game/types";
 import type { SimInput, World } from "../game/world";
 import { LUNA_RING_N, lunaRing } from "../game/bosses/_luna";
-import { WEAPONS } from "../game/registry";
+import { WEAPONS, evolutionWith, evolutionsOf } from "../game/registry";
 
 const ringPt = { x: 0, y: 0 };
 
-/** Evolution passive of a base weapon id (NEW weapon cards: the weapon is not in the build yet). */
-function weaponEvoWith(id: string): string | undefined {
-  return WEAPONS.get(id)?.evolution?.with;
+/** Is a passive of one of this base weapon's evolutions in the build (NEW weapon cards: the def comes from the registry)? */
+function recipeHeld(w: World, id: string): boolean {
+  const def = w.hasWeapon(id)?.def ?? WEAPONS.get(id);
+  if (!def) return false;
+  for (const e of evolutionsOf(def)) if (w.passiveLevel(e.with) > 0) return true;
+  return false;
+}
+
+/**
+ * How much a passive is worth as a recipe (0 = it evolves nothing held): the full value for each held weapon
+ * it opens a FIRST route for, a small one when that weapon's other route is already covered (one weapon evolves
+ * once: a second route is a choice, not a second evolution - without this the bot hoards passives over weapons).
+ */
+function recipeValue(w: World, passive: string): number {
+  let s = 0;
+  for (const inst of w.weapons) {
+    if (!evolutionWith(inst.def, passive)) continue;
+    let covered = false;
+    for (const e of evolutionsOf(inst.def)) if (e.with !== passive && w.passiveLevel(e.with) > 0) covered = true;
+    s += covered ? 3 : 26;
+  }
+  return s;
 }
 
 const PREF: Record<string, number> = { hoshi: 70, rin: 26, mochi: 24, senpai: 22, magical_girl_47: 30, isekai_kun: 72, truck_kun: 0, kuro: 40, pudding: 30, aoi: 74, akane: 26 };
@@ -401,10 +420,8 @@ export class Bot {
         s = 1000;
         break;
       case "weapon": {
-        const def = w.hasWeapon(c.id)?.def;
-        const evoWith = def?.evolution?.with ?? weaponEvoWith(c.id);
-        // its evolution passive is already in the build: this weapon is on the way to an evolution
-        const recipe = evoWith && w.passiveLevel(evoWith) > 0 ? 1 : 0;
+        // an evolution passive of it is already in the build: this weapon is on the way to an evolution
+        const recipe = recipeHeld(w, c.id) ? 1 : 0;
         if (c.from > 0) s = 40 + c.to * 2 + recipe * 6 - (c.limitBreak ? 3 : 0);
         else if (w.weapons.length < 4) s = 30 + (WEAPON_VALUE[c.id] ?? 4) + recipe * 5;
         else s = 6 + (WEAPON_VALUE[c.id] ?? 4) * 0.4 + recipe * 4;
@@ -418,7 +435,7 @@ export class Bot {
         else if ((c.id === "plot_armor" || c.id === "heart_locket" || c.id === "bento_box") && hpK < 0.5) v += 6;
         s = (c.from > 0 ? 22 : 16) + v;
         // the recipe: it evolves a weapon in the build
-        for (const inst of w.weapons) if (inst.def.evolution?.with === c.id) s += 26;
+        s += recipeValue(w, c.id);
         break;
       }
       case "heal":
@@ -454,6 +471,8 @@ export class Bot {
    */
   resolve(w: World): void {
     let offer = w.offer();
+    // (a chest's evolution choice: just pick - no banish, no skip)
+    if (w.choosing) return w.choose(this.pick(w, offer));
     if (this.useBanish && w.banishes > 0 && !this.randomPicks) {
       let worst: UpgradeCard | null = null;
       let ws = 12;
@@ -477,6 +496,18 @@ export class Bot {
 }
 
 /**
+ * Resolve everything a step queued, as the app's modals would: level-ups, chests, and the evolution
+ * choices a chest hands over (World.pendingChoices) - until nothing is pending.
+ */
+export function drain(w: World, bot: Bot): void {
+  let guard = 0;
+  while ((w.pendingPicks > 0 || w.pendingChests.length > 0) && guard++ < 1000) {
+    while (w.pendingPicks > 0 && guard++ < 1000) bot.resolve(w);
+    while (w.pendingChests.length > 0) w.openChest();
+  }
+}
+
+/**
  * Run a world headless with the bot for `seconds` (fixed dt). Level-ups and
  * chests are resolved by the bot; revives are used when available.
  * Returns the number of steps taken. `onStep` can stop early by returning false.
@@ -493,8 +524,7 @@ export function simulate(w: World, seconds: number, dt = 1 / 30, bot = new Bot(w
     bot.think(w, w.input, dt);
     w.step(dt);
     steps++;
-    while (w.pendingLevels > 0) bot.resolve(w);
-    while (w.pendingChests.length > 0) w.openChest();
+    drain(w, bot);
     if (onStep && onStep(w) === false) break;
   }
   return steps;

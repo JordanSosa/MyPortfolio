@@ -149,7 +149,7 @@ export const thunderBell: WeaponDef = {
     { dmg: 42, cd: 1.2, amount: 4, chain: 5, reach: 66, splash: 18, knock: 36 },
   ],
   upgrades: ["+1 strike", "Damage +8, chains to 1 more enemy", "+1 strike, cooldown -14%", "Damage +10, +1 chain, bigger strike blasts"],
-  evolution: { into: "raijin_drum", with: "power_bow" },
+  evolutions: [{ into: "raijin_drum", with: "power_bow" }],
   // mastery Limit Breaks (docs/content/weapons.md §4): Lv6 at rank 5, Lv7 at rank 10
   limitBreak: [
     { amount: 1, dmg: 0.15, text: "LIMIT BREAK — Extra Bell: +1 strike, +15% damage" },

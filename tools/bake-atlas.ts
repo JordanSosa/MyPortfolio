@@ -21,6 +21,7 @@
  * checks it byte for byte against a runtime atlas.
  */
 import { createRequire } from "node:module";
+import { FONT_MANIFEST, MANIFEST } from "../src/art/manifest";
 import { ALL_FONTS, ALL_SPRITES } from "../src/art/sprites/index";
 import { Atlas, type BakedAtlasMeta } from "../src/render/atlas";
 
@@ -45,7 +46,7 @@ export interface BakedAtlas {
 
 /** The runtime atlas of the current sprite registry (what dev / tests build). */
 export function runtimeAtlas(): Atlas {
-  return new Atlas({ sprites: ALL_SPRITES, fonts: ALL_FONTS });
+  return new Atlas({ sprites: ALL_SPRITES, fonts: ALL_FONTS, manifest: MANIFEST, fontManifest: FONT_MANIFEST });
 }
 
 /** FNV-1a over u32 words (the texels as little-endian u32). */

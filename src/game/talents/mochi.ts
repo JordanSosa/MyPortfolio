@@ -8,8 +8,8 @@ import { C } from "../../art/palette";
 import type { TalentTree } from "../defs";
 import { onDashThrough } from "../hooks";
 import { byRank, node } from "./_node";
+import { isWeaponOf } from "../registry";
 
-const YARN_SOURCES = new Set(["yarn_orbit", "cosmic_yarn"]);
 
 export const mochiTree: TalentTree = {
   hero: "mochi",
@@ -23,7 +23,7 @@ export const mochiTree: TalentTree = {
       install: (w, r) => {
         const slow = 1 - 0.1 * r;
         w.hooks.on("hit", (h) => {
-          if (!YARN_SOURCES.has(h.source)) return;
+          if (!isWeaponOf(h.source, "yarn_orbit")) return;
           const e = h.enemy;
           if (e.def.boss) return;
           if (slow < e.slow) e.slow = slow;

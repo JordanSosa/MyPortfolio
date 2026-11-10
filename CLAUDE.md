@@ -43,13 +43,14 @@ Further docs:
 | Unit tests while iterating | `npm test` (the fast suite); `npm run test:slow` / `npm run test:all` for long headless runs | 8 s / 40 s / 50 s |
 | Type errors | `npm run typecheck` | 2 s |
 | To *see* the game (any change to UI, art, fx or layout) | `npm run scenes`, then open `shots/scenes/latest/contact.png` | ~2 min for 100 shots |
-| A narrower visual check | `npm run scenes -- --only boss:,ult: --devices i13,se`; `--all` covers all 108 scenarios | seconds |
+| A narrower visual check | `npm run scenes -- --only boss:,ult: --devices i13,se`; `--all` covers all 116 scenarios | seconds |
 | A transient effect (an ult, a flash, a phase change) | film it: `npm run scenes -- --only "ult:kuro~180/15"` (a checked shot every 15 frames for 180) or `--film` | ~6 s |
 | Is the hero still visible in a busy fight? | `npm run scenes -- --only crowd: --film 120/15 --devices i13` (`washout`); what buries her: add `--blame` | ~1-2 min |
 | Visual regressions | `npm run scenes -- --baseline` once, then `npm run scenes -- --diff` | |
 | A specific game state | `/?scenario=<name>&step=1`, then `__kk.step(n)` and `await __kk.snapshot()` (JSON). List: `await __kk.scenarios()` | <1 s |
 | Live state on a device | dev console: `?dev=1` (also turns developer mode on for that browser), or in developer mode the `` ` `` key / a 3-finger long-press. Phone in the artifact viewer: Settings, tap the build label 7 times | |
 | A balance or difficulty answer | `npm run balance:lab` and what-ifs with `--set "boss.*.hp*=0.9"` | 10 s warm, 85 s cold |
+| Is a weapon weak, broken, or a bad second evolution? | `npm run balance:lab -- --weapons` (every weapon at Lv1 / Lv5 / each evolution against its tier's median, siblings side by side; `--set "weapon.<id>.dmg*=1.3"` for before -> after) | 4 s warm, ~2.5 min cold |
 | Publishing the artifact | `npm run check:artifact` (the CSP boot check); publish `shots/artifact/kira-kira-overdrive.html` | 18 s |
 | A change to audio | `npm run check:audio` (phone cost budget + lite-profile shape, clipping, NaN; the profile each device gets; Android focus-loss recovery) | 18 s |
 | The real flows with real taps | `node scripts/e2e.mjs` (3 devices in parallel) | ~6 min |

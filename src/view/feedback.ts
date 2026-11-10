@@ -290,6 +290,8 @@ export class Feedback {
     sub.push(...this.view.heroesB.bind(w, o));
     // Season 2 general weapons (Bubble Tea / Paper Cranes / Lightsticks / Kotatsu "a2_*" cues): src/view/arsenal2-fx.ts
     sub.push(...this.view.arsenal2.bind(w, o));
+    // second evolutions (one module per work package): src/view/evo2-fx.ts -> src/view/evo2/*.ts
+    sub.push(...this.view.evo2.bind(w, o));
     // bestiary cues, boss phases / enrage, death throes and the VICTORY dawn sequence: src/view/bestiary-fx.ts
     sub.push(...this.view.bestiary.bind(w, o));
     // Season 2: relic / talent / twist procs, shields, Plot Armor, encores, the Filler Arc: src/view/relic-fx.ts

@@ -236,7 +236,7 @@ export const henshinBurst: WeaponDef = {
     { dmg: 80, cd: 4.4, amount: 1, radius: 72, iframe: 0.6, ribbons: 8, ribbonDmg: 14, knock: 180 },
   ],
   upgrades: ["+6 ribbons fly out of the burst", "Damage +15, bigger burst", "Cooldown −12%, +2 ribbons", "Damage +20, the burst heals 5 HP and clears enemy bullets inside it"],
-  evolution: { into: EVO, with: "plot_armor" },
+  evolutions: [{ into: EVO, with: "plot_armor" }],
   limitBreak: [
     { dmg: 0.25, area: 0.1, text: "LIMIT BREAK — Season 2 Costume: +25% damage, +10% burst" },
     { cd: 0.85, amount: 1, text: "MASTERED — Stock Footage: −15% cooldown, +2 ribbons" },

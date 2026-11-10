@@ -2,7 +2,8 @@
  * Level-up card generation + application, and chest rewards (DESIGN §2.3, §2.4).
  *
  * Pool (weighted, picked without replacement):
- *   evolution (eligible: base weapon at max level + required passive owned)  - always shown first
+ *   evolution (eligible: base weapon at max level + required passive owned)  - always shown first; a weapon
+ *     with several evolutions gets one card per passive held, and the pick decides (the other is gone)
  *   upgrade of an owned weapon (w 10) / owned passive (w 8)
  *   NEW weapon while a weapon slot is free (w 6) / NEW passive while a passive slot is free (w 5)
  * Season 2: the NEW weapons (passives) share the slice's 7 (8) candidates' weight however big the pool is,
@@ -18,7 +19,7 @@
  */
 import { CFG } from "./config";
 import { PASSIVES, PASSIVE_BY_ID } from "./passives";
-import { WEAPONS, baseWeapons } from "./registry";
+import { WEAPONS, baseWeapons, evolutionsOf } from "./registry";
 import type { ChestResult, UpgradeCard, WeaponDef } from "./types";
 import { limitBreakText } from "./weapons/_shared";
 import type { World } from "./world";
@@ -77,33 +78,53 @@ function weaponUpText(def: WeaponDef, from: number, to: number): string {
   return parts.join(" · ") || def.desc;
 }
 
-/** Evolution cards currently eligible (`early`: levels below max that already qualify - chests with the Golden Gacha Ticket). */
+/**
+ * Evolution cards currently eligible (`early`: levels below max that already qualify - chests with the Golden Gacha Ticket).
+ * One card per ready recipe: a weapon with two evolutions and both passives held yields two cards (same `base`).
+ * A weapon whose choice a chest already queued (World.pendingChoices) is left out: that pick comes first.
+ */
 export function evolutionCards(w: World, early = 0): UpgradeCard[] {
   const out: UpgradeCard[] = [];
   for (const inst of w.weapons) {
     const def = inst.def;
-    if (def.evolved || !def.evolution) continue;
+    const evos = evolutionsOf(def);
+    if (evos.length === 0) continue;
     if (inst.level < def.levels.length - early) continue;
-    if (w.banished.has(def.evolution.into)) continue;
-    if (w.passiveLevel(def.evolution.with) <= 0) continue;
-    const evo = WEAPONS.get(def.evolution.into);
-    if (!evo) continue;
-    // (evolving a Limit-Broken weapon carries +15% damage per Limit Break level into the evolution)
-    const lb = inst.level - def.levels.length;
-    out.push({
-      kind: "evolution",
-      id: evo.id,
-      name: title(w, evo.id, evo.name),
-      icon: evo.icon,
-      desc: lb > 0 ? `${evo.desc} +${Math.round(lb * CFG.limitBreakInherit * 100)}% (Limit Break)` : evo.desc,
-      from: inst.level,
-      to: 1,
-      rarity: "evolution",
-      base: def.id,
-      with: def.evolution.with,
-    });
+    if (w.choiceQueued(def.id)) continue;
+    for (const e of evos) {
+      if (w.banished.has(e.into)) continue;
+      if (w.passiveLevel(e.with) <= 0) continue;
+      const evo = WEAPONS.get(e.into);
+      if (!evo) continue;
+      // (evolving a Limit-Broken weapon carries +15% damage per Limit Break level into the evolution)
+      const lb = inst.level - def.levels.length;
+      out.push({
+        kind: "evolution",
+        id: evo.id,
+        name: title(w, evo.id, evo.name),
+        icon: evo.icon,
+        desc: lb > 0 ? `${evo.desc} +${Math.round(lb * CFG.limitBreakInherit * 100)}% (Limit Break)` : evo.desc,
+        from: inst.level,
+        to: 1,
+        rarity: "evolution",
+        base: def.id,
+        with: e.with,
+      });
+    }
   }
   return out;
+}
+
+/** Does the hero hold any evolved form of this base weapon? */
+function holdsEvolved(w: World, def: WeaponDef): boolean {
+  for (const e of evolutionsOf(def)) if (w.hasWeapon(e.into)) return true;
+  return false;
+}
+
+/** Does this passive complete a recipe of a weapon in the build? */
+function evolvesHeld(w: World, passive: string): boolean {
+  for (const inst of w.weapons) for (const e of evolutionsOf(inst.def)) if (e.with === passive) return true;
+  return false;
 }
 
 /** Every candidate card with its weight (owned-only = chest mode). */
@@ -146,7 +167,7 @@ function candidates(w: World, ownedOnly: boolean): Cand[] {
     for (const def of baseWeapons()) {
       if (w.hasWeapon(def.id) || !w.inPool("weapon", def.id)) continue;
       // already own its evolved form?
-      if (def.evolution && w.hasWeapon(def.evolution.into)) continue;
+      if (holdsEvolved(w, def)) continue;
       out.push({ w: NEW_WEAPON_W, card: { kind: "weapon", id: def.id, name: title(w, def.id, def.name), icon: def.icon, desc: def.desc, from: 0, to: 1, rarity: "rare" } });
     }
     normalise(out, start, NEW_WEAPON_REF);
@@ -159,7 +180,7 @@ function candidates(w: World, ownedOnly: boolean): Cand[] {
     }
     normalise(out, start, NEW_PASSIVE_REF);
     // nudge passives that would evolve an owned weapon (on top: a recipe stands out even in a big pool)
-    for (let i = start; i < out.length; i++) for (const inst of w.weapons) if (inst.def.evolution?.with === out[i].card.id) out[i].w += 3;
+    for (let i = start; i < out.length; i++) if (evolvesHeld(w, out[i].card.id)) out[i].w += 3;
   }
   return out;
 }
@@ -245,7 +266,7 @@ function poolSize(w: World): { n: number; epic: boolean } {
     if (pi.level + 1 < max) epic = true;
   }
   if (w.weapons.length < w.weaponSlots)
-    for (const def of baseWeapons()) if (!w.hasWeapon(def.id) && w.inPool("weapon", def.id) && !(def.evolution && w.hasWeapon(def.evolution.into))) n++;
+    for (const def of baseWeapons()) if (!w.hasWeapon(def.id) && w.inPool("weapon", def.id) && !holdsEvolved(w, def)) n++;
   if (w.passives.length < w.passiveSlots) for (const def of PASSIVES) if (w.passiveLevel(def.id) <= 0 && w.inPool("passive", def.id)) n++;
   POOL.n = n;
   POOL.epic = epic;
@@ -279,8 +300,13 @@ export function applyCard(w: World, card: UpgradeCard): void {
       break;
     }
     case "evolution": {
+      if (card.choices) {
+        // a chest's ROUTE SPLIT: the player picks which evolution (the level-up picker shows the choice next)
+        w.queueChoice(card.choices);
+        break;
+      }
       const base = card.base ? w.hasWeapon(card.base) : undefined;
-      if (base) w.evolveWeapon(base);
+      if (base) w.evolveWeapon(base, card.id);
       break;
     }
     case "heal":
@@ -293,9 +319,33 @@ export function applyCard(w: World, card: UpgradeCard): void {
   w.emit("upgradeApplied", { card });
 }
 
+/** The chest's evolution reward: the first ready one, or a ROUTE SPLIT card when its weapon has several ready. */
+function chestEvolution(w: World): UpgradeCard | null {
+  const evos = evolutionCards(w, w.chestEvoEarly);
+  const first = evos[0];
+  if (!first) return null;
+  const same = evos.filter((c) => c.base === first.base);
+  if (same.length < 2) return first;
+  const base = WEAPONS.get(first.base ?? "");
+  return {
+    kind: "evolution",
+    id: first.base ?? first.id,
+    name: "Route Split!",
+    icon: base?.icon ?? first.icon,
+    desc: `Choose ${base?.name ?? "the weapon"}'s evolution: ${same.map((c) => WEAPONS.get(c.id)?.name ?? c.name).join(" or ")}`,
+    from: first.from,
+    to: 1,
+    rarity: "evolution",
+    base: first.base,
+    choices: same,
+  };
+}
+
 /**
  * Chest rewards: 1 upgrade (golden: 3, 5% x luck JACKPOT: 5), evolutions first,
- * then upgrades of owned items, then new items, then coins. Applied immediately.
+ * then upgrades of owned items, then new items, then coins. Applied immediately - except when the weapon
+ * the chest would evolve has several evolutions ready: the reward is then a ROUTE SPLIT card (`choices`),
+ * which queues the pick between them for the player (World.pendingChoices; the chest never decides a route).
  * `coins` in the result is the total coin delta (bonus + any Star Pouch rewards).
  */
 export function rollChest(w: World, golden: boolean): ChestResult {
@@ -308,7 +358,7 @@ export function rollChest(w: World, golden: boolean): ChestResult {
   const bonus = Math.round((golden ? CFG.chestCoinsGolden : CFG.chestCoins + w.rng.int(0, CFG.chestCoins)) * (jackpot ? 3 : 1) * w.stats.greed);
   const before = w.coins;
   for (let i = 0; i < n; i++) {
-    let card: UpgradeCard | null = evolutionCards(w, w.chestEvoEarly)[0] ?? null;
+    let card: UpgradeCard | null = chestEvolution(w);
     if (!card) {
       const owned = candidates(w, true);
       card = pickWeighted(w, owned)?.card ?? null;

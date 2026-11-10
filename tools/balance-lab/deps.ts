@@ -61,6 +61,28 @@ for (const [mods, key] of [
   }
 }
 
+/** Weapon id -> its content file (src/game/weapons/<name>.ts; the `_helpers` stay engine code). */
+type WeaponMod = { weapons?: { id: string }[] };
+const weaponMods = import.meta.glob<WeaponMod>("../../src/game/weapons/*.ts", { eager: true });
+const weaponFile = new Map<string, string>();
+const weaponFiles = new Set<string>();
+for (const [k, m] of Object.entries(weaponMods)) {
+  const f = rel(k);
+  if (!m.weapons || /\/_[^/]*$/.test(f)) continue;
+  weaponFiles.add(f);
+  for (const d of m.weapons) weaponFile.set(d.id, f);
+}
+
+/**
+ * Hash of the content files of some weapons (the weapon bench: a job recomputes when a weapon it holds, or its
+ * hero's signature weapon - hero traits and talents import helpers from that file - changes; the other weapon
+ * files do not touch it).
+ */
+export function weaponFilesHash(ids: string[]): string {
+  const files = [...new Set(ids.map((id) => weaponFile.get(id)).filter((f): f is string => !!f))].sort();
+  return sha(files.map((f) => `${f}:${hashFile(f)}`));
+}
+
 /** Lab files whose code each kind of sim job runs (the rest of the lab is reporting / modelling). */
 // (jobs.ts itself is types + the dispatcher: its sim step DT is keyed by value, so a new job kind keeps the cache)
 const SIM_COMMON = ["tools/balance-lab/overrides.ts", "tools/checkpoints.ts", "tools/policy.ts"];
@@ -73,6 +95,7 @@ const SIM_LAB: Record<string, string[]> = {
   window: ["tools/balance-lab/job-run.ts", "tools/balance-lab/snapshot.ts"],
   full: ["tools/balance-lab/job-run.ts", "tools/balance-lab/snapshot.ts"],
   progression: ["tools/balance-lab/job-prog.ts"],
+  weapon: ["tools/balance-lab/job-weapon.ts", "tools/balance-lab/snapshot.ts"],
 };
 
 let srcFiles: string[] | null = null;
@@ -83,6 +106,8 @@ const engine = new Map<string, string>();
  * RunConfig it builds) or, without it, every src/game + src/core file; plus the lab code that job runs.
  */
 export function engineHash(kind = "full"): string {
+  // (the weapon bench keys each job on the files of the weapons it holds: weaponFilesHash)
+  const perWeapon = kind === "weapon";
   const hit = engine.get(kind);
   if (hit) return hit;
   if (!srcFiles) {
@@ -90,7 +115,7 @@ export function engineHash(kind = "full"): string {
     const fromGraph = graph?.map((f) => relative(ROOT, f)).filter((f) => /^src\/(game|core|debug)\//.test(f));
     srcFiles = [...new Set(fromGraph?.length ? fromGraph : [...walk("src/game"), ...walk("src/core"), "src/debug/bot.ts"])].sort().filter((f) => !contentFiles.has(f));
   }
-  const files = [...srcFiles, ...SIM_COMMON, ...(SIM_LAB[kind] ?? [])];
+  const files = [...srcFiles.filter((f) => !perWeapon || !weaponFiles.has(f)), ...SIM_COMMON, ...(SIM_LAB[kind] ?? [])];
   const h = sha(DT, files.map((f) => `${f}:${hashFile(f)}`));
   engine.set(kind, h);
   return h;

@@ -6,6 +6,8 @@
  * for evolutions) and the coins count up inside the modal. A single reward
  * gets a big reel. Rewards are applied by world.openChest() when the lid
  * bursts. Tap / confirm skips ahead; continue needs a fresh touch.
+ * A weapon with several evolutions ready is not evolved by the chest: its reward is a ROUTE SPLIT card and
+ * the pick between them opens in the level-up card picker right after the chest (World.pendingChoices).
  * The revealed cards carry the level-up cards' evolution hints (known recipes only; read
  * against the build after the chest; a 5-reward JACKPOT shows none: five cards fill a phone).
  */
@@ -87,7 +89,7 @@ export function openChestModal(app: App, w: World): UiScreen {
         let strip = "";
         for (let k = 0; k < n; k++) strip += `<img class="px" alt="" src="${sprite(pool[(Math.random() * pool.length) | 0] ?? r.icon, 0, 3)}">`;
         strip += `<img class="px" alt="" src="${sprite(r.icon, 0, 3)}">`;
-        const lvl = r.kind === "evolution" ? "EVOLUTION!" : r.from === 0 ? "NEW!" : r.kind === "weapon" || r.kind === "passive" ? `Lv ${r.from} → ${r.to}` : "";
+        const lvl = r.choices ? "ROUTE SPLIT!" : r.kind === "evolution" ? "EVOLUTION!" : r.from === 0 ? "NEW!" : r.kind === "weapon" || r.kind === "passive" ? `Lv ${r.from} → ${r.to}` : "";
         return `<div class="reel" style="--i:${i}"><div class="win"><div class="strip" data-n="${n}">${strip}</div></div><div class="rn">${esc(r.name)}<small>${lvl}</small></div></div>`;
       })
       .join("");

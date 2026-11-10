@@ -357,7 +357,7 @@ export const teapotTempest: WeaponDef = {
     { dmg: 14, cd: 2.0, amount: 4, speed: 3.2, every: 0.45, puddleR: 20, puddleDmg: 12, life: 5, heal: 3, knock: 30, block: 1, mend: 2.2 },
   ],
   upgrades: ["+1 teacup", "Damage +3, hotter, wider puddles, warmer tea", "+1 teacup, spills more often", "Damage +3, bigger, longer puddles, much warmer tea"],
-  evolution: { into: "eternal_tea_party", with: "bento_box" },
+  evolutions: [{ into: "eternal_tea_party", with: "bento_box" }],
   // mastery Limit Breaks (docs/content/weapons.md §4): Lv6 at rank 5, Lv7 at rank 10
   limitBreak: [
     { amount: 1, dmg: 0.15, text: "LIMIT BREAK — Guest Cup: +1 teacup, +15% damage" },

@@ -1,7 +1,8 @@
 # Weapons, evolutions, Limit Breaks, passives
 
 20 weapons (8 existing + 12 new), each with an evolution (40 weapon defs), and 16
-passives (8 existing + 8 new). Numbers use the same `WeaponLevel` shape as the
+passives (8 existing + 8 new). Every weapon is getting a **second evolution** through a
+different passive (§8: the pilot, Meowteor Hammer, is in; 19 are designed and packaged). Numbers use the same `WeaponLevel` shape as the
 existing files (`dmg, cd, amount, speed, pierce, area, duration, knock` plus
 weapon-specific keys) and sit in the same ranges: a Lv1 weapon does roughly
 12-25 single-target DPS or 6-15 per-enemy AoE DPS; a Lv5 weapon 2.5-4× that; an
@@ -651,6 +652,7 @@ With the limits: 15 % (Cosmic Yarn) and 7 % (both) reach her, 31 % / 29 % at 40 
 | --- | --- | --- | --- |
 | Yarn Orbit | yarn ball (5 × area) | 1 | 2.5 (Lv5: 2.2) |
 | Cosmic Yarn | planet (7 × area) | 3 | 1.5 |
+| Meowteor Hammer (§8) | spiked ball (8 × area), ring swinging 26-74 px | 1 | 2.2 |
 | Teapot Tempest | teacup (5) | 1 | 2.5 (Lv5: 2.2) |
 | Eternal Tea Party | teacup (5) | 2 | 1.5 |
 
@@ -668,3 +670,279 @@ Weapons checked and left out (no orbiting contact bodies):
 - **Paper Crane Flock** - cranes leave the flock to dart at anything in range (most of a bullet-hell fight), so a
   guard would flicker on and off; their identity is Folded Tighter / crumpling when the hero is hurt.
 - **Micro Missile Swarm** - missiles fly outward and home; nothing orbits (Aoi's C6 drone is a shooter).
+
+---
+
+## 8. Second evolutions
+
+Owner request: "give every weapon a SECOND evolution through a different passive, so builds have a real
+choice". A base weapon now lists its evolutions (`WeaponDef.evolutions`, the first entry = §1's pair, read
+through `evolutionsOf()` in `src/game/registry.ts`); the second entry is a **sidegrade**, not an upgrade of
+the first: the same evolution budget (crowd DPS on the lab gauge within about 0.8-1.4× its first
+evolution), spent on a different play style.
+
+**Rules of the choice** (sim: `src/game/upgrades.ts`, `World.pendingChoices`; tests: `tests/evo2.test.ts`):
+
+- A route is ready when the base weapon is at Lv5 and that route's passive is held (as §1).
+- One passive held: level-ups and chests evolve down that route, exactly as before.
+- Both passives held: a level-up offers **one card per evolution** (both first in the offer) and the pick
+  decides; the other route is gone with the base weapon. A chest never decides for the player: its reward is a
+  **ROUTE SPLIT** card and the pick between the evolutions opens in the card picker right after the chest (no
+  level is spent on it; no reroll / banish / skip).
+- Either evolution uses its base weapon's mastery, `weaponDamage`, talent and Limit Break inheritance
+  entries, counts toward the same mastery XP, and is its own codex discovery (the Wiki shows a weapon's
+  recipes one by one, each hidden until that evolution has been made once; evolution hints likewise).
+- A Real Friend mirrors whichever evolution the start weapon took; Author's Original Manuscript still drafts
+  the **first** evolution's passive.
+
+**Design rules:** a different passive from the first evolution; no passive gates more than 3 evolutions
+(8 passives gate 3, 8 gate 2: 40 recipes over 16 passives); hero-signature weapons stay in character
+(`heroes.md`); the joke is on the trope, never on people or real works (`satire.md`); no cooldown markers
+or status rings on the hero; player fx that can land on her fade in the hero focus zone (`Flag.Focus`).
+
+### 8.1 The table
+
+Status: `done` = implemented (the coverage test then checks id, name, base and passive against this row);
+`designed` = to do. Package = the work package (§8.3) that owns it.
+
+| Base weapon | File (`src/game/weapons/`) | First evolution (passive) | Second evolution | id | + Passive | Package | Status |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Star Shot | `star-shot.ts` | Galaxy Barrage (Wish Charm) | Critical Constellation | `critical_constellation` | Lucky Clover | A | designed |
+| Petal Slash | `petal-slash.ts` | Sakura Tempest (Big Ribbon) | Already Cut | `already_cut` | Swift Shoes | A | designed |
+| Yarn Orbit | `yarn-orbit.ts` | Cosmic Yarn (Magnet Star) | Meowteor Hammer | `meowteor_hammer` | Power Bow | pilot | done |
+| Heart Boomerang | `heart-boomerang.ts` | Love Tornado (Twin Charm) | Unrequited Heart | `unrequited_heart` | Heart Locket | A | designed |
+| Thunder Bell | `thunder-bell.ts` | Raijin Drum (Power Bow) | Group Chat Lightning | `group_chat_lightning` | Friendship Bracelet | A | designed |
+| Candy Bomb | `candy-bomb.ts` | Sugar Nuke (Lucky Clover) | Konpeito Minefield | `konpeito_minefield` | Chibi Charm | A | designed |
+| Bubble Aura | `bubble-aura.ts` | Ocean Dome (Heart Locket) | Soap Opera | `soap_opera` | Inner Monologue | B | designed |
+| Prism Beam | `prism-beam.ts` | Rainbow Cannon (Swift Shoes) | Refraction Overload | `refraction_overload` | Lucky Clover | B | designed |
+| Dark Flame Dragon | `dark-flame-dragon.ts` | Unsealed Abyss Dragon (Inner Monologue) | Unbandaged Right Arm | `unbandaged_right_arm` | Main Character Aura | C | designed |
+| Teapot Tempest | `teapot-tempest.ts` | Eternal Tea Party (Bento Box) | Table-Flip Tea Service | `table_flip_service` | Speed Lines | C | designed |
+| Micro Missile Swarm | `micro-missile-swarm.ts` | Al Dente Armageddon (Speed Lines) | Final Episode Budget Missile | `budget_missile` | Big Ribbon | C | designed |
+| Baka Harisen | `baka-harisen.ts` | Dere Dere Harisen (Friendship Bracelet) | Tsun Tsun Drill Harisen | `tsun_tsun_drill` | Speed Lines | C | designed |
+| Notice-Me Sparkles | `notice-me-sparkles.ts` | Shoujo Filter (Main Character Aura) | Who Are You Again? | `who_are_you_again` | Heart Locket | D | designed |
+| Henshin Burst | `henshin-burst.ts` | Infinite Henshin Loop (Plot Armor) | Skip Intro | `skip_intro` | Wish Charm | D | designed |
+| Cheat Fireball | `cheat-fireball.ts` | Meteor Lv.99999 (Training Montage) | "Holding Back" Fireball | `holding_back` | Twin Charm | D | designed |
+| Horn of Reincarnation | `horn-of-reincarnation.ts` | Isekai Rush Hour (Swift Shoes) | Free Delivery | `free_delivery` | Magnet Star | D | designed |
+| Bubble Tea Cannon | `bubble-tea-cannon.ts` | Tapioca Tsunami (Big Ribbon) | Brown Sugar Railgun | `brown_sugar_railgun` | Power Bow | B | designed |
+| Paper Crane Flock | `paper-crane-flock.ts` | Thousand Crane Wish (Wish Charm) | Failed Exam Storm | `failed_exam_storm` | Training Montage | B | designed |
+| Idol Lightstick Wave | `idol-lightstick-wave.ts` | Sold-Out Dome Tour (Twin Charm) | Underground Mosh Pit | `mosh_pit` | Plot Armor | B | designed |
+| Kotatsu of Sloth | `kotatsu-of-sloth.ts` | Eternal Winter Break (Chibi Charm) | All-You-Can-Eat Nabe | `all_you_can_eat_nabe` | Bento Box | D | designed |
+
+Passive load after all 20 (first + second evolutions): Power Bow 3, Wish Charm 3, Big Ribbon 3, Twin Charm 3,
+Swift Shoes 3, Lucky Clover 3, Speed Lines 3, Heart Locket 3; Magnet Star 2, Plot Armor 2, Main Character
+Aura 2, Bento Box 2, Inner Monologue 2, Training Montage 2, Friendship Bracelet 2, Chibi Charm 2.
+
+### 8.2 The designs
+
+Each entry: card `desc` (the wiki text too), the mechanic, how it plays against the first evolution, and
+sprite + fx notes. Numbers are starting points: tune each on the lab gauge against its first evolution
+(`npm run balance:lab -- --job '{"kind":"gauge","hero":"hoshi","cp":null,"weapons":[["<id>",1]],"T":6}'`).
+Icons are `icon_<id>` (16×16, gold twinkle); world sprites and manifest rows go in the package's
+`src/art/sprites/evo2-<package>.ts`, view fx in `src/view/evo2/<package>.ts`. Reuse existing sfx ids.
+
+**Meowteor Hammer** (`meowteor_hammer`, Yarn Orbit + Power Bow; pilot, done). "EVOLUTION! 4 spiked yarn
+wrecking balls swing far out and SLAM on every swing. Blocking is somebody else's arc."
+`{ dmg: 28, cd: 2.6, amount: 4, area: 1.15, speed: 4.4, knock: 90, every: 0.3, block: 1, mend: 2.2, rIn: 26, rOut: 74, slam: 26, slamDmg: 90 }`.
+Four permanent spiked balls (`w_meowteor`, 16×16×2, body r 8 × area) circle at `speed` rad/s on a ring whose
+radius swings `rIn` -> `rOut` -> `rIn` (× area) once per `cd` s (× the cooldown stat); at the far point every
+ball that is up SLAMS: a blast r `slam` × area for `slamDmg` (scaled like `dmg`), knock × 1.6, as the
+weapon's own source (it is an explosion: blast hooks and Marshmallow toasting apply). **Versus Cosmic
+Yarn:** about 1.4× its crowd DPS on the gauge (4,688 vs 3,382) and nearly four times the ground swept, but
+no gem pull, slightly less on a single boss (95 vs 104), and the Orbital Guard of the base weapon (`block` 1,
+`mend` 2.2, a broken ball does not slam) on a ring that is far from her for half of every swing: Cosmic Yarn
+is the safe route, this one hits. Fx: the generic blast plus an orange ring and yarn bits (`src/view/evo2/pilot.ts`,
+particles on the fx layers); sfx: `orbitHit` hits, the generic `explosion`.
+
+**Critical Constellation** (`critical_constellation`, Star Shot + Lucky Clover). "EVOLUTION! Five heavy
+comet stars. Every critical hit draws the next star of the constellation." Every `cd` 1.6 s, 5 slow, large
+comet stars (pierce 4, no homing after launch) fly at the 5 highest-HP enemies in view, the first hit of
+each always crits; a crit kill spawns two half-damage mini stars (`miniStar`, as Hoshi's C6) at the kill.
+**Versus Galaxy Barrage** (a constant spiral stream, crowd sustain): burst and elite / boss focus, long gaps
+between volleys, scales with crit and crit damage instead of cooldown. Sprite: `w_comet_star` 16×16×2 (pale
+core, gold body, a short tail to the left). Fx: a thin gold line between consecutive crit hits for 0.2 s
+(the "constellation"), `Flag.Focus`; sfx `starShot`.
+
+**Already Cut** (`already_cut`, Petal Slash + Swift Shoes; Rin). "EVOLUTION! One long cut the way you face.
+Nothing happens. Then she sheathes the blade." Every `cd` 1.3 s a line cut 150 × 14 px (× area) along the
+facing direction: no damage on the cut itself, every enemy on the line is **marked**; 0.45 s later (the
+sheath click) each mark takes `dmg` 95 at once, +50 % while Rin has moved since the cut. Kills by a mark
+shed 3 petal blades that fly on along the line (as Sakura Tempest's, half damage). **Versus Sakura Tempest**
+(stand in the middle, 360°): directional and delayed, aimed by moving, the highest single-line burst in the
+arsenal but nothing behind her. Sprite: `w_iai_line` 48×8×3 (white hairline -> pink afterimage -> wisps),
+`fx_sheath` 12×12×2 glint on the hero's hip (her own look: no Focus). Fx: marked enemies show a 1-px white
+slit, then pink halves of petals on the delayed hit; sfx `slash` on the cut, `hitCrit` on the click.
+
+**Unrequited Heart** (`unrequited_heart`, Heart Boomerang + Heart Locket). "EVOLUTION! One big heart picks
+one enemy and keeps coming back. It will not take the hint." A single large heart (2 with +2 amount, 3 with
++4) locks onto the highest-HP enemy within 140 px and shuttles between the hero and that enemy (0.45 s a
+round trip), `dmg` 34 per pass, +8 % per consecutive pass on the same target (max +120 %), piercing what is
+in the way at half damage; when the target dies it picks the next and keeps half of the ramp. Each catch
+heals 0.5 HP (× healing), at most 2 HP/s. **Versus Love Tornado** (hearts spiral out, crowd AoE): the boss
+and elite killer, poor at clearing a ring of small enemies. Sprite: `w_heart_big` 16×16×2 (magenta, a
+bandage plaster on it). Fx: a faint pink dotted leash to the target on Layer.FxBelow (not over the hero),
+`WFX_CATCH` on every catch; sfx `boomerang`.
+
+**Group Chat Lightning** (`group_chat_lightning`, Thunder Bell + Friendship Bracelet). "EVOLUTION! One bolt,
+forwarded to everyone. Nobody asked to be added." Every `cd` 1.1 s one bolt hits a random enemy in view and
+is **forwarded**: it chains to the nearest unhit enemy within 70 px, up to 10 hops + 2 per different weapon
+held, with no damage falloff (`dmg` 36 a hop); the last enemy of a full chain takes a "seen by everyone"
+blast (r 30, 2× damage). **Versus Raijin Drum** (8 huge bolts, AoE blasts, a screen flash): no burst and no
+flash, steady chains that reward dense packs and a wide build. Sprites: none new (the `bolts` renderer,
+thinner and cyan-white); `fx_ping` 8×8×2 notification dot over each hop. Fx: `WFX_CHAIN` per hop with a
+budget of 16 a frame, no screen flash, no shake above 0.05; sfx `thunder` (rate-limited).
+
+**Konpeito Minefield** (`konpeito_minefield`, Candy Bomb + Chibi Charm). "EVOLUTION! Scatters tiny star
+candies everywhere. They are small. They are armed." Every `cd` 0.5 s tosses 2 konpeito mines to random
+points 30-90 px around the hero (max 28 alive, 12 s life); a mine arms after 0.4 s and pops when an enemy
+touches it: r 20 × area, `dmg` 42, a 25 % slow for 1 s. Mines the hero walks over are kicked 40 px ahead.
+**Versus Sugar Nuke** (one giant bomb + bomblets on a 2 s clock): area denial and kiting, strong while
+moving through lanes, weak against a boss that never walks into them. Sprite: `w_konpeito` 8×8×2 in four
+tints (pink / mint / yellow / lavender through `tint`). Fx: `candyBits` on the pop (the existing emitter,
+budgeted), a 1-frame white blink when a mine arms; sfx `candyThrow`, the generic `explosion` at 0.5 vol.
+
+**Soap Opera** (`soap_opera`, Bubble Aura + Inner Monologue). "EVOLUTION! You leave a trail of soap bubbles.
+Each one traps an enemy in a dramatic misunderstanding." While moving, a soap bubble is left every 14 px
+(life 3.5 s × duration, max 24); an enemy touching one is lifted and held inside it for 1.6 s × duration
+(elites half, bosses only slowed 30 %), takes `dmg` 12 every 0.4 s, and takes a pop of 40 when it ends; the
+standing aura shrinks to r 22. **Versus Ocean Dome** (a huge healing dome she stands in): no heal and almost
+no aura, crowd control drawn by her path - the kiting route. Sprite: `w_soap_bubble` 16×16×3 (thin rainbow
+rim, mostly transparent). Fx: bubbles on Layer.Fx with `Flag.Focus`, the existing `popRing` / `droplet` on
+the pop; sfx `bubblePop`.
+
+**Refraction Overload** (`refraction_overload`, Prism Beam + Lucky Clover). "EVOLUTION! One beam. It hits
+something, splits in three, and each of those has opinions." Every `cd` 1.7 s a 0.6 s beam at the nearest
+enemy (len 120): from the first enemy hit it splits into 3 beams fanned ±28° (len 90), and each of those
+splits once more on its first hit (9 thin beams, len 60); ticks 0.1 s, `dmg` 9 / 6 / 4 per tier, a crit on
+any tier adds one extra split from that enemy. **Versus Rainbow Cannon** (3 beams sweeping 360° around
+her): aimed, depth-first, best into a deep pack behind a front line, nothing behind her. Sprites: none new
+(`fx_beam` tinted white -> cyan -> a rainbow tier). Fx: beams drawn as Rainbow Cannon's are (opaque hero
+rule in `drawBeams`), a prism glint (`P.flare`) at every split; sfx `beam`.
+
+**Unbandaged Right Arm** (`unbandaged_right_arm`, Dark Flame Dragon + Main Character Aura; Kuro).
+"EVOLUTION! The bandages come off. Mr. Toasty wraps around his right arm. He has been waiting to say this
+line." The familiars merge into a flaming claw: every `cd` 0.9 s a wide claw swipe in the facing direction
+(cone len 54 × area, half-angle 70°), `dmg` 46, Burn 10 DPS for 4 s, +60 % crit damage on burning enemies;
+every 4th swipe is the named attack (text pop, len × 1.5, guaranteed crit). **Versus Unsealed Abyss
+Dragon** (an orbiting dragon that breathes and judges on its own): short range and aimed by facing, by far
+the higher burst, he has to walk into the crowd. Sprites: `w_abyss_claw` 40×32×4 (orange flames, as the base
+weapon: the flames are still orange), `fx_bandage` 8×8×2 scraps. Fx: scraps of bandage on the 4th swipe,
+the claw with `Flag.Focus` (it sweeps across her); sfx `fireball`, `slash`.
+
+**Table-Flip Tea Service** (`table_flip_service`, Teapot Tempest + Speed Lines; Pudding). "EVOLUTION! The
+customer was rude. Cups and saucers are served at speed. The tea is still warm." Five cups orbit at r 30
+(contact `dmg` 18, Orbital Guard `block` 1, `mend` 2.2); every `cd` 0.9 s the cup nearest an enemy is
+**flung** as a spinning saucer (speed 260 × projSpeed, pierce 6, `dmg` 40, strong knockback), flies 150 px
+and returns to its slot; a flung cup does not guard and leaves no moat. Warm Tea stays: a puddle on her
+path every 3 s (as the base weapon at Lv5), so the route never costs Pudding her healing, only the moat's.
+**Versus Eternal Tea Party** (a moat, six sturdy cups, kill-heals): ranged knockback offence and a thinner
+guard. Sprites: `w_saucer` 12×12×4 (spin). Fx: the cup drawer of `heroes-a-fx.ts` reads the same projectile
+fields (a flung cup: `p.a` = 2), a short speed-line trail (`TRAILS`), no marker on an empty slot; sfx
+`teacup`.
+
+**Final Episode Budget Missile** (`budget_missile`, Micro Missile Swarm + Big Ribbon; Aoi). "EVOLUTION! The
+whole animation budget went into one missile. It has a face." Every `cd` 3.2 s ONE large missile launches
+slowly (speed 90 -> 240, turn 2.2 rad/s) at the densest cluster in view and explodes: r 70 × area, `dmg` 240,
+knock 220, and a crater that burns for 2 s (r 40, 20 DPS). While it flies the swarm's small missiles are
+not fired ("off-model stills"): 4 tiny ones (dmg 12) in the last second before the next launch. **Versus
+Al Dente Armageddon** (24-missile salvos everywhere): one telegraphed hit that deletes a pack, very area
+hungry, bad against spread-out fast enemies. Sprite: `w_budget_missile` 24×16×2 (a face, a sweat drop),
+`fx_crater` 32×20×2 decal. Fx: a smoke trail (`TRAILS`), the blast through the generic big explosion with
+`coverHero` when it lands near her; sfx `missile`, `explosionBig`.
+
+**Tsun Tsun Drill Harisen** (`tsun_tsun_drill`, Baka Harisen + Speed Lines; Akane). "EVOLUTION! The fan
+rolls into a drill. It's not like she is aiming at you. She is, though." Every `cd` 1.0 s a drill thrust in
+the facing direction: a capsule 70 × 12 px (× area) that ticks 4 times over 0.3 s (`dmg` 22 a tick),
+drags every enemy it holds to the tip, then launches them (knock 360): launched enemies are projectiles as
+with the base weapon's ricochet (60 % of `dmg` × 4 to what they hit). No heal. **Versus Dere Dere Harisen**
+(360° heart smack, heals, stuns): the tsun route - a narrow, far-reaching line and the arsenal's biggest
+knockback, no sustain. Sprite: `w_drill_fan` 32×16×4 (a paper spiral, red-orange rim like her twin-tails).
+Fx: `fx_baka` f0 on the launch (rate-limited as today), spiral speed lines; sfx `fanSmack`, `baka`.
+
+**Who Are You Again?** (`who_are_you_again`, Notice-Me Sparkles + Heart Locket; Senpai). "EVOLUTION! He
+looks right at them. Then he asks their name. The heartbreak is area damage." The aura charms as the base
+weapon (r 56, `charm` 0.25, 2.5 s); when a charm ends, or the charmed enemy dies, it realises it was never
+noticed: a heartbreak burst r 32 × area for `dmg` 30 + 6 % of its max HP (bosses: 30 flat), and enemies in
+the burst roll the charm at once (a chain of heartbreak, budgeted 8 bursts a second). Played, as all of
+Senpai, purely as admiration. **Versus Shoujo Filter** (long charms, charmed enemies hit 3× harder, the
+Kira Kira Moment): short charms that are the ammunition - burst AoE instead of a standing army. Sprite:
+`fx_heartbreak` 16×16×3 (a heart cracking). Fx: the crack over the enemy, a pale-pink ring with
+`Flag.Focus`; text pop "who?" at most once a second; sfx `sparkleCharm`, `bubblePop`.
+
+**Skip Intro** (`skip_intro`, Henshin Burst + Wish Charm; Magical Girl #47). "EVOLUTION! The transformation
+sequence has been skipped. So has the invulnerability." No henshin at all: the burst fires at once every
+`cd` 1.25 s (r 70 × area, `dmg` 44, knock 160, 8 ribbons at 14) with **no** i-frames and no slow walk; the
+emergency transform is gone. Every 5th burst is the stock-footage finisher (r × 1.4, 2× damage). **Versus
+Infinite Henshin Loop** (a 2.5 s loop of invulnerability and Plot Armor shields): twice the burst rate and
+full mobility, none of the safety. Sprites: none new (`w_ribbon`); `fx_skip` 24×10×1 "SKIP ▶▶" pop. Fx: the
+burst ring as today, the pop text at most once per 4 s; sfx `transform` (the burst half only: lower volume, no build-up).
+
+**"Holding Back" Fireball** (`holding_back`, Cheat Fireball + Twin Charm; Isekai-kun). "EVOLUTION! He is
+holding back. This is him holding back: a stream of perfectly ordinary fireballs." A stream: one small
+fireball every `cd` 0.14 s at the nearest enemy (speed 230, blast r 12 × area, `dmg` 15, knock 20), +1
+stream per 2 amount; no "Did I overdo it?" cast. Every 100th fireball he sneezes: one base-weapon overdo
+blast. **Versus Meteor Lv.99999** (slow, huge, on the biggest crowd): constant single-target and line
+pressure, no screen-clearing hit. Sprites: none new (`w_fireball` at 0.6 scale). Fx: the small blast uses
+the existing spark, not the full explosion (budget 10 a frame); status-window pop "MP: ∞" once a run; sfx
+`fireball` at 0.35 vol, rate-limited to 8 a second.
+
+**Free Delivery** (`free_delivery`, Horn of Reincarnation + Magnet Star; Truck-kun). "EVOLUTION! The horn
+now pulls. Parcels are delivered to the bumper. The parcels are enemies." The honk is reversed: every `cd`
+1.6 s a cone ahead (len 110 × area, half-angle 40°) **pulls** every enemy in it 60 px toward the bumper
+(bosses 0), then the ram hits everything on the bumper for `ram` 85 with the isekai finish chance of the
+base weapon; pickups in the cone are pulled too. No phantom trucks. **Versus Isekai Rush Hour** (360° honk,
+scheduled phantom trucks): aimed, greedy and close - he drives into what he pulled; with Swift Shoes too
+the player must choose. Sprites: none new; `fx_parcel` 8×8×2 box on pulled enemies. Fx: reversed HONK
+rings (drawn toward the truck, `Flag.Focus`), tape scraps on the ram; sfx `honk` pitched down.
+
+**Brown Sugar Railgun** (`brown_sugar_railgun`, Bubble Tea Cannon + Power Bow). "EVOLUTION! One pearl
+through one very long straw. It does not bounce. It does not need to." Every `cd` 1.5 s a single pearl is
+fired at the nearest enemy at speed 520: a line shot across the screen, pierce ∞, `dmg` 85, -12 % per
+enemy pierced (min 40 %), leaving a syrup streak for 2 s (half width 6: 35 % slow, 10 DPS). +1 pearl per 2
+amount, fanned 6°. **Versus Tapioca Tsunami** (giant pearls bouncing 8 times, shedding more): lanes instead
+of pinball - devastating down a corridor of enemies, little to offer a ring around her. Sprite:
+`w_pearl_rail` 16×8×2, `fx_syrup` 16×8×2 decal. Fx: the "boba" trail lengthened, a straw-shaped muzzle
+flash; sfx `boba` + `beam` at 0.3.
+
+**Failed Exam Storm** (`failed_exam_storm`, Paper Crane Flock + Training Montage). "EVOLUTION! The cranes
+are refolded into paper planes. From failed exams. They never come back, and neither will that grade."
+No flock: every `cd` 0.22 s a paper plane launches from behind the hero in the facing direction (±20°
+spread, speed 300, pierce 3, `dmg` 20, life 1.4 s), +1 lane per 2 amount; every enemy a plane kills adds
+1 % XP to its gem (the passive's joke), capped at +30 % for the run's banked XP rate. **Versus Thousand
+Crane Wish** (12 homing cranes around her, a heal on every Wish): a forward barrage with screen reach, no
+homing, no heal, aimed by facing. Sprite: `w_paper_plane` 12×8×2 (a red "23" on the wing). Fx: the
+existing `paperBit` on hits, no trail on more than 24 planes; sfx `paperCrane`, rate-limited as the darts.
+
+**Underground Mosh Pit** (`mosh_pit`, Idol Lightstick Wave + Plot Armor). "EVOLUTION! The venue holds
+forty people. Every beat is a stomp, and every stomp is a shove." On every beat a 360° stomp around the
+hero (r 62 × area, `dmg` 26, knock 110, a 0.2 s daze); each beat that hits 6+ enemies adds a stack of
+Crowd Surf (max 6, lost after 2 silent beats): +4 % damage taken reduction and +6 % stomp radius a stack.
+No ENCORE. **Versus Sold-Out Dome Tour** (long 90° spotlight arcs, a screen-wide ENCORE): a short-range
+ring that makes her tankier the deeper she stands in the crowd. Sprites: none new (`w_lightstick_wave`
+as a full ring); `fx_stomp` 24×8×2 dust. Fx: the ring on Layer.FxBelow (under the hero), dust with Focus;
+the HUD beat pulse of `hud-arsenal2.ts` should include the id; sfx `lightstick` at a lower pitch.
+
+**All-You-Can-Eat Nabe** (`all_you_can_eat_nabe`, Kotatsu of Sloth + Bento Box). "EVOLUTION! The kotatsu
+gets a hot pot. Whatever wanders in gets cooked. Whatever gets cooked is dinner." Deploys as the base
+weapon (stand still), r 60 × area: enemies inside are slowed 30 % and **cooked**: `dmg` 9 every 0.3 s,
++12 % per second they have stayed inside (max +180 %); every 12th enemy that dies inside drops a snack
+(`snack`, heal 4 × healing). Moving folds it at once and it does not travel. **Versus Eternal Winter
+Break** (the kotatsu comes along, pulls gems, lobs mikan): the stationary route - the strongest standing
+aura in the game and the only one that feeds her, worthless on the move. Sprite: `w_nabe` 24×16×3 (a
+bubbling pot on the kotatsu, steam). Fx: steam puffs on Layer.Fx (Focus), a ladle splash on a snack drop;
+no Too Comfy doze on this route; sfx `snore` (deploy), `bubblePop`.
+
+### 8.3 Work packages
+
+Four packages of the 19 remaining evolutions, grouped so that no two packages edit the same weapon file,
+and by the helper / view family they have to read. Each package owns exactly: its weapon files (the new
+`WeaponDef` + the second `evolutions` entry), `src/art/sprites/evo2-<pkg>.ts` (sprites + manifest rows),
+`src/view/evo2/<pkg>.ts` (fx module), `tests/evo2-<pkg>.test.ts`, and the Status cell + numbers of its
+entries above. The recipe: `docs/ARCHITECTURE.md` §4 "Adding a second evolution".
+
+| Package | Evolutions | Reads (do not restructure) |
+| --- | --- | --- |
+| **A** (5) | Critical Constellation, Already Cut, Unrequited Heart, Group Chat Lightning, Konpeito Minefield | `src/view/weapon-fx.ts` (bolts, candy, catch cues), `weapons/_fx.ts` |
+| **B** (5) | Soap Opera, Refraction Overload, Brown Sugar Railgun, Failed Exam Storm, Underground Mosh Pit | `src/view/weapon-fx.ts` (field, beams), `src/view/arsenal2-fx.ts`, `weapons/_arsenal2.ts`, `src/ui/hud-arsenal2.ts` |
+| **C** (4) | Unbandaged Right Arm, Table-Flip Tea Service, Final Episode Budget Missile, Tsun Tsun Drill Harisen | `src/view/heroes-a-fx.ts`, `weapons/_heroes-a.ts`, `weapons/_orbital.ts` |
+| **D** (5) | Who Are You Again?, Skip Intro, "Holding Back" Fireball, Free Delivery, All-You-Can-Eat Nabe | `src/view/heroes-b-fx.ts`, `weapons/_charm.ts`, `_hb.ts`, `_truck.ts`; `src/view/arsenal2-fx.ts` (kotatsu) |
+

@@ -24,7 +24,8 @@
 import type { RelicDef } from "../../../game/defs";
 import { HEROES } from "../../../game/heroes";
 import { PASSIVES } from "../../../game/passives";
-import { BOSSES, ENEMIES, RELICS, STAGES, ULTIMATES, WEAPONS } from "../../../game/registry";
+import { recipesOf } from "../../../game/evo-hints";
+import { BOSSES, ENEMIES, RELICS, STAGES, ULTIMATES, WEAPONS, evolutionWith } from "../../../game/registry";
 import type { WeaponDef } from "../../../game/types";
 import { isDiscovered, weaponCodexInfo } from "../../../meta/codex";
 import type { MetaContent } from "../../../meta/content";
@@ -163,9 +164,11 @@ function weaponArticle(p: Profile, id: string, ctx: MetaContent): Article {
   const name = d?.name ?? id;
   const m = weaponCodexInfo(p, id);
   const mi = masteryInfo(p.mastery[id] ?? 0);
-  const evo = d?.evolution ? WEAPONS.get(d.evolution.into) : undefined;
-  const partner = d?.evolution ? PASSIVES.find((x) => x.id === d.evolution?.with) : undefined;
-  const evoKnown = !!evo && isDiscovered(p, "weapons", evo.id);
+  // (a weapon may have several evolutions, one per passive: each recipe is its own discovery)
+  const evos = d
+    ? recipesOf(d).map((r) => ({ evo: r.into, partner: r.passive, known: isDiscovered(p, "weapons", r.into.id) }))
+    : [];
+  const unknown = `<span class="wkp-q">???</span>`;
   const sigOf = HEROES.find((h) => h.weapon === id);
   const maxLv = mi.rank >= 10 ? 7 : mi.rank >= 5 ? 6 : 5;
   const l1 = d?.levels[0];
@@ -174,15 +177,18 @@ function weaponArticle(p: Profile, id: string, ctx: MetaContent): Article {
     l1 ? row("Damage", `${fmtInt(l1.dmg)} → ${fmtInt(d?.levels[d.levels.length - 1]?.dmg ?? l1.dmg)}`) : "",
     row("Max level", `${maxLv}${maxLv > 5 ? ` <i class="lbk">LIMIT BREAK</i>` : ""}`),
     row("Mastery", mi.maxed ? `<b class="gold">MASTERED</b>` : `Rank ${mi.rank}`),
-    row("Evolves with", partner ? (evoKnown ? wlink(p, "passives", partner.id, ctx) : `<span class="wkp-q">???</span>`) : "—"),
-    row("Evolves into", evo ? (evoKnown ? `<b>${esc(evo.name)}</b>` : `<span class="wkp-q">???</span>`) : "—"),
+    row("Evolves with", evos.length ? evos.map((e) => (e.known ? wlink(p, "passives", e.partner.id, ctx) : unknown)).join(" / ") : "—"),
+    row("Evolves into", evos.length ? evos.map((e) => (e.known ? `<b>${esc(e.evo.name)}</b>` : unknown)).join(" / ") : "—"),
   ].join("");
   const art = `${d && hasArt(d.icon) ? img(d.icon, "px ib-img") : unknownIcon("ib-img")}${m.mastered ? `<i class="ib-mastered">MASTERED</i>` : ""}`;
-  const recipe = evo
-    ? evoKnown
-      ? `<div class="wkp-recipe">${img(d?.icon ?? "", "px")}<b>Lv${d?.levels.length ?? 5}</b><span>+</span>${partner && hasArt(partner.icon) ? img(partner.icon, "px") : ""}<span>→</span>${hasArt(evo.icon) ? img(evo.icon, "px evo") : ""}</div><p><b>${esc(evo.name)}</b> — ${esc(evo.desc)}</p>`
-      : `<div class="wkp-recipe unk">${d && hasArt(d.icon) ? img(d.icon, "px") : ""}<b>Lv${d?.levels.length ?? 5}</b><span>+</span><i class="q">?</i><span>→</span><i class="q big">?</i></div><p class="wkp-note">This section is a stub. Evolve it in an episode to write it.${cite(id + "evo")} (Hint: chests love an evolution.)</p>`
-    : "";
+  const lv = d?.levels.length ?? 5;
+  const recipe = evos
+    .map(({ evo, partner, known }, i) =>
+      known
+        ? `<div class="wkp-recipe">${img(d?.icon ?? "", "px")}<b>Lv${lv}</b><span>+</span>${hasArt(partner.icon) ? img(partner.icon, "px") : ""}<span>→</span>${hasArt(evo.icon) ? img(evo.icon, "px evo") : ""}</div><p><b>${esc(evo.name)}</b> — ${esc(evo.desc)}</p>`
+        : `<div class="wkp-recipe unk">${d && hasArt(d.icon) ? img(d.icon, "px") : ""}<b>Lv${lv}</b><span>+</span><i class="q">?</i><span>→</span><i class="q big">?</i></div><p class="wkp-note">This section is a stub. Evolve it in an episode to write it.${cite(id + "evo" + (i || ""))} ${i === 0 ? "(Hint: chests love an evolution.)" : "(Hint: a different accessory, a different route.)"}</p>`,
+    )
+    .join("");
   const body = `
     ${infobox(name, art, rows, "weapon")}
     <p class="wkp-lead"><b>${esc(name)}</b> ${sigOf ? `is the signature weapon of ${wlink(p, "heroes", sigOf.id, ctx)}.` : "is a weapon."} ${esc(d?.desc ?? "")}</p>
@@ -191,7 +197,7 @@ function weaponArticle(p: Profile, id: string, ctx: MetaContent): Article {
     <p class="wkp-note">+3% damage per rank. Rank 5: <b>Limit Break</b> (max level 6). Rank 10: max level 7, a gold frame and the MASTERED badge.${cite(id + "m")}</p>
     ${h3("Level table")}
     ${d ? levelTable(d, mi.rank) : ""}
-    ${evo ? `${h3("Evolution")}${recipe}` : ""}
+    ${evos.length ? `${h3(evos.length > 1 ? "Evolutions" : "Evolution")}${evos.length > 1 ? `<p class="wkp-note">One weapon, ${evos.length} routes: the accessory you hold decides. Hold both and you choose.</p>` : ""}${recipe}` : ""}
     ${h3("Record")}
     <p>Defeated <b>${fmtInt(m.kills)}</b> plushies · dealt <b>${fmtInt(m.damage)}</b> damage across all episodes.${cite(id + "r")}</p>`;
   return { title: name, kicker: sigOf ? `SIGNATURE · ${sigOf.name.toUpperCase()}` : "WEAPON", icon: d && hasArt(d.icon) ? img(d.icon, "px pimg") : unknownIcon("pimg"), html: page(p, "weapons", id, body) };
@@ -200,7 +206,11 @@ function weaponArticle(p: Profile, id: string, ctx: MetaContent): Article {
 function passiveArticle(p: Profile, id: string, ctx: MetaContent): Article {
   const d = PASSIVES.find((x) => x.id === id);
   const name = d?.name ?? id;
-  const enables = [...WEAPONS.values()].filter((w) => w.evolution?.with === id);
+  const enables: { w: WeaponDef; evo: WeaponDef | undefined }[] = [];
+  for (const w of WEAPONS.values()) {
+    const e = evolutionWith(w, id);
+    if (e) enables.push({ w, evo: WEAPONS.get(e.into) });
+  }
   const rows = [row("Type", "Passive (accessory)"), row("Levels", String(d?.levels.length ?? 5)), row("Evolutions", enables.length ? String(enables.length) : "none")].join("");
   const body = `
     ${infobox(name, d && hasArt(d.icon) ? img(d.icon, "px ib-img") : unknownIcon("ib-img"), rows, "passive")}
@@ -210,8 +220,7 @@ function passiveArticle(p: Profile, id: string, ctx: MetaContent): Article {
     ${
       enables.length
         ? `${h3("Used in evolutions")}<ul class="wkp-list">${enables
-            .map((w) => {
-              const evo = w.evolution ? WEAPONS.get(w.evolution.into) : undefined;
+            .map(({ w, evo }) => {
               const known = !!evo && isDiscovered(p, "weapons", evo.id);
               return `<li>${wlink(p, "weapons", w.id, ctx)} + ${esc(name)} → ${known && evo ? `<b>${esc(evo.name)}</b>` : `<span class="wkp-q">???</span>`}</li>`;
             })

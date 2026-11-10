@@ -101,7 +101,7 @@ describe.each(ARSENAL)("$weapon", ({ weapon, evo, passive }) => {
     expect(def.limitBreak?.length).toBe(2);
     expect(def.limitBreak?.[0].text.startsWith("LIMIT BREAK — ")).toBe(true);
     expect(def.limitBreak?.[1].text.startsWith("MASTERED — ")).toBe(true);
-    expect(def.evolution).toEqual({ into: evo, with: passive });
+    expect(def.evolutions?.[0]).toEqual({ into: evo, with: passive });
     expect(def.icon).toBe(`icon_${weapon}`);
     expect(def.sfx).toBeTruthy();
     const e = WEAPONS.get(evo)!;
@@ -680,8 +680,7 @@ describe("the 8 new passives", () => {
 
   test("every passive that drives an evolution is registered (20 evolution pairs resolve)", () => {
     for (const b of baseWeapons()) {
-      if (!b.evolution) continue;
-      expect(PASSIVE_BY_ID.has(b.evolution.with), `${b.id} -> ${b.evolution.with}`).toBe(true);
+      for (const e of b.evolutions ?? []) expect(PASSIVE_BY_ID.has(e.with), `${b.id} -> ${e.with}`).toBe(true);
     }
     expect(PASSIVES.length).toBeGreaterThanOrEqual(16);
   });

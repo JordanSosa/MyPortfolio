@@ -2,6 +2,7 @@
  * Hero Plot Points (docs/content/achievements.md §4, 36): the cast, levels,
  * constellations, talents, and two goals per hero (a clear + a signature feat).
  */
+import { baseWeaponId } from "../../content";
 import { ROSTER } from "../../roster";
 import { counter, feat } from "../helpers";
 import type { AchCtx, AchievementDef } from "../types";
@@ -14,7 +15,8 @@ const clear = (id: string, hero: string, name: string, desc: string): Achievemen
 /** A one-run counter that only counts while playing `hero` (null = any hero). */
 const asHero = (hero: string | null, read: (c: AchCtx) => number) => (c: AchCtx) => (c.run && (hero === null || c.run.hero === hero) ? read(c) : 0);
 
-const YARN = ["yarn_orbit", "cosmic_yarn"];
+/** Yarn Orbit or any of its evolutions (the catalogue knows the family: a new evolution needs no edit here). */
+const isYarn = (c: AchCtx, id: string): boolean => baseWeaponId(id, c.ctx) === "yarn_orbit";
 
 export const achievements: AchievementDef[] = [
   counter("heroes_3", "Assemble The Party", "Unlock 3 heroes.", "heroes", 3, (c) => c.p.unlocks.heroes.length, { gems: 40 }),
@@ -40,12 +42,12 @@ export const achievements: AchievementDef[] = [
   feat(
     "mochi_yarn_only",
     "Loyal to the Yarn",
-    "Clear a stage as Mochi using no weapon but Yarn Orbit / Cosmic Yarn.",
+    "Clear a stage as Mochi using no weapon but Yarn Orbit (and its evolutions).",
     "heroes",
     (c) => {
       const r = c.run;
       const used = r?.weaponsUsed ?? [];
-      return !!r && r.stageCleared && r.hero === "mochi" && used.length > 0 && used.every((w) => YARN.includes(w));
+      return !!r && r.stageCleared && r.hero === "mochi" && used.length > 0 && used.every((w) => isYarn(c, w));
     },
     { gems: 120 },
     { hidden: true },

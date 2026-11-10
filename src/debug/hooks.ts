@@ -33,7 +33,7 @@ import type { App } from "../ui/app";
 import { prewarmState } from "../ui/dom";
 import { simulate, Bot } from "./bot";
 import { PASSIVE_BY_ID } from "../game/passives";
-import { BOSSES, RELICS, TWISTS, WEAPONS } from "../game/registry";
+import { BOSSES, RELICS, TWISTS, WEAPONS, evolvesInto } from "../game/registry";
 
 export function installHooks(app: App): void {
   const world = () => app.game?.world ?? app.attract?.world ?? null;
@@ -106,7 +106,7 @@ export function installHooks(app: App): void {
       }
       if (def.evolved) {
         // evolve the base weapon if owned, else add the evolution directly
-        for (const inst of w.weapons) if (inst.def.evolution?.into === id) return !!w.evolveWeapon(inst);
+        for (const inst of w.weapons) if (evolvesInto(inst.def, id)) return !!w.evolveWeapon(inst, id);
         return !!w.addWeapon(id, 1);
       }
       return !!w.addWeapon(id, level);

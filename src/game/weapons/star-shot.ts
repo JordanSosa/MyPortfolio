@@ -93,7 +93,7 @@ export const starShot: WeaponDef = {
     { dmg: 18, cd: 0.65, amount: 5, speed: 190, pierce: 4, knock: 32 },
   ],
   upgrades: ["+1 star", "Damage +4, cooldown -12%, pierces 1 more", "+1 star", "Damage +4, +1 star, pierces 1 more"],
-  evolution: { into: "galaxy_barrage", with: "wish_charm" },
+  evolutions: [{ into: "galaxy_barrage", with: "wish_charm" }],
   // mastery Limit Breaks (docs/content/weapons.md §4): Lv6 at rank 5, Lv7 at rank 10
   limitBreak: [
     { dmg: 0.15, amount: 1, text: "LIMIT BREAK — Idol Stamina: +1 star, +15% damage" },

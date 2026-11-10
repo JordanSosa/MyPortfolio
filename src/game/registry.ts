@@ -3,7 +3,7 @@
  * Vite and Vitest). To add content, drop a file into the folder - no shared
  * file needs editing:
  *
- *   src/game/weapons/<name>.ts    export const weapons: WeaponDef[] = [base, evolution];
+ *   src/game/weapons/<name>.ts    export const weapons: WeaponDef[] = [base, evolution, secondEvolution];
  *   src/game/enemies/<name>.ts    export const enemies: EnemyDef[] = [...];
  *   src/game/bosses/<name>.ts     export const bosses: EnemyDef[] = [...];   (def.boss set)
  *   src/game/ultimates/<name>.ts  export const ultimates: UltimateDef[] = [...];
@@ -18,7 +18,7 @@
  */
 import type { RelicDef, StageInfo, TalentTree, TwistDef } from "./defs";
 import { stageInfo, type StageDef } from "./stage";
-import type { EnemyDef, UltimateDef, WeaponDef } from "./types";
+import type { EnemyDef, EvoSpec, UltimateDef, WeaponDef } from "./types";
 
 type Mod = {
   weapons?: WeaponDef[];
@@ -127,11 +127,49 @@ export function enemyDef(id: string): EnemyDef | undefined {
   return ENEMIES.get(id) ?? BOSSES.get(id);
 }
 
+const NO_EVOS: readonly EvoSpec[] = [];
+
+/**
+ * A base weapon's evolutions (`{ into, with }` per passive, the first entry = its first evolution).
+ * Evolved weapons and weapons without one: an empty list. Every consumer reads the recipes through this.
+ */
+export function evolutionsOf(def: WeaponDef): readonly EvoSpec[] {
+  return def.evolved ? NO_EVOS : (def.evolutions ?? NO_EVOS);
+}
+
+/** The evolution of `base` that passive `passive` unlocks (if any). */
+export function evolutionWith(base: WeaponDef, passive: string): EvoSpec | undefined {
+  for (const e of evolutionsOf(base)) if (e.with === passive) return e;
+  return undefined;
+}
+
+/** Does `base` evolve into the weapon with id `into`? */
+export function evolvesInto(base: WeaponDef, into: string): boolean {
+  for (const e of evolutionsOf(base)) if (e.into === into) return true;
+  return false;
+}
+
+let baseByEvo: Map<string, WeaponDef> | null = null;
+
 /** Base weapon of an evolved weapon (itself for a base weapon). */
 export function baseWeaponOf(def: WeaponDef): WeaponDef {
   if (!def.evolved) return def;
-  for (const w of WEAPONS.values()) if (w.evolution?.into === def.id) return w;
-  return def;
+  if (!baseByEvo) {
+    baseByEvo = new Map();
+    for (const w of WEAPONS.values()) for (const e of evolutionsOf(w)) if (!baseByEvo.has(e.into)) baseByEvo.set(e.into, w);
+  }
+  return baseByEvo.get(def.id) ?? def;
+}
+
+/**
+ * Is `source` (a weapon id: hit / kill sources, RunStats keys) the base weapon `base` or any of its
+ * evolutions? Talents, traits and relics that say "Yarn Orbit (and its evolutions)" ask this instead of
+ * listing ids, so a new evolution is covered without touching them.
+ */
+export function isWeaponOf(source: string, base: string): boolean {
+  if (source === base) return true;
+  const def = WEAPONS.get(source);
+  return !!def && !!def.evolved && baseWeaponOf(def).id === base;
 }
 
 /** Base (non-evolved) weapons that can be offered as NEW. */
@@ -141,7 +179,17 @@ export function baseWeapons(): WeaponDef[] {
   return out;
 }
 
-/** The evolution a base weapon turns into (if its def and the target exist). */
+/** The evolved weapons a base weapon can turn into, in recipe order (entries naming a missing weapon are skipped). */
+export function evolvedFormsOf(base: WeaponDef): WeaponDef[] {
+  const out: WeaponDef[] = [];
+  for (const e of evolutionsOf(base)) {
+    const d = WEAPONS.get(e.into);
+    if (d) out.push(d);
+  }
+  return out;
+}
+
+/** The first evolution a base weapon turns into (if its def and the target exist). */
 export function evolutionOf(base: WeaponDef): WeaponDef | undefined {
-  return base.evolution ? WEAPONS.get(base.evolution.into) : undefined;
+  return evolvedFormsOf(base)[0];
 }

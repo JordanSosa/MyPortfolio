@@ -344,6 +344,12 @@ export interface WeaponLevel {
   [k: string]: number | undefined;
 }
 
+/** One evolution of a base weapon: the evolved weapon's id and the passive it needs. */
+export interface EvoSpec {
+  readonly into: string;
+  readonly with: string;
+}
+
 export interface WeaponDef {
   id: string;
   name: string;
@@ -357,8 +363,13 @@ export interface WeaponDef {
   levels: WeaponLevel[];
   /** Upgrade text for levels 2..5 (index 0 = level 2). */
   upgrades: string[];
-  /** Base weapon: evolves into `into` at max level while passive `with` is owned. */
-  evolution?: { into: string; with: string };
+  /**
+   * Base weapon: its evolutions, one per passive. At max level it evolves into `into` while passive
+   * `with` is owned; with several passives held the player picks one (level-up: one card each; a chest
+   * hands over the choice, upgrades.ts). The first entry is the "first" evolution (docs, relic drafts).
+   * Read through evolutionsOf() (registry.ts): the one source of truth.
+   */
+  evolutions?: readonly EvoSpec[];
   /** True for evolved weapons (never offered as NEW; appear as EVOLUTION cards). */
   evolved?: boolean;
   /**
@@ -511,6 +522,11 @@ export interface UpgradeCard {
   /** For evolutions: the base weapon / passive ids involved. */
   base?: string;
   with?: string;
+  /**
+   * A chest's ROUTE SPLIT (kind "evolution", id = the base weapon): several evolutions of `base` are
+   * ready at once, so the chest hands the pick to the player (World.pendingChoices) instead of choosing.
+   */
+  choices?: UpgradeCard[];
   /** Max level of this item in this run (weapon Limit Breaks raise it past its levels). */
   max?: number;
   /** The card takes a weapon past its regular max level (mastery Limit Break). */

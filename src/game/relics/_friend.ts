@@ -18,6 +18,7 @@
 import { CFG, MAX_WEAPON_SLOTS } from "../config";
 import { PK_ATTACHED, PK_MANAGED, type Enemy, type ProjHitHook, type ProjHook, type Projectile, type WeaponDef, type WeaponInstance } from "../types";
 import type { World } from "../world";
+import { evolutionsOf } from "../registry";
 import { proc } from "./_util";
 
 /** Player-position history length (steps) and the lag the Friend walks behind (steps). */
@@ -43,9 +44,9 @@ export interface Friend {
   k: number;
   /** The Friend's weapon instance (not in world.weapons: no slot, no HUD, no cards). */
   inst: WeaponInstance | null;
-  /** The hero's start weapon id and its evolution id (resolved on the first step). */
+  /** The hero's start weapon id and its evolutions' ids (resolved on the first step). */
   base: string;
-  evo: string;
+  evos: string[];
   readonly hx: Float32Array;
   readonly hy: Float32Array;
   head: number;
@@ -244,7 +245,7 @@ export function installFriend(w: World, k: number): Friend {
     k,
     inst: null,
     base: "",
-    evo: "",
+    evos: [],
     hx: new Float32Array(HIST),
     hy: new Float32Array(HIST),
     head: 0,
@@ -261,7 +262,7 @@ export function installFriend(w: World, k: number): Friend {
       f.y = p.y + 4;
       const start = w.hasWeapon(w.startWeapon);
       f.base = w.startWeapon;
-      f.evo = start?.def.evolution?.into ?? "";
+      f.evos = start ? evolutionsOf(start.def).map((e) => e.into) : [];
       proc(w, "real_friend", f.x, f.y - CFG.playerCy, 0);
     }
     f.t += dt;
@@ -313,7 +314,8 @@ export function installFriend(w: World, k: number): Friend {
     else if (!f.moving) f.face = p.x >= f.x ? 1 : -1;
     // ---- the Friend's weapon mirrors the hero's start weapon (or its evolution)
     if (p.dead) return;
-    const mine = w.hasWeapon(f.base) ?? (f.evo ? w.hasWeapon(f.evo) : undefined);
+    let mine = w.hasWeapon(f.base);
+    for (let i = 0; !mine && i < f.evos.length; i++) mine = w.hasWeapon(f.evos[i]);
     if (!mine) return;
     if (!f.inst || f.inst.def !== mine.def) equip(w, f, mine.def, mine);
     const inst = f.inst as WeaponInstance;

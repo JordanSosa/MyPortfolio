@@ -412,11 +412,11 @@ describe("UR, LR and MYTHIC relics", () => {
     const w = mk([["golden_ticket", 0]]);
     const inst = w.weapons[0];
     w.setWeaponLevel(inst, 4);
-    w.addPassive(inst.def.evolution!.with, 1);
+    w.addPassive(inst.def.evolutions![0].with, 1);
     w.pendingChests.push({ golden: false });
     const r = w.openChest()!;
     expect(r.rewards[0].kind).toBe("evolution");
-    expect(w.weapons[0].def.id).toBe(inst.def.evolution!.into);
+    expect(w.weapons[0].def.id).toBe(inst.def.evolutions![0].into);
   });
 
   test("Sacred Plot Device: level-ups reset every weapon cooldown (+ might for 5 s)", () => {
@@ -437,7 +437,7 @@ describe("UR, LR and MYTHIC relics", () => {
       const w = mk([["original_manuscript", s]]);
       expect(w.weapons[0].level).toBe(W);
       w.step(DT);
-      expect(w.passiveLevel(w.weapons[0].def.evolution!.with)).toBe(P);
+      expect(w.passiveLevel(w.weapons[0].def.evolutions![0].with)).toBe(P);
     }
   });
 

@@ -116,7 +116,7 @@ describe.each(HEROES)("$hero", ({ hero, weapon, evo, passive, ult }) => {
     expect(def.limitBreak?.length).toBe(2);
     expect(def.limitBreak?.[0].text.startsWith("LIMIT BREAK")).toBe(true);
     expect(def.limitBreak?.[1].text.startsWith("MASTERED")).toBe(true);
-    expect(def.evolution).toEqual({ into: evo, with: passive });
+    expect(def.evolutions?.[0]).toEqual({ into: evo, with: passive });
     const w = sandbox(hero, { weaponLevelBonus: { [weapon]: 2 } }, 11);
     const inst = w.hasWeapon(weapon) as WeaponInstance;
     expect(w.weaponMaxLevel(def)).toBe(7);

@@ -13,6 +13,10 @@
  *   --out <dir> (default shots/balance-lab/<name>) --name <name> --json (print the JSON summary to stdout)
  *   --job '<json>' (run one job in-process and print its result: debugging / agents)  --batch jobs.json --out res.json
  *   --trace P6:final:hoshi (the model's state every 30 s for one cell)  --refcheck (model vs the cached reference runs, per cell)
+ *   npm run balance:lab -- --weapons                     the WEAPON BENCH: every weapon at Lv1 / Lv5 / each evolution, alone and inside a
+ *                                                        reference build (share, kills, boss, damage taken with / without), ranked
+ *                                                        against its tier's median, evolutions of one weapon side by side
+ *     --weapons --only yarn_orbit,cosmic_yarn (some weapons)  --seeds 1-3  --set "weapon.yarn_orbit.dmg*=1.3" (before -> after)
  *
  * Output: <out>/report.html (self-contained, inline SVG), report.json, report.md; the paths are printed.
  * Cache: node_modules/.cache/balance-lab (keyed by what each job depends on; see deps.ts).
@@ -26,7 +30,7 @@ import { CHECKPOINTS } from "../checkpoints";
 import { ROOT, sha } from "./cache";
 import { compareAll, errorSummary, lossOf, fitNoise, fitTheta, loadCalibration, refJobs, saveCalibration, REF_CELLS, type Calibration } from "./calibrate";
 import { execJobs, makeExec, type Done, type Exec } from "./exec";
-import { runJob, type BossRec, type CensusResult, type GaugeResult, type Job, type PathResult, type RunRec, type SliceRec } from "./jobs";
+import { runJob, type BossRec, type CensusResult, type GaugeResult, type Job, type PathResult, type RunRec, type SliceRec, type WeaponRec } from "./jobs";
 import {
   belowCp,
   bossJobs,
@@ -60,6 +64,8 @@ import { closePool } from "./pool";
 import { rangedIds, stageIds } from "./deps";
 import { buildReport, type LabData } from "./report";
 import { validateMatrices } from "./validate";
+import { aggregate, benchPlan } from "./weapons";
+import { writeBench } from "./weapons-report";
 
 function args(argv: string[]) {
   const get = (k: string) => {
@@ -209,6 +215,7 @@ export async function main(argv: string[], t0: number): Promise<number> {
   }
   const workers = Number(a.get("workers") ?? Math.min(4, cpus().length));
   const ex = makeExec(workers, a.has("fresh"), a.has("quiet"));
+  if (a.has("weapons")) return weaponBench(a, ex, sets, t0, argv);
   const batch = a.get("batch");
   if (batch) {
     const jobs = JSON.parse(readFileSync(batch, "utf8")) as Job[];
@@ -351,6 +358,43 @@ export async function main(argv: string[], t0: number): Promise<number> {
   console.log(`  json    ${r.json}`);
   console.log(`  summary ${r.md}`);
   if (a.has("json")) console.log(JSON.stringify(r.summary));
+  return 0;
+}
+
+/** `--weapons`: the weapon bench (tools/balance-lab/weapons.ts). */
+async function weaponBench(a: ReturnType<typeof args>, ex: Exec, sets: Override[], t0: number, argv: string[]): Promise<number> {
+  const seeds = a.nums(a.get("seeds"), [1, 2, 3]);
+  const bot = a.get("bot") ?? "mid";
+  const plan = benchPlan({ seeds, bot, only: a.list("only") });
+  if (!plan.variants.length) {
+    console.error(`--weapons: no weapon matches --only ${a.get("only")}`);
+    return 1;
+  }
+  const run = async (set: Override[], label: string) => {
+    const undo = applyOverrides(set);
+    try {
+      const done = await execJobs<GaugeResult | WeaponRec>(ex, plan.jobs, set, label);
+      const bad = done.filter((d) => d.error);
+      if (bad.length) throw new Error(`weapon bench: ${bad.length} job(s) failed: ${bad[0].error?.split("\n")[0]} (${JSON.stringify(bad[0].job)})`);
+      return aggregate(plan, done.map((d) => d.result));
+    } finally {
+      undo();
+    }
+  };
+  const base = await run([], "weapon bench");
+  const variant = sets.length ? await run(sets, "weapon bench (what-if)") : null;
+  const meta = { date: new Date().toISOString(), seeds, bot, set: sets.map((x) => x.text), stats: { jobs: ex.stats.jobs, hits: ex.stats.hits, cpuMs: ex.stats.cpuMs, wallMs: performance.now() - t0, workers: ex.workers }, argv };
+  const name = a.get("name") ?? (sets.length ? `weapons-whatif-${sha(sets.map((x) => x.text)).slice(0, 6)}` : "weapons");
+  const out = a.get("out") ?? join(ROOT, "shots/balance-lab", name);
+  const top = variant ?? base;
+  const r = writeBench(out, top, meta, variant ? base : undefined);
+  const n = (f: string) => top.rows.filter((x) => x.flag === f).length;
+  console.log(`weapon bench: ${top.rows.length} rows (${new Set(top.rows.map((x) => x.base)).size} weapons), ${n("WEAK")} weak, ${n("STRONG")} strong, ${n("SUPPORT")} support, ${top.siblings.filter((x) => x.flag).length} sibling gaps, ${(meta.stats.wallMs / 1000).toFixed(1)} s (${ex.stats.hits}/${ex.stats.jobs} cached)`);
+  for (const f of top.flags) console.log(`  ${f}`);
+  console.log(`  report  ${r.html}`);
+  console.log(`  json    ${r.json}`);
+  console.log(`  summary ${r.md}`);
+  if (a.has("json")) console.log(JSON.stringify(top));
   return 0;
 }
 

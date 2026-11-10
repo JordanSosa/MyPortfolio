@@ -23,10 +23,10 @@
 import { time } from "../core/time";
 import { CFG } from "../game/config";
 import { HEROES } from "../game/heroes";
-import { BOSSES, STAGES, WEAPONS } from "../game/registry";
+import { BOSSES, STAGES, WEAPONS, evolutionsOf } from "../game/registry";
 import type { TimelineEvent } from "../game/stage";
 import type { UpgradeCard } from "../game/types";
-import { makeOffer } from "../game/upgrades";
+import { evolutionCards, makeOffer } from "../game/upgrades";
 import { guardOf } from "../game/weapons/_orbital";
 import type { World } from "../game/world";
 import { discover } from "../meta/codex";
@@ -35,7 +35,7 @@ import type { PageId } from "../ui/hub/hub";
 import { save } from "../ui/save";
 import { tooSoon } from "../ui/screens/common";
 import { Session } from "../ui/session";
-import { Bot, simulate } from "./bot";
+import { Bot, drain, simulate } from "./bot";
 import { renderOnce, stepFrames, Stepper } from "./dev";
 import { applyProfile, buildProfile, sandbox } from "./profiles";
 
@@ -95,8 +95,7 @@ class Ctx {
     if (!w) return;
     if (this.holdUlt && !w.ult && w.ultMeter >= CFG.ultMax - 1) w.ultMeter = CFG.ultMax - 1;
     if (!this.autoResolve || this.app.modal) return;
-    while (w.pendingLevels > 0) this.bot.resolve(w);
-    while (w.pendingChests.length > 0) w.openChest();
+    drain(w, this.bot);
   }
   /**
    * The bot steers the hero during the scenario's live frames (kiting, dashing, collecting: a crowd
@@ -291,12 +290,13 @@ function warp(c: Ctx, w: World, t: number, level = levelAt(w.stage.id, t), settl
     let guard = 0;
     while (w.level < level && guard++ < 200) {
       w.addXp(w.xpNext - w.xp + 0.01);
-      while (w.pendingLevels > 0) bot.resolve(w);
+      while (w.pendingPicks > 0) bot.resolve(w);
     }
     // a chest every ~8 levels (evolutions happen in chests)
     for (let k = 0; k < Math.floor(level / 8); k++) {
       w.pendingChests.push({ golden: false });
       w.openChest();
+      while (w.pendingPicks > 0) bot.resolve(w);
     }
     if (t > w.t) {
       const d = w.director as unknown as { nextEvent?: number; opened?: boolean; events?: TimelineEvent[] };
@@ -307,8 +307,7 @@ function warp(c: Ctx, w: World, t: number, level = levelAt(w.stage.id, t), settl
       d.nextEvent = i < 0 ? d.events.length : i;
     }
     if (settle > 0) simulate(w, settle, 1 / 30, bot);
-    while (w.pendingLevels > 0) bot.resolve(w);
-    while (w.pendingChests.length > 0) w.openChest();
+    drain(w, bot);
   } finally {
     w.muted = false;
   }
@@ -472,6 +471,23 @@ async function evoBuild(c: Ctx): Promise<World> {
   return w;
 }
 
+/**
+ * The two-evolutions build (levelup:evo-two / levelup:route-split / chest:route-split): the evo-hints build
+ * with Yarn Orbit at Lv5 and BOTH its passives held (Magnet Star -> Cosmic Yarn, Power Bow -> Meowteor
+ * Hammer), both recipes discovered: the level-up offers one card per evolution, a chest hands over the choice.
+ */
+async function twoEvoBuild(c: Ctx): Promise<World> {
+  const w = await evoBuild(c);
+  discover(save.profile, "weapons", "meowteor_hammer", false);
+  w.muted = true;
+  const yarn = w.hasWeapon("yarn_orbit");
+  if (yarn) w.setWeaponLevel(yarn, 5);
+  w.addPassive("magnet_star", 1);
+  w.muted = false;
+  if (evolutionCards(w).filter((x) => x.base === "yarn_orbit").length !== 2) throw new Error("Yarn Orbit should have two evolutions ready");
+  return w;
+}
+
 /** Hand-pick a level-up offer from every card the real generator can make right now (makeOffer over the whole pool). */
 function pickOffer(w: World, want: [UpgradeCard["kind"], string][]): void {
   const all = makeOffer(w, 99);
@@ -489,6 +505,7 @@ function pickOffer(w: World, want: [UpgradeCard["kind"], string][]): void {
 const ORBITALS: Record<string, { hero: string; base: string; evo?: string }> = {
   yarn_orbit: { hero: "mochi", base: "yarn_orbit" },
   cosmic_yarn: { hero: "mochi", base: "yarn_orbit", evo: "cosmic_yarn" },
+  meowteor_hammer: { hero: "mochi", base: "yarn_orbit", evo: "meowteor_hammer" },
   teapot_tempest: { hero: "pudding", base: "teapot_tempest" },
   eternal_tea_party: { hero: "pudding", base: "teapot_tempest", evo: "eternal_tea_party" },
 };
@@ -502,20 +519,23 @@ function evolveBuild(w: World, evolve = true): string[] {
   w.muted = true;
   try {
     const sig = w.hero.weapon;
-    const evo = WEAPONS.get(sig)?.evolution;
+    // (a weapon with two evolutions: the stress scenes keep its first one)
+    const sigDef = WEAPONS.get(sig);
+    const evo = sigDef ? evolutionsOf(sigDef)[0] : undefined;
     // (the warp's chests may have evolved it already)
     if (!(evo && w.hasWeapon(evo.into))) {
       const inst = w.hasWeapon(sig) ?? w.addWeapon(sig, 1);
       if (inst) w.setWeaponLevel(inst, inst.def.levels.length);
       if (inst && evo && evolve) {
         if (w.passiveLevel(evo.with) <= 0) w.addPassive(evo.with, 1);
-        w.evolveWeapon(inst);
+        w.evolveWeapon(inst, evo.into);
       }
     }
     if (evolve)
       for (const x of [...w.weapons]) {
-        const e = x.def.evolution;
-        if (e && x.level >= x.def.levels.length && w.passiveLevel(e.with) > 0 && !w.hasWeapon(e.into)) w.evolveWeapon(x);
+        if (x.level < x.def.levels.length) continue;
+        const e = evolutionsOf(x.def).find((s) => w.passiveLevel(s.with) > 0);
+        if (e) w.evolveWeapon(x, e.into);
       }
   } finally {
     w.muted = false;
@@ -536,6 +556,13 @@ interface Kind {
 }
 
 const heroIds = () => HEROES.map((h) => h.id);
+/** Every second (third...) evolution in the registry: the evolved id, its base weapon and passive. */
+const secondEvos = (): { into: string; with: string; base: string }[] =>
+  [...WEAPONS.values()].flatMap((d) =>
+    evolutionsOf(d)
+      .slice(1)
+      .map((e) => ({ ...e, base: d.id })),
+  );
 const stageIds = () => [...STAGES.keys()];
 const bossIds = () => [...BOSSES.keys()].filter((id) => !!BOSSES.get(id)?.boss);
 const PAGES: Record<string, PageId[]> = {
@@ -568,6 +595,30 @@ const KINDS: Record<string, Kind> = {
       } satisfies Kind,
     ]),
   ),
+  article: {
+    group: "hub",
+    desc: "a Wiki article, its entry discovered on a mid account: article:<tab>/<id> (article:weapons/yarn_orbit = a weapon whose evolutions are still stubs; +evo = its evolutions discovered too, +evo1 = only the first: a weapon with two routes shows one recipe and one stub)",
+    list: () => ["weapons/yarn_orbit+evo", "weapons/yarn_orbit+evo1"],
+    run: async (c, a) => {
+      const [path, flag] = a.split("+");
+      const [tab, id] = path.split("/");
+      const tabs = ["heroes", "weapons", "passives", "enemies", "bosses", "relics", "stages"] as const;
+      const kind = tabs.find((t) => t === tab);
+      if (!kind || !id) throw new Error(`article:<${tabs.join("|")}>/<id>[+evo|+evo1], got '${a}'`);
+      useProfile(c, "mid");
+      discover(save.profile, kind, id, false);
+      const def = kind === "weapons" ? WEAPONS.get(id) : undefined;
+      if (def && flag) for (const e of evolutionsOf(def).slice(0, flag === "evo1" ? 1 : 9)) discover(save.profile, "weapons", e.into, false);
+      c.mark("profile");
+      c.app.goHub(["home", "wiki"], { tab: path });
+      await stableAttract(c, !c.app.hub?.coversScene);
+      // (the page slide-in, then the article sheet rising over it)
+      await c.settle(0.9);
+      // a weapon's recipes sit below the level table: bring them into the shot
+      if (flag) document.querySelector(".wkp-recipe")?.scrollIntoView({ block: "center" });
+      await c.settle(0.2);
+    },
+  },
   hero: {
     group: "hub",
     desc: "a hero's page (hero:<id>[:talents])",
@@ -698,8 +749,11 @@ const KINDS: Record<string, Kind> = {
       if (!o) throw new Error(`orbital:<${Object.keys(ORBITALS).join("|")}>[:tea|:calm], got '${a}'`);
       useProfile(c, "mid", o.hero);
       const w = startRun(c, "shoujo_academy", o.hero);
-      // (level 10: one warp chest, so the base weapon is not evolved behind our back; the tea moment earlier,
-      // in a calmer crowd, so the Warm Tea ring at her feet can be judged; calm: no warp, the run's first seconds)
+      // (the warp's chest must not evolve the base weapon behind our back, nor down another route: banished)
+      const baseDef = WEAPONS.get(o.base);
+      if (baseDef) for (const x of evolutionsOf(baseDef)) if (x.into !== o.evo) w.banished.add(x.into);
+      // (the tea moment earlier, in a calmer crowd, so the Warm Tea ring at her feet can be judged; calm: no warp,
+      // the run's first seconds)
       if (moment === "tea") warp(c, w, 90, 8);
       else if (moment !== "calm") warp(c, w, 200, 10);
       w.muted = true;
@@ -707,7 +761,7 @@ const KINDS: Record<string, Kind> = {
       if (!inst) throw new Error(`${o.hero} cannot hold ${o.base}`);
       if (inst.def.id === o.base) {
         w.setWeaponLevel(inst, 5);
-        if (o.evo) inst = w.evolveWeapon(inst) ?? inst;
+        if (o.evo) inst = w.evolveWeapon(inst, o.evo) ?? inst;
       }
       w.muted = false;
       if (inst.def.id !== (o.evo ?? o.base)) throw new Error(`orbital:${id}: got ${inst.def.id}`);
@@ -754,6 +808,40 @@ const KINDS: Record<string, Kind> = {
       await c.frames(120);
     },
   },
+  evo2: {
+    group: "run",
+    desc: "a SECOND evolution in play (docs/content/weapons.md §8): evo2:<evolved id> = its base weapon's hero (Hoshi for a general weapon) mid-Shoujo Academy with the weapon evolved down that route, 2 s of live play (film it: evo2:meowteor_hammer~180/15); evo2:<id>:calm = the run's first seconds, the weapon alone on a near-empty screen; evo2:<id>@<stage>",
+    list: () => secondEvos().map((x) => x.into),
+    run: async (c, a) => {
+      const [spec, st] = a.split("@");
+      const [id, moment] = spec.split(":");
+      const e = secondEvos().find((x) => x.into === id);
+      if (!e || (moment && moment !== "calm")) throw new Error(`evo2:<${secondEvos().map((x) => x.into).join("|")}>[:calm][@stage], got '${a}'`);
+      const hero = HEROES.find((h) => h.weapon === e.base)?.id ?? "hoshi";
+      const stage = stageOf(st || "shoujo_academy");
+      useProfile(c, "mid", hero);
+      const w = startRun(c, stage, hero);
+      // (the warp's chest must not evolve the base weapon down another route behind our back: those are banished)
+      const baseDef = WEAPONS.get(e.base);
+      if (baseDef) for (const x of evolutionsOf(baseDef)) if (x.into !== id) w.banished.add(x.into);
+      if (moment !== "calm") warp(c, w, 200, 10);
+      w.muted = true;
+      let inst = w.hasWeapon(id);
+      if (!inst) {
+        const base = w.hasWeapon(e.base) ?? w.addWeapon(e.base, 1);
+        if (!base) throw new Error(`${hero} cannot hold ${e.base}`);
+        w.setWeaponLevel(base, base.def.levels.length);
+        if (w.passiveLevel(e.with) <= 0) w.addPassive(e.with, 1);
+        inst = w.evolveWeapon(base, id) ?? undefined;
+      }
+      w.muted = false;
+      if (inst?.def.id !== id) throw new Error(`evo2:${id}: the build holds ${w.weapons.map((x) => x.def.id).join(", ")}`);
+      // (calm: the run's first kills would open a level-up card over the film)
+      if (moment === "calm") w.xpNext = 1e9;
+      c.mark(`evo2 ${id} (${hero})`);
+      await c.frames(120);
+    },
+  },
   speech: {
     group: "run",
     desc: "enemy speech bubbles on screen (the 4 enemies nearest the hero speak from their stage's pools + one free bubble); speech:<stage>, default Candy Kingdom",
@@ -775,9 +863,42 @@ const KINDS: Record<string, Kind> = {
   },
   levelup: {
     group: "modal",
-    desc: "the level-up card picker (1:00 into Dream Meadow, level 6); levelup:evo-hints = evolution hints (READY star, a pair-completing passive, a missing passive), levelup:evo-four = + a card with an undiscovered recipe (4 cards), levelup:evo-many = the 6-card grid with hints",
-    list: () => ["", "evo-hints", "evo-four", "evo-many"],
+    desc: "the level-up card picker (1:00 into Dream Meadow, level 6); levelup:evo-lines = a weapon card with two known recipes (two hint lines), levelup:evo-two = a weapon with two evolutions ready (one card each), levelup:route-split = the same choice handed over by a chest; levelup:evo-hints = evolution hints (READY star, a pair-completing passive, a missing passive), levelup:evo-four = + a card with an undiscovered recipe (4 cards), levelup:evo-many = the 6-card grid with hints",
+    list: () => ["", "evo-hints", "evo-four", "evo-many", "evo-lines", "evo-two", "route-split"],
     run: async (c, a) => {
+      if (a === "evo-lines") {
+        // a weapon card with TWO known recipes (Yarn Orbit Lv2: Power Bow held, Magnet Star missing): two hint lines
+        const w = await evoBuild(c);
+        discover(save.profile, "weapons", "meowteor_hammer", false);
+        c.autoResolve = false;
+        w.addXp(w.xpNext - w.xp + 0.01);
+        pickOffer(w, [
+          ["weapon", "yarn_orbit"],
+          ["passive", "magnet_star"],
+          ["weapon", "star_shot"],
+        ]);
+        await c.until(() => c.app.modalKind === "levelup", "the level-up modal", 120, 60);
+        return;
+      }
+      if (a === "evo-two" || a === "route-split") {
+        const w = await twoEvoBuild(c);
+        c.autoResolve = false;
+        if (a === "route-split") {
+          // a chest finds two evolutions ready: it hands the pick over (World.pendingChoices), the picker opens
+          w.pendingChests.push({ golden: false });
+          const res = w.openChest();
+          if (!res?.rewards[0]?.choices || !w.choosing) throw new Error("the chest did not hand over the evolution choice");
+        } else {
+          w.addXp(w.xpNext - w.xp + 0.01);
+          pickOffer(w, [
+            ["evolution", "cosmic_yarn"],
+            ["evolution", "meowteor_hammer"],
+            ["weapon", "heart_boomerang"],
+          ]);
+        }
+        await c.until(() => c.app.modalKind === "levelup", "the card picker", 120, 60);
+        return;
+      }
       if (a === "evo-hints" || a === "evo-four" || a === "evo-many") {
         const w = await evoBuild(c);
         c.autoResolve = false;
@@ -802,11 +923,12 @@ const KINDS: Record<string, Kind> = {
   },
   chest: {
     group: "modal",
-    desc: "a chest opening (chest:golden for the golden one; chest:evo-hints = a golden chest's revealed cards on the evo-hints build)",
-    list: () => ["", "golden", "evo-hints"],
+    desc: "a chest opening (chest:golden for the golden one; chest:evo-hints = a golden chest's revealed cards on the evo-hints build, chest:route-split = its first card is a ROUTE SPLIT: two evolutions ready)",
+    list: () => ["", "golden", "evo-hints", "route-split"],
     run: async (c, a) => {
-      if (a === "evo-hints") {
-        const w = await evoBuild(c);
+      if (a === "evo-hints" || a === "route-split") {
+        // (route-split: Yarn Orbit has two evolutions ready - the chest's first card is the ROUTE SPLIT)
+        const w = a === "route-split" ? await twoEvoBuild(c) : await evoBuild(c);
         c.autoResolve = false;
         const k = w.dropPickup("chest", w.player.x, w.player.y + 2, 1, true);
         k.vx = k.vy = 0;

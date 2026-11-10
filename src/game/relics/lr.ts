@@ -4,6 +4,7 @@
 import { CFG } from "../config";
 import type { RelicDef } from "../defs";
 import { Buff } from "../hooks";
+import { evolutionsOf } from "../registry";
 import type { UltState } from "../types";
 import { atStar, num, proc } from "./_util";
 
@@ -16,7 +17,7 @@ export const originalManuscript: RelicDef = {
   rarity: "LR",
   icon: "icon_relic_original_manuscript",
   flavor: "The ending was different in the draft. Better, even.",
-  desc: (s) => `Start with your start weapon at Lv ${atStar(DRAFT_W, s)} and its evolution passive at Lv ${atStar(DRAFT_P, s)}`,
+  desc: (s) => `Start with your start weapon at Lv ${atStar(DRAFT_W, s)} and its first evolution's passive at Lv ${atStar(DRAFT_P, s)}`,
   install(w, s) {
     const lv = atStar(DRAFT_W, s);
     const plv = atStar(DRAFT_P, s);
@@ -28,7 +29,8 @@ export const originalManuscript: RelicDef = {
       const p = w.player;
       if (!inst) return;
       if (inst.level < lv) w.setWeaponLevel(inst, lv);
-      const evo = inst.def.evolution;
+      // (a weapon with two evolutions: the first one's passive - the other route stays the player's to build)
+      const evo = evolutionsOf(inst.def)[0];
       if (evo) {
         const have = w.passiveLevel(evo.with);
         if (have <= 0) w.addPassive(evo.with, plv);

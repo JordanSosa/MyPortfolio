@@ -67,7 +67,7 @@ export function fixtureContent(): MetaContent {
       { id: "truck_kun", name: "Truck-kun", title: "", weapon: "horn_of_reincarnation", portrait: "" },
     ],
     weapons: [
-      { id: "star_shot", name: "Star Shot", icon: "", evolved: false, evolution: { into: "galaxy_barrage", with: "wish_charm" } },
+      { id: "star_shot", name: "Star Shot", icon: "", evolved: false, evolutions: [{ into: "galaxy_barrage", with: "wish_charm" }] },
       { id: "galaxy_barrage", name: "Galaxy Barrage", icon: "", evolved: true },
       { id: "petal_slash", name: "Petal Slash", icon: "", evolved: false },
       { id: "yarn_orbit", name: "Yarn Orbit", icon: "", evolved: false },
