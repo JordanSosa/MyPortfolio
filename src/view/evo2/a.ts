@@ -308,7 +308,7 @@ const packageA: Evo2Module = {
       const j = i * 4;
       const al = 1 - k * k;
       // (a gold bed under a pale hairline: it has to read on the pale academy floor as well as on night grass)
-      r.line(Layer.Fx, linkXY[j], linkXY[j + 1], linkXY[j + 2], linkXY[j + 3], 3, C.orange, 0.45 * al, Flag.Focus);
+      r.line(Layer.Fx, linkXY[j], linkXY[j + 1], linkXY[j + 2], linkXY[j + 3], 3, C.orange, 0.6 * al, Flag.Focus);
       r.line(Layer.Fx, linkXY[j], linkXY[j + 1], linkXY[j + 2], linkXY[j + 3], 1, k < 0.25 ? C.white : C.paleYellow, al, Flag.Focus);
       const s = 0.55 * (1 - k);
       r.spr(Layer.Fx, hFlare, linkXY[j + 2], linkXY[j + 3], s, s, 0, C.paleYellow, al, 0, Flag.Focus);

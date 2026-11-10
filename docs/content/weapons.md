@@ -711,12 +711,12 @@ Status: `done` = implemented (the coverage test then checks id, name, base and p
 
 | Base weapon | File (`src/game/weapons/`) | First evolution (passive) | Second evolution | id | + Passive | Package | Status |
 | --- | --- | --- | --- | --- | --- | --- | --- |
-| Star Shot | `star-shot.ts` | Galaxy Barrage (Wish Charm) | Critical Constellation | `critical_constellation` | Lucky Clover | A | designed |
-| Petal Slash | `petal-slash.ts` | Sakura Tempest (Big Ribbon) | Already Cut | `already_cut` | Swift Shoes | A | designed |
+| Star Shot | `star-shot.ts` | Galaxy Barrage (Wish Charm) | Critical Constellation | `critical_constellation` | Lucky Clover | A | done |
+| Petal Slash | `petal-slash.ts` | Sakura Tempest (Big Ribbon) | Already Cut | `already_cut` | Swift Shoes | A | done |
 | Yarn Orbit | `yarn-orbit.ts` | Cosmic Yarn (Magnet Star) | Meowteor Hammer | `meowteor_hammer` | Power Bow | pilot | done |
-| Heart Boomerang | `heart-boomerang.ts` | Love Tornado (Twin Charm) | Unrequited Heart | `unrequited_heart` | Heart Locket | A | designed |
-| Thunder Bell | `thunder-bell.ts` | Raijin Drum (Power Bow) | Group Chat Lightning | `group_chat_lightning` | Friendship Bracelet | A | designed |
-| Candy Bomb | `candy-bomb.ts` | Sugar Nuke (Lucky Clover) | Konpeito Minefield | `konpeito_minefield` | Chibi Charm | A | designed |
+| Heart Boomerang | `heart-boomerang.ts` | Love Tornado (Twin Charm) | Unrequited Heart | `unrequited_heart` | Heart Locket | A | done |
+| Thunder Bell | `thunder-bell.ts` | Raijin Drum (Power Bow) | Group Chat Lightning | `group_chat_lightning` | Friendship Bracelet | A | done |
+| Candy Bomb | `candy-bomb.ts` | Sugar Nuke (Lucky Clover) | Konpeito Minefield | `konpeito_minefield` | Chibi Charm | A | done |
 | Bubble Aura | `bubble-aura.ts` | Ocean Dome (Heart Locket) | Soap Opera | `soap_opera` | Inner Monologue | B | done |
 | Prism Beam | `prism-beam.ts` | Rainbow Cannon (Swift Shoes) | Refraction Overload | `refraction_overload` | Lucky Clover | B | done |
 | Dark Flame Dragon | `dark-flame-dragon.ts` | Unsealed Abyss Dragon (Inner Monologue) | Unbandaged Right Arm | `unbandaged_right_arm` | Main Character Aura | C | done |
@@ -804,23 +804,34 @@ moving through lanes, weak against a boss that never walks into them. Sprite: `w
 tints (pink / mint / yellow / lavender through `tint`). Fx: `candyBits` on the pop (the existing emitter,
 budgeted), a 1-frame white blink when a mine arms; sfx `candyThrow`, the generic `explosion` at 0.5 vol.
 
-**Soap Opera** (`soap_opera`, Bubble Aura + Inner Monologue). "EVOLUTION! You leave a trail of soap bubbles.
-Each one traps an enemy in a dramatic misunderstanding." While moving, a soap bubble is left every 14 px
-(life 3.5 s × duration, max 24); an enemy touching one is lifted and held inside it for 1.6 s × duration
-(elites half, bosses only slowed 30 %), takes `dmg` 12 every 0.4 s, and takes a pop of 40 when it ends; the
-standing aura shrinks to r 22. **Versus Ocean Dome** (a huge healing dome she stands in): no heal and almost
-no aura, crowd control drawn by her path - the kiting route. Sprite: `w_soap_bubble` 16×16×3 (thin rainbow
-rim, mostly transparent). Fx: bubbles on Layer.Fx with `Flag.Focus`, the existing `popRing` / `droplet` on
-the pop; sfx `bubblePop`.
+**Soap Opera** (`soap_opera`, Bubble Aura + Inner Monologue; package B, done). "EVOLUTION! You leave a trail of
+soap bubbles. Each one traps an enemy in a dramatic misunderstanding."
+`{ dmg: 24, cd: 0.4, amount: 1, area: 1, radius: 22, slow: 0.62, knock: 12, every: 14, max: 24, life: 3.5, hold: 1.6, pop: 90, popR: 26, br: 8 }`.
+While she moves, a soap bubble (`w_soap_bubble`, touch r `br`) is left every `every` px where she just was
+(`life` s × duration, `max` alive + 2 per extra amount; when full the oldest free one makes way). The first
+enemy that touches one is lifted and held inside it (`Enemy.stun` + `z`) for `hold` s × duration (elites
+half; a boss is never held: the bubble pops on it and slows it 30 % for the hold time), takes `dmg` every
+`cd` s, and when the hold ends the bubble POPS: `pop` (scaled like `dmg`) to the one inside and everybody
+within `popR` × area. The standing aura shrinks to r `radius`. **Versus Ocean Dome** (a huge healing dome she
+stands in): 1.2× its crowd DPS on the gauge (7,403 vs 6,153; boss 120 vs 119) but only while she keeps
+walking, no heal, no dome - standing ground it is a fifth of a typical evolution on the weapon bench
+(camp 0.20×). Crowd control drawn by her path: the kiting route. Fx (`src/view/evo2/b.ts`): the bubbles are
+generic PK_FREE sprites (they fade over her), a faint wash on the ground for what is left of the aura (no
+rim), a ring + droplets on the pop, "?!" at most every 1.4 s; sfx `bubblePop`.
 
-**Refraction Overload** (`refraction_overload`, Prism Beam + Lucky Clover). "EVOLUTION! One beam. It hits
-something, splits in three, and each of those has opinions." Every `cd` 1.7 s a 0.6 s beam at the nearest
-enemy (len 120): from the first enemy hit it splits into 3 beams fanned ±28° (len 90), and each of those
-splits once more on its first hit (9 thin beams, len 60); ticks 0.1 s, `dmg` 9 / 6 / 4 per tier, a crit on
-any tier adds one extra split from that enemy. **Versus Rainbow Cannon** (3 beams sweeping 360° around
-her): aimed, depth-first, best into a deep pack behind a front line, nothing behind her. Sprites: none new
-(`fx_beam` tinted white -> cyan -> a rainbow tier). Fx: beams drawn as Rainbow Cannon's are (opaque hero
-rule in `drawBeams`), a prism glint (`P.flare`) at every split; sfx `beam`.
+**Refraction Overload** (`refraction_overload`, Prism Beam + Lucky Clover; package B, done). "EVOLUTION! One
+beam. It hits something, splits in three, and each of those has opinions."
+`{ dmg: 28, cd: 1.5, amount: 1, duration: 0.7, area: 1, len: 130, len2: 90, len3: 60, fan: 28, width: 3.5, tick: 0.1, knock: 10, d2: 18, d3: 12 }`.
+Every `cd` s one `duration` s beam at the nearest enemy (len `len`, +1 root beam per 2 amount, max 3). From
+the first enemy it touches it splits into 3 beams fanned ±`fan`° around its own direction (len `len2`,
+`d2` a tick); each of those splits once more on its first enemy (9 beams, len `len3`, `d3` a tick). A child
+beam grows out of the enemy it split from (it rides that enemy and never hits it), and every beam ends with
+the root. A critical hit of any beam adds one extra thin beam from that enemy (at most 40 beams alive).
+**Versus Rainbow Cannon** (3 beams sweeping 360° around her): 1.19× its crowd DPS on the gauge (5,559 vs
+4,681; boss 98 vs 73), aimed and depth-first - best into a deep pack behind a front line, nothing behind
+her, and it scales with crit chance. Sprites: none new. Fx: crisp opaque lines, white-cored cyan -> aqua ->
+a rainbow tier, with `Flag.Focus` (no additive haze, no bloom along a beam; the root starts 14 px off her),
+a glint at every tip and split; sfx `beam`.
 
 **Unbandaged Right Arm** (`unbandaged_right_arm`, Dark Flame Dragon + Main Character Aura; Kuro; done).
 "EVOLUTION! The bandages come off. Mr. Toasty wraps around his right arm. He has been waiting to say this
@@ -894,76 +905,117 @@ launch, `fx_baka` through the usual pop rule; sfx `fanSmack`, `baka`.
 
 **Who Are You Again?** (`who_are_you_again`, Notice-Me Sparkles + Heart Locket; Senpai). "EVOLUTION! He
 looks right at them. Then he asks their name. The heartbreak is area damage." The aura charms as the base
-weapon (r 56, `charm` 0.25, 2.5 s); when a charm ends, or the charmed enemy dies, it realises it was never
-noticed: a heartbreak burst r 32 × area for `dmg` 30 + 6 % of its max HP (bosses: 30 flat), and enemies in
-the burst roll the charm at once (a chain of heartbreak, budgeted 8 bursts a second). Played, as all of
-Senpai, purely as admiration. **Versus Shoujo Filter** (long charms, charmed enemies hit 3× harder, the
-Kira Kira Moment): short charms that are the ammunition - burst AoE instead of a standing army. Sprite:
-`fx_heartbreak` 16×16×3 (a heart cracking). Fx: the crack over the enemy, a pale-pink ring with
-`Flag.Focus`; text pop "who?" at most once a second; sfx `sparkleCharm`, `bubblePop`.
+weapon (r `radius` 56, a `sting` 6 every `cd` 0.45 s, `charm` 0.25, `duration` 2.5 s, up to `max` 12
+admirers); when a charm ends, or the charmed enemy dies (to anything), it realises it was never noticed: a
+heartbreak burst r `burst` 32 × area for `dmg` 40 + `hpShare` 6 % of its max HP (that share capped at
+`hpCap` 60; bosses take `dmg` flat), and every other non-boss in the burst rolls the charm at once (a chain
+of heartbreak, paced at `rate` 8 bursts a second from a queue, oldest first). Played, as all of Senpai,
+purely as admiration. **Versus Shoujo Filter** (long charms, charmed enemies hit 3× harder, the Kira Kira
+Moment): short charms that are the ammunition - burst AoE instead of a standing army. Sprite:
+`fx_heartbreak` 16×16×3 (a heart cracking). Fx: the crack over the spot and a pink ring, both with
+`Flag.Focus` (a plain-blend ring: additive pink turned white on pale floors); text pop "who?" at most once
+a second; sfx `sparkleCharm`, `bubblePop` (the charm book's own cues). Bench (in a build, seeds 1-2): crowd
+0.79× / boss 1.0× Shoujo Filter, clears its wave faster (12 s vs 21 s); on the ideal-density gauge the
+chain runs to 2.2× (20 631 vs 9 200).
 
 **Skip Intro** (`skip_intro`, Henshin Burst + Wish Charm; Magical Girl #47). "EVOLUTION! The transformation
 sequence has been skipped. So has the invulnerability." No henshin at all: the burst fires at once every
-`cd` 1.25 s (r 70 × area, `dmg` 44, knock 160, 8 ribbons at 14) with **no** i-frames and no slow walk; the
-emergency transform is gone. Every 5th burst is the stock-footage finisher (r × 1.4, 2× damage). **Versus
-Infinite Henshin Loop** (a 2.5 s loop of invulnerability and Plot Armor shields): twice the burst rate and
-full mobility, none of the safety. Sprites: none new (`w_ribbon`); `fx_skip` 24×10×1 "SKIP ▶▶" pop. Fx: the
-burst ring as today, the pop text at most once per 4 s; sfx `transform` (the burst half only: lower volume, no build-up).
+`cd` 1.25 s (r `radius` 70 × area, `dmg` 40, knock 160, `ribbons` 8 at `ribbonDmg` 12) with **no** i-frames
+and no slow walk; the emergency transform (Panic Henshin) is gone, and no henshin is counted. Every
+`finEvery` 5th burst is the stock-footage finisher (r × `finArea` 1.4, damage × `finDmg` 2). Quick Change
+and Double Henshin still apply; C6 fires the next burst at once. **Versus Infinite Henshin Loop** (a 2.5 s
+loop of invulnerability and Plot Armor shields): twice the burst rate and full mobility, none of the
+safety. Sprites: none new (`w_ribbon`); `fx_skip` 24×10×1 "SKIP ▶▶" pop. Fx: its own burst cue
+(`SKIP_BURST`), a crisp mint ring with `Flag.Focus` and sparks - the base weapon's glow ring + shockwave
+kept the screen white at this rate - the pop over her head at most once per 4 s, a pink second ring and
+"(stock footage)" on the finisher; sfx `explosion` (quiet, high), `transform` on the finisher only.
+Bench: crowd 1.28× / boss 1.19× the Loop in a build (gauge 1.46× / 1.56×), damage taken ×0.65 against the
+Loop's ×0.01.
 
 **"Holding Back" Fireball** (`holding_back`, Cheat Fireball + Twin Charm; Isekai-kun). "EVOLUTION! He is
 holding back. This is him holding back: a stream of perfectly ordinary fireballs." A stream: one small
-fireball every `cd` 0.14 s at the nearest enemy (speed 230, blast r 12 × area, `dmg` 15, knock 20), +1
-stream per 2 amount; no "Did I overdo it?" cast. Every 100th fireball he sneezes: one base-weapon overdo
-blast. **Versus Meteor Lv.99999** (slow, huge, on the biggest crowd): constant single-target and line
-pressure, no screen-clearing hit. Sprites: none new (`w_fireball` at 0.6 scale). Fx: the small blast uses
-the existing spark, not the full explosion (budget 10 a frame); status-window pop "MP: ∞" once a run; sfx
-`fireball` at 0.35 vol, rate-limited to 8 a second.
+fireball every `cd` 0.14 s at the nearest enemy (`speed` 230, blast r `blast` 15 × area, `dmg` 26, knock
+20), +1 stream (at the next-nearest enemy) per 2 amount; no "Did I overdo it?" cast. Every `sneeze` 100th
+fireball he sneezes: one base-weapon overdo blast (`sneezeDmg` 156, r `sneezeBlast` 70, the crater).
+**Versus Meteor Lv.99999** (slow, huge, on the biggest crowd): constant single-target and line pressure, no
+screen-clearing hit. Sprites: none new (`w_fireball` at 0.6 scale, no trail). Fx: the small blast is sparks
+and a thin ring, not an explosion (no `explosion` event; budget 10 a frame); status-window pop
+"MP: 9999/9999" once a run (the font has no ∞), "achoo!" on the sneeze; sfx `fireball` at 0.35 vol,
+rate-limited to 8 a second. Bench: boss 1.0× the tier median (gauge boss 1.29× the Meteor), crowd 0.54×
+the tier median and 0.23× the Meteor in a build - the Meteor is the bench's outlier (3.7× its tier), so
+this pair waits for the sibling pass.
 
 **Free Delivery** (`free_delivery`, Horn of Reincarnation + Magnet Star; Truck-kun). "EVOLUTION! The horn
 now pulls. Parcels are delivered to the bumper. The parcels are enemies." The honk is reversed: every `cd`
-1.6 s a cone ahead (len 110 × area, half-angle 40°) **pulls** every enemy in it 60 px toward the bumper
-(bosses 0), then the ram hits everything on the bumper for `ram` 85 with the isekai finish chance of the
-base weapon; pickups in the cone are pulled too. No phantom trucks. **Versus Isekai Rush Hour** (360° honk,
-scheduled phantom trucks): aimed, greedy and close - he drives into what he pulled; with Swift Shoes too
-the player must choose. Sprites: none new; `fx_parcel` 8×8×2 box on pulled enemies. Fx: reversed HONK
-rings (drawn toward the truck, `Flag.Focus`), tape scraps on the ram; sfx `honk` pitched down.
+1.5 s a cone ahead (`len` 110 × area, half-angle `angle` 40°) **pulls** every enemy in it up to `pull` 80 px
+toward the drop spot just off the bumper (a `dmg` 30 tug; elites half, bosses and props 0), then
+`slamAfter` 0.24 s later the delivery hits everything there (r `slamR` 22) for `slam` 130 and throws it
+ahead; gems and every pickup in the cone are pulled too (food and chests included). The moving ram stays
+(`ram` 45). Its kills are isekai'd with the base weapon's extra-gem chance (`isekai` 0.25), quietly: one
+light pillar per delivery instead of one per kill (they all die in one spot, on the truck). No phantom
+trucks. **Versus Isekai Rush Hour** (360° honk, scheduled phantom trucks): aimed, greedy and close - he
+drives into what he pulled; with Swift Shoes too the player must choose. Sprites: none new; `fx_parcel`
+8×8×2 box on pulled enemies. Fx: reversed HONK arcs closing in on the truck (plain blend, `Flag.Focus`),
+tape scraps on the delivery, "DELIVERED!" at most once per 8 s; sfx `honk` pitched down, `hitCrit`. Bench:
+crowd 1.44× Rush Hour inside a build, but boss 0.45× and alone it clears slowly (gauge crowd 0.3×): it
+needs the build around it.
 
-**Brown Sugar Railgun** (`brown_sugar_railgun`, Bubble Tea Cannon + Power Bow). "EVOLUTION! One pearl
-through one very long straw. It does not bounce. It does not need to." Every `cd` 1.5 s a single pearl is
-fired at the nearest enemy at speed 520: a line shot across the screen, pierce ∞, `dmg` 85, -12 % per
-enemy pierced (min 40 %), leaving a syrup streak for 2 s (half width 6: 35 % slow, 10 DPS). +1 pearl per 2
-amount, fanned 6°. **Versus Tapioca Tsunami** (giant pearls bouncing 8 times, shedding more): lanes instead
-of pinball - devastating down a corridor of enemies, little to offer a ring around her. Sprite:
-`w_pearl_rail` 16×8×2, `fx_syrup` 16×8×2 decal. Fx: the "boba" trail lengthened, a straw-shaped muzzle
-flash; sfx `boba` + `beam` at 0.3.
+**Brown Sugar Railgun** (`brown_sugar_railgun`, Bubble Tea Cannon + Power Bow; package B, done). "EVOLUTION!
+One pearl through one very long straw. It does not bounce. It does not need to."
+`{ dmg: 190, cd: 1.3, amount: 1, speed: 520, knock: 70, reach: 440, falloff: 0.12, floor: 0.4, syrup: 2, syrupW: 6, syrupSlow: 0.65, syrupDps: 30 }`.
+Every `cd` s a single pearl (`w_pearl_rail`) is fired at the nearest enemy and flies `reach` px in a straight
+line: pierce ∞, `dmg`, -`falloff` per enemy pierced (never under `floor`). Its line on the ground is a
+syrup streak for `syrup` s × duration (half width `syrupW` × area: speed × `syrupSlow`, `syrupDps` scaled
+like `dmg`, ticked every 0.25 s). +1 pearl per 2 amount, fanned 6°. **Versus Tapioca Tsunami** (giant pearls
+bouncing 8 times, shedding more): 1.23× its crowd DPS on the gauge (2,397 vs 1,942; boss 176 vs 47), lanes
+instead of pinball - devastating down a corridor of enemies, little to offer a ring around her (in a real
+run the Tsunami's bouncing is worth far more than its gauge: the bench has it 4.9× apart, a question for
+the sibling balance pass). Sprites: `w_pearl_rail` 16×8×2, `fx_syrup` 16×8×2 (decal tiles). Fx: a short
+straw line behind the pearl, a straw-shaped muzzle flash, tea drops; sfx `boba` + `beam` at 0.3.
 
-**Failed Exam Storm** (`failed_exam_storm`, Paper Crane Flock + Training Montage). "EVOLUTION! The cranes
-are refolded into paper planes. From failed exams. They never come back, and neither will that grade."
-No flock: every `cd` 0.22 s a paper plane launches from behind the hero in the facing direction (±20°
-spread, speed 300, pierce 3, `dmg` 20, life 1.4 s), +1 lane per 2 amount; every enemy a plane kills adds
-1 % XP to its gem (the passive's joke), capped at +30 % for the run's banked XP rate. **Versus Thousand
-Crane Wish** (12 homing cranes around her, a heal on every Wish): a forward barrage with screen reach, no
-homing, no heal, aimed by facing. Sprite: `w_paper_plane` 12×8×2 (a red "23" on the wing). Fx: the
-existing `paperBit` on hits, no trail on more than 24 planes; sfx `paperCrane`, rate-limited as the darts.
+**Failed Exam Storm** (`failed_exam_storm`, Paper Crane Flock + Training Montage; package B, done). "EVOLUTION!
+The cranes are refolded into paper planes. From failed exams. They never come back, and neither will that
+grade."
+`{ dmg: 36, cd: 0.16, amount: 3, speed: 300, pierce: 5, knock: 22, spread: 20, back: 44, life: 1.4, xp: 0.01, xpCap: 0.3 }`.
+No flock: every `cd` s a paper plane per lane (1 + 1 per 2 amount: 2 lanes as it comes) launches from
+`back` px BEHIND the hero in the facing direction (±`spread`°, `pierce`, `life` s: through whatever is
+chasing her down that line, past her, on across the screen). No homing, no heal. Every enemy a plane kills
+marks its gem up: +`xp` per plane kill so far, capped at +`xpCap` (the passive's joke). **Versus Thousand
+Crane Wish** (12 homing cranes around her, a heal on every Wish): 0.63× its crowd DPS on the gauge (2,127
+vs 3,365; boss 186 vs 672) but about level with it on the weapon bench (power 1.10 vs 1.17: the planes
+reach the whole screen) - a forward barrage aimed by facing. Launching from behind her is what makes it work
+while kiting (a first version launched at her feet and killed 16 enemies a minute alone). Sprite:
+`w_paper_plane` 12×8×2. Fx: paper bits on hits, scraps and a red grade ("23/100", "F", "SEE ME") on a kill
+at most every 2 s, no trails; sfx `paperCrane` at most every 0.3 s.
 
-**Underground Mosh Pit** (`mosh_pit`, Idol Lightstick Wave + Plot Armor). "EVOLUTION! The venue holds
-forty people. Every beat is a stomp, and every stomp is a shove." On every beat a 360° stomp around the
-hero (r 62 × area, `dmg` 26, knock 110, a 0.2 s daze); each beat that hits 6+ enemies adds a stack of
-Crowd Surf (max 6, lost after 2 silent beats): +4 % damage taken reduction and +6 % stomp radius a stack.
-No ENCORE. **Versus Sold-Out Dome Tour** (long 90° spotlight arcs, a screen-wide ENCORE): a short-range
-ring that makes her tankier the deeper she stands in the crowd. Sprites: none new (`w_lightstick_wave`
-as a full ring); `fx_stomp` 24×8×2 dust. Fx: the ring on Layer.FxBelow (under the hero), dust with Focus;
-the HUD beat pulse of `hud-arsenal2.ts` should include the id; sfx `lightstick` at a lower pitch.
+**Underground Mosh Pit** (`mosh_pit`, Idol Lightstick Wave + Plot Armor; package B, done). "EVOLUTION! The
+venue holds forty people. Every beat is a stomp, and every stomp is a shove."
+`{ dmg: 40, cd: 0.429, every: 1, amount: 1, range: 70, knock: 110, daze: 0.2, need: 6, stacks: 6, dr: 0.04, grow: 0.06 }`.
+On every beat an instant 360° stomp around the hero (r `range` × area, `dmg`, `knock`, a `daze` s stun;
+bosses are not dazed). A beat that hits `need`+ enemies adds a stack of Crowd Surf (max `stacks`; all lost
+after 2 beats in a row below `need`): +`dr` damage reduction (a live stat modifier, removed on dispose) and
++`grow` stomp radius a stack. No ENCORE, no combo-rank bonus. **Versus Sold-Out Dome Tour** (long 90°
+spotlight arcs, a screen-wide ENCORE): 1.13× its crowd DPS on the gauge (8,024 vs 7,130; boss 101 vs 68)
+when the crowd is on top of her, but half its reach: on the bench it kills a fifth as much alone and cuts
+damage taken by two thirds (taken ×0.34) - the stand-in-the-pit route. Sprites: `fx_stomp` 24×8×2 dust.
+Fx: the stomp ring on `Layer.FxBelow` (under her, 0.34 s), dust and a spark per stack along it (particles),
+"CROWD SURF!" at full stacks; the HUD beat pulse of `hud-arsenal2.ts` includes the id; sfx `lightstick`
+at -7 semitones.
 
 **All-You-Can-Eat Nabe** (`all_you_can_eat_nabe`, Kotatsu of Sloth + Bento Box). "EVOLUTION! The kotatsu
 gets a hot pot. Whatever wanders in gets cooked. Whatever gets cooked is dinner." Deploys as the base
-weapon (stand still), r 60 × area: enemies inside are slowed 30 % and **cooked**: `dmg` 9 every 0.3 s,
-+12 % per second they have stayed inside (max +180 %); every 12th enemy that dies inside drops a snack
-(`snack`, heal 4 × healing). Moving folds it at once and it does not travel. **Versus Eternal Winter
-Break** (the kotatsu comes along, pulls gems, lobs mikan): the stationary route - the strongest standing
-aura in the game and the only one that feeds her, worthless on the move. Sprite: `w_nabe` 24×16×3 (a
-bubbling pot on the kotatsu, steam). Fx: steam puffs on Layer.Fx (Focus), a ladle splash on a snack drop;
-no Too Comfy doze on this route; sfx `snore` (deploy), `bubblePop`.
+weapon (stand still `deploy` 0.4 s; `armor` 2 and `regen` 1 inside), r `radius` 80 × area: enemies inside
+are slowed 30 % (`slow` 0.7) and **cooked**: `dmg` 36 every `cd` 0.3 s, +`cook` 25 % per second they have
+stayed inside (max +`cookMax` 200 %); every `snackEvery` 12th enemy that dies inside (to anything) drops a
+snack (a mikan, heal `snackHeal` 4 × healing). Moving folds it at once and nothing travels with her (no
+folded aura). **Versus Eternal Winter Break** (the kotatsu comes along, pulls gems, lobs mikan): the
+stationary route - the strongest standing aura per enemy in the game and the only one that feeds her,
+worthless on the move. Sprite: `w_nabe` 24×16×3 (a bubbling pot, steam; drawn beside her on `w_kotatsu`'s
+quilt, in front, so it reads). Fx: the cooking floor warms as the pot heats, steam puffs on Layer.Fx
+(Focus), a ladle splash on a snack drop; no Too Comfy doze on this route; sfx `snore` (deploy),
+`bubblePop`. The lab bench cannot gauge it (its bot never camps: 0 DPS for the base weapon too); a
+standing probe (60 s, director on) put an earlier tuning (dmg 24, r 68) at 0.54× Eternal Winter Break's
+standing damage, hence the shipped numbers.
 
 ### 8.3 Work packages
 

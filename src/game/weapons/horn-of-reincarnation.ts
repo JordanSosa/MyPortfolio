@@ -17,7 +17,7 @@
  *
  * Second evolution: Free Delivery (+ Magnet Star) - the honk is reversed: every `cd` s the cone ahead
  * (`len` x area, half-angle `angle`°) PULLS every enemy in it up to `pull` px toward the bumper (a `dmg`
- * tug; elites half, bosses and props not at all) and the gems / coins in it to the truck; `slamAfter` s
+ * tug; elites half, bosses and props not at all) and the gems / pickups in it to the truck; `slamAfter` s
  * later the DELIVERY lands: everything on the bumper (r `slamR` x area) takes `slam` and is thrown ahead.
  * The moving ram stays (`ram`), no phantom trucks. Its kills are isekai'd with the base weapon's extra-gem
  * chance (`isekai`), but quietly (`quietIsekai`): everything dies ON the bumper, and a light pillar per
@@ -362,7 +362,7 @@ function pullCone(w: World, inst: WeaponInstance, dx: number, dy: number, len: n
     }
   }
   w.release();
-  // free shipping: the gems and coins in the cone come along
+  // free shipping: the gems and every pickup in the cone come along (food, chests and power-ups too, not just coins)
   const far = len * len;
   const gems = w.gems;
   for (let i = 0; i < gems.count; i++) {
@@ -378,13 +378,13 @@ function pullCone(w: World, inst: WeaponInstance, dx: number, dy: number, len: n
   const picks = w.pickups;
   for (let i = 0; i < picks.count; i++) {
     const c = picks.items[i];
-    if (c.dead || c.kind !== "coin" || c.state !== 0) continue;
+    if (c.dead || c.state !== 0) continue;
     const gx = c.x - ox;
     const gy = c.y - oy;
     const d2 = gx * gx + gy * gy;
     if (d2 > far || gx * dx + gy * dy < cosH * Math.sqrt(d2)) continue;
     c.state = 1;
-    c.speed = 90;
+    c.speed = 120;
   }
   hfx(w, FD_PULL, ox, oy, dx, dy, len, half);
   return hits;

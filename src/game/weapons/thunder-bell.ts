@@ -295,7 +295,7 @@ export const groupChatLightning: WeaponDef = {
   sfx: "thunder",
   evolved: true,
   desc: "EVOLUTION! One bolt, forwarded to everyone. Nobody asked to be added.",
-  levels: [{ dmg: 58, cd: 0.9, amount: 1, hops: 10, perWeapon: 2, reach: 70, hopT: 0.04, seenR: 30, seenMul: 2, knock: 18 }],
+  levels: [{ dmg: 58, cd: 0.9, amount: 1, hops: 10, perWeapon: 2, reach: 80, hopT: 0.04, seenR: 30, seenMul: 2, knock: 18 }],
   upgrades: [],
   update(w, inst, dt) {
     const c = chatOf(inst);

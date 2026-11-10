@@ -356,7 +356,8 @@ const unrequited: ProjHook = (p, w, dt) => {
       w.heal(each, true);
     }
   }
-  fireSfx(w, inst, pl.x, pl.y);
+  // (the whoosh on every other throw: it comes back more than twice a second)
+  if (p.b & 1) fireSfx(w, inst, pl.x, pl.y);
   if (!t) t = p.target = crush(w, inst, p, range);
   p.targetUid = t ? t.uid : 0;
   if (!t) {

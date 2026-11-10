@@ -357,7 +357,7 @@ export const alreadyCut: WeaponDef = {
   sfx: "slash",
   evolved: true,
   desc: "EVOLUTION! One long cut the way you face. Nothing happens. Then she sheathes the blade.",
-  levels: [{ dmg: 95, cd: 1.3, amount: 1, area: 1, knock: 40, len: 150, wid: 14, wait: 0.45, moved: 0.5, petals: 3, petalDmg: 14 }],
+  levels: [{ dmg: 62, cd: 1.3, amount: 1, area: 1, knock: 40, len: 150, wid: 14, wait: 0.45, moved: 0.5, petals: 3, petalDmg: 14 }],
   upgrades: [],
   update(w, inst, dt) {
     const S = wstats(w, inst);

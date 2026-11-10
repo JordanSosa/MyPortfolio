@@ -402,7 +402,7 @@ export const konpeitoMinefield: WeaponDef = {
   sfx: "candyThrow",
   evolved: true,
   desc: "EVOLUTION! Scatters tiny star candies everywhere. They are small. They are armed.",
-  levels: [{ dmg: 50, cd: 0.5, amount: 2, area: 1, radius: 23, knock: 60, duration: 12, max: 28, arm: 0.4, slow: 0.75, slowT: 1, kick: 40, near: 30, far: 90 }],
+  levels: [{ dmg: 54, cd: 0.5, amount: 2, area: 1, radius: 23, knock: 60, duration: 12, max: 28, arm: 0.4, slow: 0.75, slowT: 1, kick: 40, near: 30, far: 90 }],
   upgrades: [],
   update(w, inst, dt) {
     const live = prune(inst);
@@ -447,7 +447,9 @@ export const konpeitoMinefield: WeaponDef = {
       p.onEnd = plant;
       own(inst, p);
     }
-    fireSfx(w, inst, sx, sy);
+    // (two tosses a second: the throw is heard on every other one)
+    d.vol = (d.vol ?? 0) + 1;
+    if (d.vol & 1) fireSfx(w, inst, sx, sy);
   },
   dispose(_w, inst) {
     killOwned(inst);
