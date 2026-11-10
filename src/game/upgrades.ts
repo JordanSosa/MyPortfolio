@@ -121,10 +121,25 @@ function holdsEvolved(w: World, def: WeaponDef): boolean {
   return false;
 }
 
-/** Does this passive complete a recipe of a weapon in the build? */
-function evolvesHeld(w: World, passive: string): boolean {
-  for (const inst of w.weapons) for (const e of evolutionsOf(inst.def)) if (e.with === passive) return true;
-  return false;
+/**
+ * The level-up nudge of a NEW passive that would evolve a weapon in the build: every weapon nudges by 3 in total,
+ * shared between the passives of its routes (two evolutions: 1.5 each), and not at all once one of its routes is
+ * covered. So a second evolution does not make recipe passives crowd the offers: the passive / weapon mix of the
+ * level-ups stays what the one-evolution game was tuned on.
+ */
+function recipeNudge(w: World, passive: string): number {
+  let n = 0;
+  for (const inst of w.weapons) {
+    const evos = evolutionsOf(inst.def);
+    let mine = false;
+    let covered = false;
+    for (const e of evos) {
+      if (e.with === passive) mine = true;
+      else if (w.passiveLevel(e.with) > 0) covered = true;
+    }
+    if (mine && !covered) n += 3 / evos.length;
+  }
+  return n;
 }
 
 /** Every candidate card with its weight (owned-only = chest mode). */
@@ -180,7 +195,7 @@ function candidates(w: World, ownedOnly: boolean): Cand[] {
     }
     normalise(out, start, NEW_PASSIVE_REF);
     // nudge passives that would evolve an owned weapon (on top: a recipe stands out even in a big pool)
-    for (let i = start; i < out.length; i++) if (evolvesHeld(w, out[i].card.id)) out[i].w += 3;
+    for (let i = start; i < out.length; i++) out[i].w += recipeNudge(w, out[i].card.id);
   }
   return out;
 }

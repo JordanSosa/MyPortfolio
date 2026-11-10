@@ -5,7 +5,7 @@
  * to a run time (the director skips the timeline before it). No game logic is copied:
  * every number comes from the live World / director / upgrade code.
  */
-import { Bot, makeBot } from "../../src/debug/bot";
+import { Bot, drain, makeBot } from "../../src/debug/bot";
 import { World } from "../../src/game/world";
 import { checkpointRun } from "../checkpoints";
 import { cpId } from "./overrides";
@@ -31,12 +31,9 @@ export function cellWorld(c: CellSpec, opts: { maxE?: number; director?: boolean
   return new World({ hero: plan.hero, seed: c.seed * 7717 + 13, run: plan.config, maxEnemies: opts.maxE ?? 250, director: opts.director ?? true, god: opts.god ?? false });
 }
 
-/** Resolve pending level-ups / chests with the bot (as `simulate` does after a step). */
+/** Resolve pending level-ups / chests (and a chest's evolution choices) with the bot, as `simulate` does after a step. */
 export function settle(w: World, bot: Bot): void {
-  for (let g = 0; g < 500 && (w.pendingLevels > 0 || w.pendingChests.length > 0); g++) {
-    while (w.pendingLevels > 0) bot.resolve(w);
-    while (w.pendingChests.length > 0) w.openChest();
-  }
+  drain(w, bot);
 }
 
 /**

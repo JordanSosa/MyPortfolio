@@ -11,7 +11,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { availableParallelism } from "node:os";
 import { fileURLToPath } from "node:url";
-import { defineConfig, mergeConfig, type ViteUserConfig } from "vitest/config";
+import { defineConfig, mergeConfig, type Plugin, type ViteUserConfig } from "vitest/config";
 import viteConfig from "./vite.config";
 
 const root = fileURLToPath(new URL(".", import.meta.url));
@@ -33,11 +33,29 @@ function slowOnlyFiles(): string[] {
   return out;
 }
 
+/**
+ * A module that calls `import.meta.glob` is transformed into static imports of the files that matched: its
+ * transform depends on a folder listing, not only on its own text. Vitest's fs module cache keys a module by its
+ * text and only bails out on the literal `import.meta.glob(`, which the typed calls here
+ * (`import.meta.glob<Mod>(...)`) never contain. So `npm test` kept serving a stale file list: a new
+ * `src/art/sprites/evo2-*.ts` or `src/view/evo2/*.ts` (or a new weapon file) stayed invisible until a cache
+ * entry was deleted. This plugin keeps every such module out of the cache (about ten small files).
+ */
+function globModulesUncached(): Plugin {
+  return {
+    name: "kk-glob-modules-uncached",
+    configureVitest({ defineCacheKeyGenerator }) {
+      defineCacheKeyGenerator(({ sourceCode }) => (/\bimport\.meta\.glob\s*[<(]/.test(sourceCode) ? false : undefined));
+    },
+  };
+}
+
 export default defineConfig(async (env) => {
   const base = (typeof viteConfig === "function" ? await viteConfig(env) : viteConfig) as ViteUserConfig;
   return mergeConfig(base, {
     // a fixed build stamp: vite.config.ts stamps the minute, which would change the transform of src/debug/diag.ts
     define: { __KK_BUILD__: JSON.stringify({ version: "test", commit: "test", date: "test" }) },
+    plugins: [globModulesUncached()],
     test: {
       root,
       include: ["tests/**/*.test.ts"],
