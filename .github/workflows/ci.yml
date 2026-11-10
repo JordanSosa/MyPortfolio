@@ -1,0 +1,25 @@
+name: CI
+
+# Type-check, run the unit + headless simulation tests, and make sure both
+# production builds succeed on every pull request and on pushes to branches.
+on:
+  pull_request:
+  push:
+    branches-ignore: [master]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - run: npm run build:single
