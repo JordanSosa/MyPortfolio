@@ -100,7 +100,7 @@ Base stats are multiplied by passives (Might, Area, Cooldown, Amount...).
 | --- | --- | --- | --- |
 | **Star Shot** | Homing stars at nearest enemies | dmg 10, cd 0.85, amt 2, spd 160, pierce 2 | **Galaxy Barrage** (+Wish Charm): rotating spiral stream of homing stars, cd 0.1, 3 arms, pierce 3 |
 | **Petal Slash** | Arc slash in facing dir (Lv2 also behind) | dmg 16, cd 1.1, area 48×32 | **Sakura Tempest** (+Big Ribbon): 360° whirlwind every 0.8 s + petal blades fanned at the nearest enemy (a boss first) that curve in |
-| **Yarn Orbit** | Balls orbit the player (r 28), 3 s on / 1.3 s off | dmg 14, per-enemy hit cd 0.4 (0.34 from Lv3, 0.28 at Lv5) | **Cosmic Yarn** (+Magnet Star): 6 planets (dmg 36, hit cd 0.26), permanent, also pull gems |
+| **Yarn Orbit** | Balls orbit the player (r 28), 3 s on / 1.3 s off | dmg 16, per-enemy hit cd 0.4 (0.34 from Lv3, 0.28 at Lv5) | **Cosmic Yarn** (+Magnet Star): 6 planets (dmg 38, hit cd 0.26), permanent, also pull gems |
 | **Heart Boomerang** | Thrown at nearest, flies 90 px and returns, pierces | dmg 12, cd 1.4 | **Love Tornado** (+Twin Charm): hearts spiral outward in a tornado |
 | **Thunder Bell** | Lightning strikes random on-screen enemies, chains (60 %), small spark blast | dmg 24, cd 1.4, strikes 2, chain 3 | **Raijin Drum** (+Power Bow): 8 huge bolts with AoE blasts + screen flash |
 | **Candy Bomb** | Lobs bombs (0.6 s arc) at enemies, AoE r 28 | dmg 25, cd 2.0 | **Sugar Nuke** (+Lucky Clover): giant bomb r 80 + 6 cluster bomblets |

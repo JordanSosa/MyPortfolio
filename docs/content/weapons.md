@@ -757,52 +757,92 @@ no gem pull, slightly less on a single boss (95 vs 104), and the Orbital Guard o
 is the safe route, this one hits. Fx: the generic blast plus an orange ring and yarn bits (`src/view/evo2/pilot.ts`,
 particles on the fx layers); sfx: `orbitHit` hits, the generic `explosion`.
 
-**Critical Constellation** (`critical_constellation`, Star Shot + Lucky Clover). "EVOLUTION! Five heavy
-comet stars. Every critical hit draws the next star of the constellation." Every `cd` 1.6 s, 5 slow, large
-comet stars (pierce 4, no homing after launch) fly at the 5 highest-HP enemies in view, the first hit of
-each always crits; a crit kill spawns two half-damage mini stars (`miniStar`, as Hoshi's C6) at the kill.
-**Versus Galaxy Barrage** (a constant spiral stream, crowd sustain): burst and elite / boss focus, long gaps
-between volleys, scales with crit and crit damage instead of cooldown. Sprite: `w_comet_star` 16×16×2 (pale
-core, gold body, a short tail to the left). Fx: a thin gold line between consecutive crit hits for 0.2 s
-(the "constellation"), `Flag.Focus`; sfx `starShot`.
+**Critical Constellation** (`critical_constellation`, Star Shot + Lucky Clover; package A, done). "EVOLUTION! Five
+heavy comet stars. Every critical hit draws the next star of the constellation."
+`{ dmg: 88, cd: 1.6, amount: 5, speed: 150, pierce: 4, knock: 60, mini: 0.5 }`.
+Every `cd` s a volley of `amount` comets (0.07 s apart; `w_comet_star` 16×16×2, r 8, no homing, a slight lead)
+flies at the `amount` highest-HP enemies in view, one each (fewer enemies: they share). The first hit of each
+comet always crits; what it pierces afterwards rolls like any hit. A crit of the weapon that kills (bosses
+excepted) splits into two mini stars of `mini` × `dmg` (`miniStar`, the weapon's own source, so their crits
+draw on; 14 splits a second at most). Hoshi's Star Shot talents and constellations read it as Star Shot (Fan
+Chant +1 pierce, Backup Dancers +1 comet a rank, Falling Star, C6; `starInst()`). **Versus Galaxy Barrage**
+(a constant spiral stream): burst with long gaps, aimed at whatever has the most HP, scaling with crit and crit
+damage instead of cooldown. Gauge 1,532 crowd / 583 boss against 1,335 / 455 (1.15× / 1.28×); in the weapon
+bench's real runs 27,281 DPS in the build against 25,458, but 1,082 on the boss against Galaxy Barrage's 2,782
+(which the bench flags as far above its tier). Fx (`src/view/evo2/a.ts`): the "comet" trail; every crit is linked
+to the previous one (within 0.7 s and 130 px) by a 1-px pale line on a gold bed for 0.45 s, a twinkle on the new star
+(`Flag.Focus`, no glow), a small ring on a crit kill; sfx `starShot`.
 
-**Already Cut** (`already_cut`, Petal Slash + Swift Shoes; Rin). "EVOLUTION! One long cut the way you face.
-Nothing happens. Then she sheathes the blade." Every `cd` 1.3 s a line cut 150 × 14 px (× area) along the
-facing direction: no damage on the cut itself, every enemy on the line is **marked**; 0.45 s later (the
-sheath click) each mark takes `dmg` 95 at once, +50 % while Rin has moved since the cut. Kills by a mark
-shed 3 petal blades that fly on along the line (as Sakura Tempest's, half damage). **Versus Sakura Tempest**
-(stand in the middle, 360°): directional and delayed, aimed by moving, the highest single-line burst in the
-arsenal but nothing behind her. Sprite: `w_iai_line` 48×8×3 (white hairline -> pink afterimage -> wisps),
-`fx_sheath` 12×12×2 glint on the hero's hip (her own look: no Focus). Fx: marked enemies show a 1-px white
-slit, then pink halves of petals on the delayed hit; sfx `slash` on the cut, `hitCrit` on the click.
+**Already Cut** (`already_cut`, Petal Slash + Swift Shoes; Rin; package A, done). "EVOLUTION! One long cut the
+way you face. Nothing happens. Then she sheathes the blade."
+`{ dmg: 62, cd: 1.3, amount: 1, area: 1, knock: 40, len: 150, wid: 14, wait: 0.45, moved: 0.5, petals: 3, petalDmg: 14 }`.
+Every `cd` s a line cut `len` × `wid` px (× area) from the hero: no damage on the cut, every enemy on the line
+is **marked** (48 at most); `wait` s later (the sheath click) every mark still standing takes `dmg` at once,
++`moved` if Rin has walked more than 6 px since the cut. A mark that dies sheds `petals` petal blades
+(`petalDmg`, pierce 3) that fly on down the line. The line follows the way she last moved - with one piece of
+aim assist, as Petal Slash has its own: if another line (the nearest enemy's, or one of 12 around the clock)
+holds more than twice as many enemies, she turns to that one, so a cut is never spent on air while a horde
+chases her (the pure movement aim played badly on a phone: the horde is behind a kiting hero). Extra Amount
+fans more cuts ±0.3 rad around the first; Rin's talents: Wide Stance widens it, Petal Storm's blades fly on the
+cut, every 3rd draw is a Crescent Moon cut (2.5× as wide, ×1.5) instead of the 360° moon slash. **Versus Sakura
+Tempest** (stand in the middle, 360°): one direction, delayed, a whole line at once, nothing behind her. Gauge
+2,687 crowd / 66 boss against 2,106 / 77 (1.28× / 0.86×); in the bench's real runs 15,544 DPS in the build / 214
+on the boss against 6,051 / 222 and 401 solo kills a minute against 151 (Sakura Tempest is the weak one of the
+tier there: a later pass should lift it rather than cut this). Sprites: `w_iai_line` 48×8×3 (a white hairline
+in a pink sheath -> pink afterimage -> wisps, stretched along the cut, `Flag.Focus`), `fx_sheath` 12×12×2 glint
+on the hero's hip at the click (her own look: no Focus). Fx: a white slit on every marked enemy, flickering
+faster as the click comes, then two pink halves flying apart and petals on each delayed hit; a small shake on
+a click of 3+ marks; sfx `slash` on the cut, `hitCrit` on the click.
 
-**Unrequited Heart** (`unrequited_heart`, Heart Boomerang + Heart Locket). "EVOLUTION! One big heart picks
-one enemy and keeps coming back. It will not take the hint." A single large heart (2 with +2 amount, 3 with
-+4) locks onto the highest-HP enemy within 140 px and shuttles between the hero and that enemy (0.45 s a
-round trip), `dmg` 34 per pass, +8 % per consecutive pass on the same target (max +120 %), piercing what is
-in the way at half damage; when the target dies it picks the next and keeps half of the ramp. Each catch
-heals 0.5 HP (× healing), at most 2 HP/s. **Versus Love Tornado** (hearts spiral out, crowd AoE): the boss
-and elite killer, poor at clearing a ring of small enemies. Sprite: `w_heart_big` 16×16×2 (magenta, a
-bandage plaster on it). Fx: a faint pink dotted leash to the target on Layer.FxBelow (not over the hero),
-`WFX_CATCH` on every catch; sfx `boomerang`.
+**Unrequited Heart** (`unrequited_heart`, Heart Boomerang + Heart Locket; package A, done). "EVOLUTION! One big
+heart picks one enemy and keeps coming back. It will not take the hint."
+`{ dmg: 58, cd: 0, amount: 1, area: 1, speed: 320, knock: 14, range: 140, ramp: 0.08, rampMax: 1.2, through: 0.6, heal: 0.5, healCap: 2 }`.
+A single large heart (2 with +2 Amount, 3 with +4; `w_heart_big` 16×16×2, r 9 × area) locks onto the
+highest-HP enemy within `range` px of the hero (hearts spread over different targets when they can) and
+shuttles hero <-> target at `speed` px/s, a leg never shorter than 0.2 s (so about 0.4-0.9 s a round trip). The
+pass deals `dmg`, +`ramp` per consecutive pass on that target up to +`rampMax`; whatever stands in the way
+takes `through` × `dmg` once per leg. When the target dies, or is left more than 1.35 × `range` behind, it
+picks the next and keeps half of the ramp. A catch after a pass heals `heal` HP (× healing) out of a bucket of
+`healCap` HP a second; with nobody in range it waits at her shoulder. **Versus Love Tornado** (hearts spiral
+out, crowd AoE): the boss and elite killer of the pair. Bench, real runs: 744 on the boss against 452, 3,282 DPS
+in the build against 18,084, the same overall power (1.65 vs 1.58 of the tier median). The gauge's immortal
+blob flatters it (6,811 crowd / 342 boss against 4,751 / 63): there every leg passes through a dozen enemies.
+Fx: the "heartBig" trail, a faint dotted leash from the hero to each heart's target on Layer.FxBelow (it
+starts outside her body), `WFX_CATCH` on every catch, the heart fades into her hands as the boomerang does; sfx
+`boomerang` on every other throw.
 
-**Group Chat Lightning** (`group_chat_lightning`, Thunder Bell + Friendship Bracelet). "EVOLUTION! One bolt,
-forwarded to everyone. Nobody asked to be added." Every `cd` 1.1 s one bolt hits a random enemy in view and
-is **forwarded**: it chains to the nearest unhit enemy within 70 px, up to 10 hops + 2 per different weapon
-held, with no damage falloff (`dmg` 36 a hop); the last enemy of a full chain takes a "seen by everyone"
-blast (r 30, 2× damage). **Versus Raijin Drum** (8 huge bolts, AoE blasts, a screen flash): no burst and no
-flash, steady chains that reward dense packs and a wide build. Sprites: none new (the `bolts` renderer,
-thinner and cyan-white); `fx_ping` 8×8×2 notification dot over each hop. Fx: `WFX_CHAIN` per hop with a
-budget of 16 a frame, no screen flash, no shake above 0.05; sfx `thunder` (rate-limited).
+**Group Chat Lightning** (`group_chat_lightning`, Thunder Bell + Friendship Bracelet; package A, done).
+"EVOLUTION! One bolt, forwarded to everyone. Nobody asked to be added."
+`{ dmg: 58, cd: 0.9, amount: 1, hops: 10, perWeapon: 2, reach: 80, hopT: 0.04, seenR: 30, seenMul: 2, knock: 18 }`.
+Every `cd` s one bolt hits a random enemy in view and is **forwarded**: every `hopT` s it hops to the nearest
+enemy within `reach` px (× area) that this chain has not hit, `hops` times + `perWeapon` for every other weapon
+held, `dmg` a hop with no falloff. The last enemy of a **full** chain takes the "seen by everyone" blast (r
+`seenR` × area, `seenMul` × `dmg`, everything in it); a chain that runs out of enemies just ends. The next bolt
+waits for the chain in flight; extra Amount sends more bolts one after the other. **Versus Raijin Drum** (8
+huge bolts, AoE blasts, a screen flash): no burst and no flash, steady chains that reward dense packs and a
+wide build, next to nothing against a lone boss. Gauge 8,769 crowd / 68 boss against 5,517 / 132 (the gauge's
+120-enemy blob completes every chain); in the bench's real runs 7,706 DPS in the build / 78 on the boss against
+11,116 / 243, 524 solo kills a minute against 537. Sprite: `fx_ping` 8×8×2, a notification dot popping over
+every hop. Fx: its own bolts (dark blue and cyan under a white core, normal blend - the additive `bolts`
+renderer vanishes on the pale Shoujo Academy floor; forwards budgeted at 16 a frame), a ring on the blast, no
+screen flash, shake 0.05; sfx `thunder` on the bolt, a climbing `countTick` on the hops (70 ms apart at most).
 
-**Konpeito Minefield** (`konpeito_minefield`, Candy Bomb + Chibi Charm). "EVOLUTION! Scatters tiny star
-candies everywhere. They are small. They are armed." Every `cd` 0.5 s tosses 2 konpeito mines to random
-points 30-90 px around the hero (max 28 alive, 12 s life); a mine arms after 0.4 s and pops when an enemy
-touches it: r 20 × area, `dmg` 42, a 25 % slow for 1 s. Mines the hero walks over are kicked 40 px ahead.
-**Versus Sugar Nuke** (one giant bomb + bomblets on a 2 s clock): area denial and kiting, strong while
-moving through lanes, weak against a boss that never walks into them. Sprite: `w_konpeito` 8×8×2 in four
-tints (pink / mint / yellow / lavender through `tint`). Fx: `candyBits` on the pop (the existing emitter,
-budgeted), a 1-frame white blink when a mine arms; sfx `candyThrow`, the generic `explosion` at 0.5 vol.
+**Konpeito Minefield** (`konpeito_minefield`, Candy Bomb + Chibi Charm; package A, done). "EVOLUTION! Scatters
+tiny star candies everywhere. They are small. They are armed."
+`{ dmg: 54, cd: 0.5, amount: 2, area: 1, radius: 23, knock: 60, duration: 12, max: 28, arm: 0.4, slow: 0.75, slowT: 1, kick: 40, near: 30, far: 90 }`.
+Every `cd` s tosses `amount` konpeito to random points `near`-`far` px around the hero, while fewer than `max`
+are out (tosses in the air count). A toss lands after `arm` s and is an armed mine for `duration` s (× the
+duration stat); it pops when an enemy touches it (5 px + the enemy's radius): everything within `radius` ×
+area takes `dmg` and is slowed to `slow` speed for `slowT` s (bosses are not slowed). A mine the moving hero
+walks over is kicked `kick` px the way she is going. The pop is the weapon's own small blast, not
+`World.explode` (four of the generic fireballs a second, each with a shake and a flash, buried the hero).
+**Versus Sugar Nuke** (one giant bomb + bomblets): area denial and kiting, strong while moving through lanes,
+weak against whatever does not walk into them. Gauge 2,245 crowd / 88 boss against 5,176 / 53; in the bench's
+real runs 7,818 DPS in the build / 153 on the boss against 7,520 / 122, but 313 solo kills a minute against 576
+(it cannot clear a wave alone). Sprite: `w_konpeito` 8×8×2, white / grey with a dark rim, in four tints (pink
+/ mint / yellow / lavender, saturated: pastel candies vanished on the pale academy floor) at 1.25×. Fx: a
+white blink when a mine arms; on the pop a ring and spikes in the mine's tint + candy bits (6 pops dressed a
+frame), dust on a kick; sfx `candyThrow` on every other toss, `explosion` at 0.5 vol (90 ms apart at most).
 
 **Soap Opera** (`soap_opera`, Bubble Aura + Inner Monologue; package B, done). "EVOLUTION! You leave a trail of
 soap bubbles. Each one traps an enemy in a dramatic misunderstanding."
@@ -1039,39 +1079,44 @@ entries above. The recipe: `docs/ARCHITECTURE.md` §4 "Adding a second evolution
 The owner approved a "weapon balance check": rank every weapon by measurement instead of by feel
 (`npm run balance:lab -- --weapons`, method and limits in docs/DEVTOOLS.md §4.1). Each weapon is benched at Lv1,
 Lv5 and as every evolution, alone and inside a reference build, on its signature hero (`*`; general weapons on
-Hoshi). `power` / `crowd` / `boss` / `camp` are ratios to the tier's median weapon; `taken x` is the damage the
-hero takes (net of healing) with the weapon against the same kit without it; `camp` columns are the same build
-played standing ground. The figure in brackets is the value before this pass.
+Hoshi). `power` / `crowd` / `boss` / `camp` are ratios to the tier's median weapon (1.00 = typical; < 0.6 is
+flagged WEAK unless the weapon protects or is a stand-your-ground weapon, > 1.6 STRONG); `taken x` is the damage
+the hero takes (net of healing) with the weapon against the same kit without it; the `camp` columns are the same
+build played standing ground. Figures in brackets: the value with the numbers from before this pass.
 
-**Lv1 (P2 × Dream Meadow, King Puff)**
+The snapshot below is the bench at the end of this pass (seeds 1-3, mid bot). The 19 second evolutions that
+landed during it (§8) are in the table as first measured, **before their own balance pass**: rerun the bench for
+today's numbers.
 
-| # | weapon | hero | power (before) | crowd | boss | taken x | camp | camp taken x | flag |
-|---|---|---|---|---|---|---|---|---|---|
-| 1 | Cheat Fireball | isekai_kun* | 4.02 | 2.42 | 5.94 | 0.72 | 5.05 | 0.86 | STRONG |
-| 2 | Star Shot | hoshi* | 3.09 | 2.31 | 4.11 | 0.58 | 2.84 | 0.80 | STRONG |
-| 3 | Notice-Me Sparkles | senpai* | 2.71 | 1.05 | 4.59 | 0.89 | 1.31 | 0.97 | STRONG |
-| 4 | Teapot Tempest | pudding* | 2.04 | 1.82 | 2.43 | 0.59 | 1.00 | 1.03 | STRONG |
-| 5 | Henshin Burst | magical_girl_47* | 2.03 | 1.42 | 2.80 | 0.74 | 2.29 | 0.74 | STRONG |
-| 6 | Thunder Bell | hoshi | 2.00 | 3.03 | 1.13 | 0.96 | 2.43 | 1.12 | STRONG |
-| 7 | Micro Missile Swarm | aoi* | 1.94 | 1.29 | 2.73 | 0.93 | 1.20 | 0.80 | STRONG |
-| 8 | Dark Flame Dragon | kuro* | 1.43 | 1.02 | 1.96 | 1.01 | 1.00 | 0.97 |  |
-| 9 | Idol Lightstick Wave | hoshi | 1.28 | 1.36 | 1.30 | 0.79 | 1.89 | 0.94 |  |
-| 10 | Candy Bomb | hoshi | 1.05 | 1.11 | 1.07 | 0.96 | 0.94 | 1.10 |  |
-| 11 | Heart Boomerang | hoshi | 0.95 | 1.05 | 0.93 | 0.74 | 0.94 | 1.15 |  |
-| 12 | Petal Slash | rin* | 0.81 | 0.96 | 0.73 | 0.89 | 1.12 | 1.03 |  |
-| 13 | Prism Beam | hoshi | 0.81 | 0.94 | 0.73 | 0.84 | 0.76 | 0.96 |  |
-| 14 | Bubble Tea Cannon | hoshi | 0.79 | 1.06 | 0.57 | 0.87 | 0.81 | 0.95 |  |
-| 15 | Yarn Orbit | mochi* | 0.63 (0.41) | 0.87 | 0.44 | 0.73 | 0.64 (0.38) | 0.93 |  |
-| 16 | Paper Crane Flock | hoshi | 0.50 | 0.79 | 0.25 | 0.89 | 0.30 | 0.98 | WEAK |
-| 17 | Horn of Reincarnation | truck_kun* | 0.43 | 0.61 | 0.28 | 0.40 | 1.20 | 0.95 | SUPPORT |
-| 18 | Baka Harisen | akane* | 0.31 | 0.42 | 0.23 | 0.80 | 0.69 | 1.02 |  |
-| 19 | Bubble Aura | hoshi | 0.27 | 0.45 | 0.11 | 0.66 | 0.76 (0.76) | 0.93 |  |
-| 20 | Kotatsu of Sloth | hoshi | 0.01 | 0.01 | 0.00 | 0.96 | 0.75 (0.59) | 0.94 |  |
+**Lv1** (P2 x Dream Meadow at 1:30, King Puff; kit Lv3)
 
-**Lv5 (P3 × Candy Kingdom, Gingerbread Golem)**
+| # | weapon | hero | power | crowd | boss | taken x | camp | camp taken x | flag |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | Cheat Fireball | isekai_kun* | 4.06 | 2.32 | 5.94 | 0.72 | 5.05 | 0.86 | STRONG |
+| 2 | Star Shot | hoshi* | 3.11 | 2.21 | 4.11 | 0.58 | 2.84 | 0.80 | STRONG |
+| 3 | Notice-Me Sparkles | senpai* | 2.75 | 1.01 | 4.59 | 0.89 | 1.31 | 0.97 | STRONG |
+| 4 | Teapot Tempest | pudding* | 2.05 | 1.74 | 2.43 | 0.59 | 1.00 | 1.03 | STRONG |
+| 5 | Henshin Burst | magical_girl_47* | 2.05 | 1.36 | 2.80 | 0.74 | 2.29 | 0.74 | STRONG |
+| 6 | Thunder Bell | hoshi | 1.98 | 2.90 | 1.13 | 0.96 | 2.43 | 1.12 | STRONG |
+| 7 | Micro Missile Swarm | aoi* | 1.95 | 1.24 | 2.73 | 0.93 | 1.20 | 0.80 | STRONG |
+| 8 | Dark Flame Dragon | kuro* | 1.44 | 0.97 | 1.96 | 1.01 | 1.00 | 0.97 |  |
+| 9 | Idol Lightstick Wave | hoshi | 1.28 | 1.30 | 1.30 | 0.79 | 1.89 | 0.94 |  |
+| 10 | Candy Bomb | hoshi | 1.05 | 1.06 | 1.07 | 0.96 | 0.94 | 1.10 |  |
+| 11 | Heart Boomerang | hoshi | 0.95 | 1.00 | 0.93 | 0.74 | 0.94 | 1.15 |  |
+| 12 | Petal Slash | rin* | 0.81 | 0.91 | 0.73 | 0.89 | 1.12 | 1.03 |  |
+| 13 | Prism Beam | hoshi | 0.80 | 0.90 | 0.73 | 0.84 | 0.76 | 0.96 |  |
+| 14 | Bubble Tea Cannon | hoshi | 0.78 | 1.02 | 0.57 | 0.87 | 0.81 | 0.95 |  |
+| 15 | Yarn Orbit | mochi* | 0.64 (0.41) | 0.76 | 0.54 | 0.76 (0.89) | 0.75 (0.38) | 1.04 (0.98) |  |
+| 16 | Paper Crane Flock | hoshi | 0.50 (0.49) | 0.76 | 0.25 | 0.89 (0.93) | 0.30 (0.27) | 0.98 (0.86) | WEAK |
+| 17 | Horn of Reincarnation | truck_kun* | 0.43 | 0.59 | 0.28 | 0.40 | 1.20 | 0.95 | SUPPORT |
+| 18 | Baka Harisen | akane* | 0.31 | 0.40 | 0.23 | 0.80 | 0.69 | 1.02 |  |
+| 19 | Bubble Aura | hoshi | 0.26 (0.27) | 0.43 | 0.11 | 0.66 (0.66) | 0.76 (0.76) | 0.93 (0.93) |  |
+| 20 | Kotatsu of Sloth | hoshi | 0.01 (0.01) | 0.01 | 0.00 | 0.96 (0.97) | 0.75 (0.59) | 0.94 (0.84) |  |
 
-| # | weapon | hero | power (before) | crowd | boss | taken x | camp | camp taken x | flag |
-|---|---|---|---|---|---|---|---|---|---|
+**Lv5** (P3 x Candy Kingdom at 5:00, Gingerbread Golem; kit Lv5)
+
+| # | weapon | hero | power | crowd | boss | taken x | camp | camp taken x | flag |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | 1 | Cheat Fireball | isekai_kun* | 7.39 | 4.21 | 10.31 | 0.46 | 5.35 | 0.44 | STRONG |
 | 2 | Notice-Me Sparkles | senpai* | 2.68 | 2.18 | 3.09 | 0.94 | 2.08 | 0.39 | STRONG |
 | 3 | Dark Flame Dragon | kuro* | 1.74 | 1.67 | 1.75 | 1.24 | 1.40 | 0.83 | STRONG |
@@ -1087,66 +1132,120 @@ played standing ground. The figure in brackets is the value before this pass.
 | 13 | Petal Slash | rin* | 0.89 | 0.61 | 1.15 | 0.72 | 1.29 | 0.72 |  |
 | 14 | Micro Missile Swarm | aoi* | 0.83 | 0.58 | 1.05 | 0.95 | 0.79 | 0.70 |  |
 | 15 | Horn of Reincarnation | truck_kun* | 0.71 | 0.29 | 1.10 | 0.16 | 1.20 | 0.52 |  |
-| 16 | Yarn Orbit | mochi* | 0.59 (0.26) | 0.69 | 0.47 | 0.60 | 0.49 (0.31) | 0.89 | SUPPORT |
-| 17 | Baka Harisen | akane* | 0.53 | 0.38 | 0.65 | 0.15 | 1.09 | 0.61 | SUPPORT |
-| 18 | Paper Crane Flock | hoshi | 0.49 (0.17) | 0.59 | 0.37 | 1.05 | 0.12 (0.04) | 1.01 | WEAK |
-| 19 | Bubble Aura | hoshi | 0.20 | 0.32 | 0.07 | 0.75 | 0.67 (0.47) | 0.80 |  |
-| 20 | Kotatsu of Sloth | hoshi | 0.01 | 0.02 | 0.00 | 0.97 | 0.64 (0.24) | 0.74 |  |
+| 16 | Baka Harisen | akane* | 0.53 | 0.38 | 0.65 | 0.15 | 1.09 | 0.61 | SUPPORT |
+| 17 | Yarn Orbit | mochi* | 0.50 (0.26) | 0.60 | 0.37 | 0.54 (0.73) | 0.48 (0.31) | 1.05 (0.97) | SUPPORT |
+| 18 | Paper Crane Flock | hoshi | 0.49 (0.17) | 0.59 | 0.37 | 1.05 (0.91) | 0.12 (0.04) | 1.01 (1.01) | WEAK |
+| 19 | Bubble Aura | hoshi | 0.20 (0.17) | 0.32 | 0.07 | 0.75 (0.71) | 0.67 (0.47) | 0.80 (0.79) |  |
+| 20 | Kotatsu of Sloth | hoshi | 0.01 (0.00) | 0.02 | 0.00 | 0.97 (1.02) | 0.64 (0.24) | 0.74 (0.94) |  |
 
-**Evolutions (P4 × Shoujo Academy, Council President)**
+**Evolutions** (P4 x Shoujo Academy at 8:00, Council President; kit evolved)
 
-| # | weapon | hero | power (before) | crowd | boss | taken x | camp | camp taken x | flag |
-|---|---|---|---|---|---|---|---|---|---|
-| 1 | Galaxy Barrage | hoshi* | 7.12 | 1.80 | 12.51 | 0.36 | 2.75 | 0.70 | STRONG |
-| 2 | Meteor Lv.99999 | isekai_kun* | 3.70 | 4.05 | 3.39 | 0.69 | 5.72 | 0.70 | STRONG |
-| 3 | Tapioca Tsunami | hoshi | 2.91 | 2.38 | 3.47 | 0.57 | 3.40 | 0.76 | STRONG |
-| 4 | Unsealed Abyss Dragon | kuro* | 2.14 | 1.56 | 2.74 | 0.67 | 1.90 | 0.90 | STRONG |
-| 5 | Love Tornado | hoshi | 1.86 | 1.72 | 2.03 | 0.54 | 2.34 | 1.00 | STRONG |
-| 6 | Shoujo Filter | senpai* | 1.43 | 1.85 | 1.02 | 0.40 | 1.43 | 0.61 |  |
-| 7 | Raijin Drum | hoshi | 1.22 | 1.35 | 1.09 | 1.00 | 1.54 | 0.94 |  |
-| 8 | Sold-Out Dome Tour | hoshi | 1.13 | 1.36 | 0.91 | 0.71 | 1.23 | 0.90 |  |
-| 9 | Al Dente Armageddon | aoi* | 1.05 | 0.90 | 1.21 | 0.87 | 0.99 | 0.86 |  |
-| 10 | Dere Dere Harisen | akane* | 1.04 | 0.66 | 1.43 | 0.05 | 0.81 | 0.16 |  |
-| 11 | Rainbow Cannon | hoshi | 1.00 | 1.28 | 0.73 | 0.75 | 1.63 | 0.78 |  |
-| 12 | Infinite Henshin Loop | magical_girl_47* | 0.89 | 0.71 | 1.07 | 0.01 | 1.01 | 0.01 |  |
-| 13 | Sugar Nuke | hoshi | 0.85 | 1.15 | 0.55 | 1.16 | 0.96 | 0.88 |  |
-| 14 | Thousand Crane Wish | hoshi | 0.76 (0.36) | 0.69 | 0.84 | 0.78 | 0.37 (0.22) | 0.88 |  |
-| 15 | Sakura Tempest | rin* | 0.76 | 0.53 | 1.00 | 0.58 | 0.83 | 0.76 |  |
-| 16 | Isekai Rush Hour | truck_kun* | 0.76 | 0.88 | 0.64 | 0.42 | 1.00 | 0.58 |  |
-| 17 | Cosmic Yarn | mochi* | 0.71 (0.45) | 0.45 | 0.97 | 0.53 | 0.54 (0.37) | 1.02 |  |
-| 18 | Ocean Dome | hoshi | 0.56 (0.48) | 0.77 | 0.35 | 0.38 | 0.87 (0.72) | 0.80 | SUPPORT |
-| 19 | Eternal Tea Party | pudding* | 0.50 | 0.51 | 0.50 | 0.14 | 0.43 | 0.39 | SUPPORT |
-| 20 | Meowteor Hammer | mochi* | 0.40 | 0.48 | 0.32 | 0.76 | 0.29 | 0.99 | WEAK |
-| 21 | Eternal Winter Break | hoshi | 0.14 (0.08) | 0.21 | 0.08 | 0.48 | 0.81 (0.56) | 0.68 | SUPPORT |
+| # | weapon | hero | power | crowd | boss | taken x | camp | camp taken x | flag |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| 1 | Galaxy Barrage | hoshi* | 8.52 | 1.87 | 14.73 | 0.36 | 2.37 | 0.70 | STRONG |
+| 2 | Meteor Lv.99999 | isekai_kun* | 4.20 | 4.19 | 3.99 | 0.69 | 4.93 | 0.70 | STRONG |
+| 3 | Critical Constellation | hoshi* | 3.96 | 1.99 | 5.73 | 0.43 | 2.88 | 0.66 | STRONG |
+| 4 | Tapioca Tsunami | hoshi | 3.37 | 2.47 | 4.09 | 0.57 | 2.93 | 0.76 | STRONG |
+| 5 | Unsealed Abyss Dragon | kuro* | 2.49 | 1.61 | 3.23 | 0.67 | 1.64 | 0.90 | STRONG |
+| 6 | Unrequited Heart | hoshi | 2.29 | 0.52 | 3.94 | 0.62 | 0.41 | 0.93 | STRONG |
+| 7 | Love Tornado | hoshi | 2.14 | 1.78 | 2.39 | 0.54 | 2.02 | 1.00 | STRONG |
+| 8 | Unbandaged Right Arm | kuro* | 1.99 | 1.01 | 2.87 | 0.43 | 1.88 | 0.84 | STRONG |
+| 9 | Who Are You Again? | senpai* | 1.69 | 2.15 | 1.15 | 0.52 | 1.57 | 0.60 | STRONG |
+| 10 | Shoujo Filter | senpai* | 1.60 | 1.91 | 1.21 | 0.40 | 1.23 | 0.61 | STRONG |
+| 11 | Skip Intro | magical_girl_47* | 1.43 | 1.14 | 1.66 | 0.55 | 1.23 | 1.10 |  |
+| 12 | Raijin Drum | hoshi | 1.38 | 1.40 | 1.29 | 1.00 | 1.33 | 0.94 |  |
+| 13 | Already Cut | rin* | 1.32 | 1.43 | 1.13 | 0.81 | 1.58 | 0.93 |  |
+| 14 | Sold-Out Dome Tour | hoshi | 1.27 | 1.41 | 1.07 | 0.71 | 1.06 | 0.90 |  |
+| 15 | Dere Dere Harisen | akane* | 1.22 | 0.68 | 1.69 | 0.05 | 0.70 | 0.16 |  |
+| 16 | Al Dente Armageddon | aoi* | 1.21 | 0.93 | 1.42 | 0.87 | 0.86 | 0.86 |  |
+| 17 | Final Episode Budget Missile | aoi* | 1.20 | 1.58 | 0.75 | 0.97 | 1.28 | 0.92 |  |
+| 18 | Rainbow Cannon | hoshi | 1.12 | 1.33 | 0.86 | 0.75 | 1.40 | 0.78 |  |
+| 19 | Tsun Tsun Drill Harisen | akane* | 1.05 | 0.72 | 1.32 | 0.42 | 1.31 | 0.91 |  |
+| 20 | Infinite Henshin Loop | magical_girl_47* | 1.02 | 0.74 | 1.26 | 0.01 | 0.87 | 0.01 |  |
+| 21 | Failed Exam Storm | hoshi | 0.98 | 1.32 | 0.58 | 0.52 | 1.05 | 0.76 |  |
+| 22 | Sugar Nuke | hoshi | 0.94 | 1.19 | 0.65 | 1.16 | 0.83 | 0.88 |  |
+| 23 | Sakura Tempest | rin* | 0.89 | 0.55 | 1.18 | 0.58 | 0.71 | 0.76 |  |
+| 24 | Thousand Crane Wish | hoshi | 0.88 (0.41) | 0.72 | 0.99 | 0.78 (0.82) | 0.32 (0.19) | 0.88 (0.88) |  |
+| 25 | Konpeito Minefield | hoshi | 0.87 | 0.90 | 0.81 | 0.87 | 0.63 | 0.89 |  |
+| 26 | "Holding Back" Fireball | isekai_kun* | 0.86 | 0.67 | 1.01 | 0.56 | 1.32 | 0.81 |  |
+| 27 | Isekai Rush Hour | truck_kun* | 0.85 | 0.91 | 0.75 | 0.42 | 0.86 | 0.58 |  |
+| 28 | Group Chat Lightning | hoshi | 0.80 | 1.15 | 0.41 | 0.95 | 0.80 | 0.99 |  |
+| 29 | Brown Sugar Railgun | hoshi | 0.79 | 0.85 | 0.69 | 0.74 | 0.95 | 0.72 |  |
+| 30 | Table-Flip Tea Service | pudding* | 0.77 | 0.82 | 0.67 | 0.31 | 0.53 | 0.53 |  |
+| 31 | Refraction Overload | hoshi | 0.72 | 0.83 | 0.58 | 0.87 | 0.83 | 0.89 |  |
+| 32 | Cosmic Yarn | mochi* | 0.71 (0.53) | 0.58 | 0.81 | 0.49 (0.49) | 0.44 (0.32) | 0.99 (0.92) |  |
+| 33 | Soap Opera | hoshi | 0.64 | 0.86 | 0.39 | 0.61 | 0.19 | 0.83 |  |
+| 34 | Ocean Dome | hoshi | 0.62 (0.54) | 0.80 | 0.41 | 0.38 (0.46) | 0.75 (0.62) | 0.80 (0.77) |  |
+| 35 | Eternal Tea Party | pudding* | 0.57 | 0.53 | 0.59 | 0.14 | 0.37 | 0.39 | SUPPORT |
+| 36 | Underground Mosh Pit | hoshi | 0.51 | 0.45 | 0.55 | 0.26 | 0.75 | 0.46 | SUPPORT |
+| 37 | Meowteor Hammer | mochi* | 0.45 | 0.49 | 0.37 | 0.76 | 0.25 | 0.99 | WEAK |
+| 38 | Free Delivery | truck_kun* | 0.42 | 0.46 | 0.37 | 0.32 | 1.58 | 0.55 | SUPPORT |
+| 39 | Eternal Winter Break | hoshi | 0.16 (0.09) | 0.21 | 0.09 | 0.48 (0.62) | 0.70 (0.48) | 0.68 (0.77) | SUPPORT |
+| 40 | All-You-Can-Eat Nabe | hoshi | 0.01 | 0.02 | 0.00 | 0.95 | 1.29 | 0.80 |  |
 
-**Tuned** (EXPANSION §2: fix only what is broken; these were dead weight, 0.0-0.3x the median with no
-protection to show for it):
+**Siblings** (every evolution of a weapon; power within the evolution tier)
+
+| weapon | Lv5 | evolutions (power) | spread |
+| --- | --- | --- | --- |
+| Baka Harisen | 0.53 | Dere Dere Harisen 1.22, Tsun Tsun Drill Harisen 1.05 | 1.16x |
+| Bubble Aura | 0.20 | Ocean Dome 0.62, Soap Opera 0.64 | 1.03x |
+| Bubble Tea Cannon | 0.98 | Tapioca Tsunami 3.37, Brown Sugar Railgun 0.79 | 4.24x (flagged) |
+| Candy Bomb | 1.02 | Sugar Nuke 0.94, Konpeito Minefield 0.87 | 1.08x |
+| Cheat Fireball | 7.39 | Meteor Lv.99999 4.20, "Holding Back" Fireball 0.86 | 4.88x (flagged) |
+| Dark Flame Dragon | 1.74 | Unsealed Abyss Dragon 2.49, Unbandaged Right Arm 1.99 | 1.25x |
+| Heart Boomerang | 1.28 | Love Tornado 2.14, Unrequited Heart 2.29 | 1.07x |
+| Henshin Burst | 0.92 | Infinite Henshin Loop 1.02, Skip Intro 1.43 | 1.40x |
+| Horn of Reincarnation | 0.71 | Isekai Rush Hour 0.85, Free Delivery 0.42 | 2.01x (flagged) |
+| Idol Lightstick Wave | 1.06 | Sold-Out Dome Tour 1.27, Underground Mosh Pit 0.51 | 2.49x (flagged) |
+| Kotatsu of Sloth | 0.01 | Eternal Winter Break 0.16, All-You-Can-Eat Nabe 0.01 | 13.53x (flagged) |
+| Micro Missile Swarm | 0.83 | Al Dente Armageddon 1.21, Final Episode Budget Missile 1.20 | 1.01x |
+| Notice-Me Sparkles | 2.68 | Shoujo Filter 1.60, Who Are You Again? 1.69 | 1.06x |
+| Paper Crane Flock | 0.49 | Thousand Crane Wish 0.88, Failed Exam Storm 0.98 | 1.11x |
+| Petal Slash | 0.89 | Sakura Tempest 0.89, Already Cut 1.32 | 1.49x |
+| Prism Beam | 1.32 | Rainbow Cannon 1.12, Refraction Overload 0.72 | 1.55x |
+| Star Shot | 1.37 | Galaxy Barrage 8.52, Critical Constellation 3.96 | 2.15x (flagged) |
+| Teapot Tempest | 1.05 | Eternal Tea Party 0.57, Table-Flip Tea Service 0.77 | 1.33x |
+| Thunder Bell | 1.19 | Raijin Drum 1.38, Group Chat Lightning 0.80 | 1.72x (flagged) |
+| Yarn Orbit | 0.50 | Cosmic Yarn 0.71, Meowteor Hammer 0.45 | 1.60x (flagged) |
+
+**Tuned** (EXPANSION §2: fix only what is broken; these were dead weight, 0.0-0.3x the median with little or no
+protection to show for it). Level-table numbers only:
 
 | Weapon | Change | Bench before -> after |
 | --- | --- | --- |
-| Yarn Orbit | dmg 10 / 10 / 14 / 14 / 20 -> 14 / 14 / 20 / 22 / 32; area 1 / 1 / 1.15 / 1.2 / 1.3 -> 1.1 / 1.1 / 1.25 / 1.35 / 1.45 (the 3 s on / 1.3 s off cycle and the guard are unchanged) | Lv1 0.41 -> 0.63, Lv5 0.26 -> 0.59 and it now cuts the damage taken by 40 % (SUPPORT) |
-| Cosmic Yarn | dmg 27 -> 36, area 1.15 -> 1.3 (stays an upgrade of the bigger Lv5 ring) | 0.45 -> 0.71; taken x 0.53 |
-| Paper Crane Flock | dmg 9 / 9 / 12 / 12 / 15 -> 11 / 11 / 17 / 21 / 30; cd 1.2 / 1.2 / 1.2 / 1.0 / 1.0 -> 1.2 / 1.2 / 1.1 / 0.9 / 0.8; pierce 1 / 1 / 1 / 1 / 2 -> 1 / 1 / 2 / 2 / 3 | Lv5 0.17 -> 0.49 (still the low end: the bot keeps losing its fold streak) |
-| Thousand Crane Wish | dmg 22 -> 36, pierce 3 -> 4 | 0.36 -> 0.76 |
-| Kotatsu of Sloth | dmg 4 / 5 / 5 / 7 / 9 -> 5 / 7 / 9 / 15 / 28; regen 0.5 / 0.5 / 1 / 1 / 1 -> 0.5 / 1 / 1.5 / 2 / 2.5; armor 1 / 1 / 1 / 2 / 2 -> 1 / 1 / 2 / 2 / 3 | standing ground: Lv1 0.59 -> 0.75, Lv5 0.24 -> 0.64, damage taken -6 % -> -26 % (the bot never stands still: its bot-played row stays ~0) |
-| Eternal Winter Break | dmg 14 -> 24, armor 2 -> 3, regen 1.5 -> 3 | standing ground 0.56 -> 0.81, damage taken -23 % -> -32 % (bot-played -52 %: SUPPORT) |
+| Yarn Orbit | dmg 10 / 10 / 14 / 14 / 20 -> 16 / 16 / 23 / 25 / 37 (area - the ball size, so the Orbital Guard of §7 - and the 3 s on / 1.3 s off cycle are unchanged) | Lv1 0.41 -> 0.64, Lv5 0.26 -> 0.50; damage taken with it at Lv5 -27 % -> -46 % (SUPPORT) |
+| Cosmic Yarn | dmg 27 -> 38 (a bonk no weaker than the Lv5 ball it replaces) | 0.53 -> 0.71; damage taken -51 % |
+| Paper Crane Flock | dmg 9 / 9 / 12 / 12 / 15 -> 11 / 11 / 17 / 21 / 30; cd 1.2 / 1.2 / 1.2 / 1.0 / 1.0 -> 1.2 / 1.2 / 1.1 / 0.9 / 0.8; pierce 1 / 1 / 1 / 1 / 2 -> 1 / 1 / 2 / 2 / 3 | Lv5 0.17 -> 0.49 (still the low end: its darts pick the nearest enemy, and the bot keeps losing the fold streak) |
+| Thousand Crane Wish | dmg 22 -> 36, pierce 3 -> 4 | 0.41 -> 0.88 |
+| Kotatsu of Sloth | dmg 4 / 5 / 5 / 7 / 9 -> 5 / 7 / 9 / 15 / 28; regen 0.5 / 0.5 / 1 / 1 / 1 -> 0.5 / 1 / 1.5 / 2 / 2.5; armor 1 / 1 / 1 / 2 / 2 -> 1 / 1 / 2 / 2 / 3 | standing ground: Lv1 0.59 -> 0.75, Lv5 0.24 -> 0.64, damage taken at Lv5 -6 % -> -26 % (the bot never stands still: its bot-played row is ~0 by construction) |
+| Eternal Winter Break | dmg 14 -> 24, armor 2 -> 3, regen 1.5 -> 3 | standing ground 0.48 -> 0.70; damage taken -38 % -> -52 % (SUPPORT) |
 | Bubble Aura | Lv3-5 dmg 9 / 11 / 14 -> 11 / 15 / 21 | Lv5 standing ground 0.47 -> 0.67 (bot-played 0.17 -> 0.20: the bot kites out of a 42 px aura) |
-| Ocean Dome | dmg 14 -> 21 (a tick no weaker than the Lv5 aura it replaces) | 0.48 -> 0.56; taken x 0.46 -> 0.38 |
+| Ocean Dome | dmg 14 -> 21 (a tick no weaker than the Lv5 aura it replaces) | 0.54 -> 0.62; damage taken -54 % -> -62 % |
 
-Stage clear rates (default lab report, Hoshi / Rin / Kuro, before -> after): every intended cell within a few
-points (Dream Meadow P2 61 -> 62 %, Shoujo Academy P4 49 -> 49 %, Beach P5 46 -> 48 %, Final Arc P6 53 -> 60 %),
-the largest move is Candy Kingdom P3 22 -> 35 % (target 40-70 %). Mochi (`--heroes mochi`): Dream Meadow P2
-36 -> 38 %, Candy Kingdom P3 8 -> 13 %, Beach P5 39 -> 47 %.
+An area bump for Yarn Orbit / Cosmic Yarn was tried and dropped: bigger balls eat more bullets, and the late-game
+storm floor of §7 (`tests/orbitals.test.ts`) went under 10 %.
+
+Stage clear rates (default lab report on the same tree, the old numbers -> the new ones; Hoshi / Rin / Kuro):
+every cell within 6 points - Dream Meadow P2 28 -> 32 %, Candy Kingdom P3 38 -> 35 %, Shoujo Academy P4 54 -> 54 %,
+Beach P5 50 -> 51 %, Final Arc P5 29 -> 27 % and P6 54 -> 55 %; the first Dream Meadow clear of the progression
+sample 1.82 -> 1.86 h (4 accounts). Mochi alone (`--heroes mochi`, measured before the second evolutions landed, with a
+slightly larger Yarn Orbit buff): Dream Meadow P2 36 -> 38 %, Candy Kingdom P3 8 -> 13 %, Beach P5 39 -> 47 %: she
+still trails the starters at P2-P3.
 
 **Left alone on purpose** (strong, not broken - the owner decides):
 
 - **Cheat Fireball / Meteor Lv.99999** (4-7x): the overdone cast is ~19 normal casts' worth. Isekai-kun's stage
-  clear rates sit with the other heroes' (`--heroes isekai_kun`: 60 / 26 / 47 / 55 / 73 % at the intended cells
-  against 61 / 22 / 49 / 46 / 53 %), so it is his identity, not a trivial strategy.
-- **Galaxy Barrage** (boss 12.5x: the Council President in ~35 s against ~145 s for the kit alone). Boss HP is
+  clear rates sat with the other heroes' (`--heroes isekai_kun`: 60 / 26 / 47 / 55 / 73 % at the intended cells
+  against 61 / 22 / 49 / 46 / 53 % for Hoshi / Rin / Kuro, before the second evolutions landed), so it is his
+  identity, not a trivial strategy.
+- **Galaxy Barrage** (boss 12-15x: the Council President in ~35 s against ~145 s for the kit alone). Boss HP is
   tuned around Hoshi (85 % of the progression simulator's runs), so cutting it would raise walls everywhere.
-- **Tapioca Tsunami** (2.9x), **Notice-Me Sparkles** (2.7x), **Dark Flame Dragon / Unsealed Abyss Dragon** (1.7-2.1x).
-- Low but doing their job: **Baka Harisen** (0.3-0.5x, damage taken -85 % at Lv5), **Eternal Tea Party** (0.5x,
+- **Tapioca Tsunami** (2.9-3.4x), **Notice-Me Sparkles** (2.7x), **Dark Flame Dragon / Unsealed Abyss Dragon**
+  (1.7-2.5x).
+- Low but doing their job: **Baka Harisen** (0.3-0.5x, damage taken -85 % at Lv5), **Eternal Tea Party** (0.57x,
   -86 %), **Horn of Reincarnation Lv1** (0.43x, -60 %), **Ocean Dome**.
-- **Meowteor Hammer** (0.40x, 1.8x below its sibling Cosmic Yarn): the second-evolution pass balances it with
-  this tool (§8).
+- **Paper Crane Flock** is still flagged (0.49-0.50x): out of dead-weight range, a gap left for players (fold
+  streaks, a Wish Charm build) rather than a number to chase.
+- The **second evolutions** (§8): the bench flags 8 sibling gaps (Tapioca Tsunami / Brown Sugar Railgun 4.2x,
+  Meteor / "Holding Back" 4.9x, Galaxy Barrage / Critical Constellation 2.2x, Meowteor Hammer 0.45x WEAK ...).
+  Their balance pass uses this tool.

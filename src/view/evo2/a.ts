@@ -3,7 +3,7 @@
  * generic hit feedback cannot express for:
  *
  *   critical_constellation (weapons/star-shot.ts)       the "comet" trail; a thin gold line from each crit to the
- *       next one (FX_STAR_LINK) with a twinkle on the new star, a small ring when the crit kills
+ *       next one (FX_STAR_LINK, up to 130 px apart) with a twinkle on the new star, a small ring when the crit kills
  *   already_cut (weapons/petal-slash.ts)                the cut line (w_iai_line, stretched: hairline ->
  *       afterimage -> wisps), a white slit on every marked enemy until the click, the sheath glint on Rin's
  *       hip (her own look: no Focus) and pink halves flying apart on each delayed hit
@@ -106,6 +106,8 @@ const popSpike: EmitterDef = {
 // ---------------------------------------------------------------- pools
 const LINKS = 24;
 const LINK_LIFE = 0.45;
+/** Longest link drawn (px). */
+const LINK_MAX = 130;
 const linkXY = new Float32Array(LINKS * 4);
 const linkT = new Float32Array(LINKS).fill(9);
 let linkN = 0;
@@ -198,7 +200,11 @@ const packageA: Evo2Module = {
       w.bus.on("heroFx", (e) => {
         switch (e.kind) {
           case FX_STAR_LINK: {
-            if (e.x !== e.x2 || e.y !== e.y2) {
+            // (a link stays local: two crits a screen apart get their twinkles, not a line across the whole fight)
+            const lx = e.x2 - e.x;
+            const ly = e.y2 - e.y;
+            const far = lx * lx + ly * ly;
+            if (far > 0 && far < LINK_MAX * LINK_MAX) {
               const i = linkN++ % LINKS;
               linkXY[i * 4] = e.x;
               linkXY[i * 4 + 1] = e.y;

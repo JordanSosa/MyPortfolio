@@ -238,7 +238,7 @@ export interface Sibling {
   /** Power of the base weapon at its last level (within the Lv5 tier). */
   l5Power: number;
   evos: { id: string; name: string; passive: string; power: number; crowd: number; boss: number; takenX: number; camp: number; vsBest: number; flag: string }[];
-  /** Best / worst power among the evolutions (1 = one evolution, or equals). */
+  /** Best / worst power among the evolutions (1 = one evolution, or equals); a stand-your-ground evolution counts with its `camp`. */
   spread: number;
   flag: string;
 }
@@ -394,21 +394,23 @@ export function aggregate(plan: BenchPlan, res: Res): Bench {
     const evos = rows.filter((r) => r.base === b && r.tier === "evo");
     if (!evos.length) continue;
     const l5 = rows.find((r) => r.base === b && r.tier === "L5");
-    const best = Math.max(...evos.map((r) => r.power));
-    const worst = Math.min(...evos.map((r) => r.power));
+    // a stand-your-ground weapon (bot-played power ~0 by construction: the Kotatsu line) is compared on its camp DPS
+    const eff = (r: Row) => (r.power < WEAK && r.camp >= WEAK ? r.camp : r.power);
+    const best = Math.max(...evos.map(eff));
+    const worst = Math.min(...evos.map(eff));
     const spread = worst > 0 ? best / worst : NaN;
     siblings.push({
       base: b,
       name: l5?.name ?? b,
       l5Power: l5?.power ?? NaN,
-      evos: evos.map((r) => ({ id: r.id, name: r.name, passive: r.passive ?? "", power: r.power, crowd: r.crowd, boss: r.boss, takenX: r.takenX, camp: r.camp, vsBest: best > 0 ? r.power / best : NaN, flag: r.flag })),
+      evos: evos.map((r) => ({ id: r.id, name: r.name, passive: r.passive ?? "", power: r.power, crowd: r.crowd, boss: r.boss, takenX: r.takenX, camp: r.camp, vsBest: best > 0 ? eff(r) / best : NaN, flag: r.flag })),
       spread,
       flag: evos.length > 1 && spread > SIBLING_SPREAD ? `evolutions ${spread.toFixed(1)}x apart` : "",
     });
   }
   const flags: string[] = [];
   for (const r of rows) if (r.flag) flags.push(`${r.flag} ${r.name} (${r.tier}): power ${r.power.toFixed(2)}x the tier median (crowd ${r.crowd.toFixed(2)}x, boss ${r.boss.toFixed(2)}x)${r.notes.length ? `; ${r.notes.join("; ")}` : ""}`);
-  for (const s of siblings) if (s.flag) flags.push(`SIBLINGS ${s.name}: ${s.flag} (${s.evos.map((e) => `${e.name} ${e.power.toFixed(2)}x`).join(", ")})`);
+  for (const s of siblings) if (s.flag) flags.push(`SIBLINGS ${s.name}: ${s.flag} (${s.evos.map((e) => `${e.name} ${e.power.toFixed(2)}x${e.power < WEAK && e.camp >= WEAK ? ` / ${e.camp.toFixed(2)}x standing ground` : ""}`).join(", ")})`);
   return { rows, tiers, siblings, flags };
 }
 
@@ -468,9 +470,9 @@ export function benchMarkdown(b: Bench, meta: BenchMeta, was?: Bench): string {
     for (const r of b.rows.filter((x) => x.tier === t.id).sort((x, y) => x.rank - y.rank)) md.push(`| ${rowCells(r, wasBy.get(r.key)).join(" | ")} |`);
   }
   md.push("", "## Evolutions of each weapon (siblings)", "");
-  md.push("| weapon | Lv5 power | evolution (passive) | power | crowd | boss | taken x | vs best sibling | flag |", "| --- | --- | --- | --- | --- | --- | --- | --- | --- |");
+  md.push("| weapon | Lv5 power | evolution (passive) | power | crowd | boss | taken x | camp | vs best sibling | flag |", "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |");
   for (const s of b.siblings) {
-    s.evos.forEach((e, i) => md.push(`| ${i ? "" : s.name} | ${i ? "" : f2(s.l5Power)} | ${e.name} (${e.passive}) | ${f2(e.power)} | ${f2(e.crowd)} | ${f2(e.boss)} | ${f2(e.takenX)} | ${f2(e.vsBest)} | ${[e.flag, i ? "" : s.flag].filter(Boolean).join("; ")} |`));
+    s.evos.forEach((e, i) => md.push(`| ${i ? "" : s.name} | ${i ? "" : f2(s.l5Power)} | ${e.name} (${e.passive}) | ${f2(e.power)} | ${f2(e.crowd)} | ${f2(e.boss)} | ${f2(e.takenX)} | ${f2(e.camp)} | ${f2(e.vsBest)} | ${[e.flag, i ? "" : s.flag].filter(Boolean).join("; ")} |`));
   }
   return `${md.join("\n")}\n`;
 }

@@ -16,7 +16,8 @@
  *   npm run balance:lab -- --weapons                     the WEAPON BENCH: every weapon at Lv1 / Lv5 / each evolution, alone and inside a
  *                                                        reference build (share, kills, boss, damage taken with / without), ranked
  *                                                        against its tier's median, evolutions of one weapon side by side
- *     --weapons --only yarn_orbit,cosmic_yarn (some weapons)  --seeds 1-3  --set "weapon.yarn_orbit.dmg*=1.3" (before -> after)
+ *     --weapons --only yarn_orbit,cosmic_yarn (some families: the ratios are then to THEIR median - raw numbers and siblings only)
+ *     --weapons --seeds 1-3  --set "weapon.yarn_orbit.dmg*=1.3" (before -> after per row)
  *
  * Output: <out>/report.html (self-contained, inline SVG), report.json, report.md; the paths are printed.
  * Cache: node_modules/.cache/balance-lab (keyed by what each job depends on; see deps.ts).

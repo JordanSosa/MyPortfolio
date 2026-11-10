@@ -40,11 +40,11 @@ export function writeBench(out: string, b: Bench, meta: BenchMeta, was?: Bench):
         }),
     );
   }
-  h += `<h2>Evolutions of each weapon (siblings)</h2><p>Every evolution of a base weapon next to its Lv5 form (power within its own tier). Evolutions of one weapon more than ${SIBLING_SPREAD}x apart are flagged.</p>`;
+  h += `<h2>Evolutions of each weapon (siblings)</h2><p>Every evolution of a base weapon next to its Lv5 form (power within its own tier). Evolutions of one weapon more than ${SIBLING_SPREAD}x apart are flagged (a stand-your-ground evolution is compared on its camp DPS).</p>`;
   h += table(
-    ["weapon", "Lv5 power", "evolution (passive)", "power", "crowd", "boss", "taken x", "vs best sibling", "flag"],
+    ["weapon", "Lv5 power", "evolution (passive)", "power", "crowd", "boss", "taken x", "camp", "vs best sibling", "flag"],
     b.siblings.flatMap((s) =>
-      s.evos.map((e, i) => [i ? "" : esc(s.name), i ? "" : f2(s.l5Power), `${esc(e.name)} <span class="muted">(${esc(e.passive)})</span>`, `${bar(e.power)}<span class="num">${f2(e.power)}</span>`, f2(e.crowd), f2(e.boss), f2(e.takenX), f2(e.vsBest), `<span class="bad">${esc([e.flag === "SUPPORT" ? "" : e.flag, i ? "" : s.flag].filter(Boolean).join("; "))}</span>`]),
+      s.evos.map((e, i) => [i ? "" : esc(s.name), i ? "" : f2(s.l5Power), `${esc(e.name)} <span class="muted">(${esc(e.passive)})</span>`, `${bar(e.power)}<span class="num">${f2(e.power)}</span>`, f2(e.crowd), f2(e.boss), f2(e.takenX), f2(e.camp), f2(e.vsBest), `<span class="bad">${esc([e.flag === "SUPPORT" ? "" : e.flag, i ? "" : s.flag].filter(Boolean).join("; "))}</span>`]),
     ),
   );
   h += `</main></body></html>`;

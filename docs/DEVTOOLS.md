@@ -315,7 +315,7 @@ evolutions** against the median weapon of its tier, so a quietly weak or broken 
 `shots/balance-lab/weapons/report.html` / `report.json` / `report.md` and prints the flags.
 
 ```
-npm run balance:lab -- --weapons                                   # all weapons: ~2.5 min cold, ~4 s warm
+npm run balance:lab -- --weapons                                   # all 80 rows: ~3 min cold (1,796 jobs), ~3 s warm
 npm run balance:lab -- --weapons --set "weapon.yarn_orbit.dmg*=1.3"   # what-if: before -> after per row (~20-45 s)
 npm run balance:lab -- --weapons --set "weapon.kotatsu_of_sloth.levels.4.dmg=26"   # one level's number
 npm run balance:lab -- --weapons --seeds 1-5 | --only yarn_orbit,meowteor_hammer | --bot good | --json
@@ -346,7 +346,8 @@ mean) are ratios to the **median of the tier** (a robust centre; the tier's MAD 
   instead) nor is a stand-your-ground weapon (`camp` >= 0.6x).
 - `STRONG`: power > 1.6x.
 - `SIBLINGS`: two evolutions of one weapon more than 1.6x apart. The last table lists every evolution of a
-  weapon next to its Lv5 form (`vs best sibling`): use it to balance a second evolution against the first.
+  weapon next to its Lv5 form (`vs best sibling`): use it to balance a second evolution against the first. A
+  stand-your-ground evolution (the Kotatsu line) is compared on its `camp` DPS.
 - Notes: "crowd / boss specialist", "plays far below its gauge" (strong in ideal conditions, weak in play:
   reach, targeting or the bot), "cannot clear the wave alone", "hero takes N % more damage with it".
 
@@ -359,6 +360,9 @@ check the stages with the default report: `npm run balance:lab -- --set ...` (be
 
 - It is a rough-ranges tool. Between two seed sets `power` moves ~8 % (median; 30 % at worst), `taken x`
   ~15 %: a single 0.55 or 1.7 is not a finding, a 0.2 or a 4 is. `--seeds 1-5` tightens it.
+- `--only` benches some weapon families: the ratios are then to the median of **those** rows. Use it for raw
+  numbers and sibling comparisons; rank against the full table (a what-if on the full table reruns only the
+  jobs that hold the weapon anyway).
 - One reference kit and one cell per tier. A weapon that shines with a particular partner, stat or relic
   (Twin Charm on an amount weapon, a fold streak the bot keeps losing) is under-rated; the kit's own weapons are
   measured next to a slightly different kit (the spare).
@@ -372,8 +376,14 @@ check the stages with the default report: `npm run balance:lab -- --set ...` (be
 - Boss DPS in a real fight is far below the pinned-boss gauge (adds soak hits, the bot dodges): Paper Crane
   Flock is 2x the median on the pinned boss and 0.14x in the fight (its darts pick the nearest enemy).
 
-**First run** (Season 3 content, 20 weapons, 21 evolutions): see the report; the pass that followed is in
-`docs/content/weapons.md` §9.
+**Measured** (4 cores): 80 rows = 1,796 jobs (a gauge, 3 solo runs, 3 build slices, 3 boss fights and 3 camp
+slices per row, plus the shared kit-alone baselines on twice the seeds): ~150 s for the first 61 rows on a busy
+machine, ~3 s from a warm cache, 20-45 s for a what-if on one weapon family.
+
+**First run** (Season 3 content): the ranking, what was tuned (Yarn Orbit, Paper Crane Flock, Kotatsu of Sloth,
+Bubble Aura and their first evolutions) and what was left alone are in `docs/content/weapons.md` §9. The
+existing gauge table (the default report's "Weapon DPS") had Paper Crane Flock as a boss outlier on the **high**
+side; in real fights it was the weakest weapon in the game.
 
 ## 5. Scene gallery (`npm run scenes`, `scripts/scenes.mjs`)
 
