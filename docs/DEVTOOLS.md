@@ -442,7 +442,7 @@ The exit code is 1 when a shot has an error-level flag.
 | `pageError` | error | an uncaught error or a `console.error` (minus SwiftShader / Vite noise) |
 | `scroll` | error | the document or a vertical page scroller scrolls sideways |
 | `overflow` | warning | a text or control element sticks out of the viewport and is not clipped on purpose or sliding |
-| `scenario` / `harness` | error | the scenario ended in `error`, a timeout, or the page / browser crashed (that worker gets a fresh page or browser and the run goes on: before, one crashed Chromium in an `--all` run failed every later job of its worker and the run hung with nothing printed) |
+| `scenario` / `harness` | error | the scenario ended in `error`, a timeout, or the page / browser crashed (that worker gets a fresh page or browser and the run goes on: before, one crashed Chromium in an `--all` run failed every later job of its worker and the run hung with nothing printed). A scene that failed because the browser itself gave out (a crashed tab, `WebGL2 is not available`, `ERR_INSUFFICIENT_RESOURCES`) is shot once more on a fresh browser before it is judged; the result line counts them (`3 scene(s) reshot on a fresh browser`). The 135-scene `--all` run on one device hit this in the four `chest` scenes |
 | `diff` (`--diff`) | warning > 0.5 % + noise, error > 10 % + noise | pixels changed vs the baseline |
 
 Notes on the checks:
@@ -726,8 +726,8 @@ above scores 100 % on both, on any machine and under any load.
 ### 6.4 `npm run check:bundle` (`scripts/check-bundle.mjs`, ~4 s)
 
 1. `vite build`.
-2. The main chunk must stay within 1,608,000 B raw and 542,000 B gzip. Today it is 1,560,803 B (97.1 %)
-   and 525,950 B gzip (97.0 %).
+2. The main chunk must stay within 1,608,000 B raw and 542,000 B gzip. Today it is 1,560,834 B (97.1 %)
+   and 525,959 B gzip (97.0 %).
    - The budget was 1,575,000 B / 530,000 B until the twenty second evolutions (docs/content/weapons.md §8) took
      the chunk from 1,498,877 B / 506,784 B to 99 % of it. It was raised on purpose to measured + 3 %.
    - Raise it the same way (in review, with the old and new numbers written here), never in passing.

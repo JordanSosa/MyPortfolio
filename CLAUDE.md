@@ -43,9 +43,10 @@ Further docs:
 | Unit tests while iterating | `npm test` (the fast suite); `npm run test:slow` / `npm run test:all` for long headless runs | 8 s / 40 s / 50 s |
 | Type errors | `npm run typecheck` | 2 s |
 | To *see* the game (any change to UI, art, fx or layout) | `npm run scenes`, then open `shots/scenes/latest/contact.png` | ~2 min for 100 shots |
-| A narrower visual check | `npm run scenes -- --only boss:,ult: --devices i13,se`; `--all` covers all 116 scenarios | seconds |
+| A narrower visual check | `npm run scenes -- --only boss:,ult: --devices i13,se`; `--all` covers all 135 scenarios (~2.5 min on one device) | seconds |
 | A transient effect (an ult, a flash, a phase change) | film it: `npm run scenes -- --only "ult:kuro~180/15"` (a checked shot every 15 frames for 180) or `--film` | ~6 s |
 | Is the hero still visible in a busy fight? | `npm run scenes -- --only crowd: --film 120/15 --devices i13` (`washout`); what buries her: add `--blame` | ~1-2 min |
+| A second evolution in play (docs/content/weapons.md §8) | `npm run scenes -- --only evo2: --film 120/15 --devices i13` (all 20, the weapon alone mid-Shoujo Academy); one: `--only "evo2:mosh_pit~60/4"`, `evo2:<id>:calm`, `evo2:<id>@final_arc` (a dark floor). The choice: `--only levelup:evo-two,levelup:route-split,chest:route-split,article: --devices i13,se` | ~40 s for the 180 shots |
 | Visual regressions | `npm run scenes -- --baseline` once, then `npm run scenes -- --diff` | |
 | A specific game state | `/?scenario=<name>&step=1`, then `__kk.step(n)` and `await __kk.snapshot()` (JSON). List: `await __kk.scenarios()` | <1 s |
 | Live state on a device | dev console: `?dev=1` (also turns developer mode on for that browser), or in developer mode the `` ` `` key / a 3-finger long-press. Phone in the artifact viewer: Settings, tap the build label 7 times | |

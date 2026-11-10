@@ -14,7 +14,7 @@ const ROOT = fileURLToPath(new URL("..", import.meta.url));
 /**
  * Main chunk budget. Measured: 1,482,128 B raw / 498.2 KB gzip before the developer suite, 1,498,877 B /
  * 505.3 KB after it (the always-on profiler + diagnostics): budget 1,575,000 / 530,000.
- * Season 3, the twenty second evolutions (20 weapons, their sprites and fx): 1,560,803 B raw / 525,950 B gzip,
+ * Season 3, the twenty second evolutions (20 weapons, their sprites and fx): 1,560,834 B raw / 525,959 B gzip,
  * 99 % of that budget. Raised on purpose, in review, to measured + 3 %. Raise it the same way: never in passing.
  */
 export const BUDGET = { raw: 1_608_000, gzip: 542_000 };
