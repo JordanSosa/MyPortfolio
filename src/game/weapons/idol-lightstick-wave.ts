@@ -284,7 +284,7 @@ export const moshPit: WeaponDef = {
   evolved: true,
   desc: "EVOLUTION! The venue holds forty people. Every beat is a stomp, and every stomp is a shove.",
   // (cd = 60 / 140 for tooling; the sim stomps on the stage's beat)
-  levels: [{ dmg: 40, cd: 0.429, every: 1, amount: 1, range: 70, knock: 110, daze: 0.2, need: 6, stacks: 6, dr: 0.04, grow: 0.06 }],
+  levels: [{ dmg: 46, cd: 0.429, every: 1, amount: 1, range: 78, knock: 110, daze: 0.2, need: 6, stacks: 6, dr: 0.04, grow: 0.06 }],
   upgrades: [],
   update(w, inst) {
     const d = inst.data;

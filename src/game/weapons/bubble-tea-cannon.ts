@@ -297,7 +297,7 @@ export const brownSugarRailgun: WeaponDef = {
   sfx: "boba",
   evolved: true,
   desc: "EVOLUTION! One pearl through one very long straw. It does not bounce. It does not need to.",
-  levels: [{ dmg: 190, cd: 1.3, amount: 1, speed: 520, knock: 70, reach: 440, falloff: 0.12, floor: 0.4, syrup: 2, syrupW: 6, syrupSlow: 0.65, syrupDps: 30 }],
+  levels: [{ dmg: 540, cd: 1.05, amount: 1, speed: 520, knock: 70, reach: 440, falloff: 0.08, floor: 0.5, syrup: 2, syrupW: 8, syrupSlow: 0.65, syrupDps: 60 }],
   upgrades: [],
   update(w, inst, dt) {
     prune(inst);

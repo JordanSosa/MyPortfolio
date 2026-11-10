@@ -746,7 +746,8 @@ Icons are `icon_<id>` (16×16, gold twinkle); world sprites and manifest rows go
 
 **Meowteor Hammer** (`meowteor_hammer`, Yarn Orbit + Power Bow; pilot, done). "EVOLUTION! 4 spiked yarn
 wrecking balls swing far out and SLAM on every swing. Blocking is somebody else's arc."
-`{ dmg: 28, cd: 2.6, amount: 4, area: 1.15, speed: 4.4, knock: 90, every: 0.3, block: 1, mend: 2.2, rIn: 26, rOut: 74, slam: 26, slamDmg: 90 }`.
+`{ dmg: 46, cd: 2.0, amount: 4, area: 1.15, speed: 4.4, knock: 110, every: 0.3, block: 1, mend: 2.2, rIn: 26, rOut: 74, slam: 30, slamDmg: 170 }`
+(the sibling pass of §9.1; the pilot shipped `dmg` 28, `cd` 2.6, `knock` 90, `slam` 26, `slamDmg` 90).
 Four permanent spiked balls (`w_meowteor`, 16×16×2, body r 8 × area) circle at `speed` rad/s on a ring whose
 radius swings `rIn` -> `rOut` -> `rIn` (× area) once per `cd` s (× the cooldown stat); at the far point every
 ball that is up SLAMS: a blast r `slam` × area for `slamDmg` (scaled like `dmg`), knock × 1.6, as the
@@ -761,7 +762,8 @@ particles on the fx layers); sfx: `orbitHit` hits, the generic `explosion`.
 heavy comet stars. Every critical hit draws the next star of the constellation."
 `{ dmg: 88, cd: 1.6, amount: 5, speed: 150, pierce: 4, knock: 60, mini: 0.5 }`.
 Every `cd` s a volley of `amount` comets (0.07 s apart; `w_comet_star` 16×16×2, r 8, no homing, a slight lead)
-flies at the `amount` highest-HP enemies in view, one each (fewer enemies: they share). The first hit of each
+flies at the `amount` highest-HP enemies in view, one each (fewer enemies: they share; with a boss in view every
+fourth comet - the 1st, the 5th ... - is aimed at the boss: §9.1). The first hit of each
 comet always crits; what it pierces afterwards rolls like any hit. A crit of the weapon that kills (bosses
 excepted) splits into two mini stars of `mini` × `dmg` (`miniStar`, the weapon's own source, so their crits
 draw on; 14 splits a second at most). Hoshi's Star Shot talents and constellations read it as Star Shot (Fan
@@ -775,7 +777,8 @@ to the previous one (within 0.7 s and 130 px) by a 1-px pale line on a gold bed 
 
 **Already Cut** (`already_cut`, Petal Slash + Swift Shoes; Rin; package A, done). "EVOLUTION! One long cut the
 way you face. Nothing happens. Then she sheathes the blade."
-`{ dmg: 62, cd: 1.3, amount: 1, area: 1, knock: 40, len: 150, wid: 14, wait: 0.45, moved: 0.5, petals: 3, petalDmg: 14 }`.
+`{ dmg: 54, cd: 1.3, amount: 1, area: 1, knock: 40, len: 150, wid: 14, wait: 0.45, moved: 0.5, petals: 3, petalDmg: 14 }`
+(§9.1: `dmg` was 62; Sakura Tempest went from `dmg` 28 / `petalDmg` 14 to 33 / 17).
 Every `cd` s a line cut `len` × `wid` px (× area) from the hero: no damage on the cut, every enemy on the line
 is **marked** (48 at most); `wait` s later (the sheath click) every mark still standing takes `dmg` at once,
 +`moved` if Rin has walked more than 6 px since the cut. A mark that dies sheds `petals` petal blades
@@ -813,7 +816,8 @@ starts outside her body), `WFX_CATCH` on every catch, the heart fades into her h
 
 **Group Chat Lightning** (`group_chat_lightning`, Thunder Bell + Friendship Bracelet; package A, done).
 "EVOLUTION! One bolt, forwarded to everyone. Nobody asked to be added."
-`{ dmg: 58, cd: 0.9, amount: 1, hops: 10, perWeapon: 2, reach: 80, hopT: 0.04, seenR: 30, seenMul: 2, knock: 18 }`.
+`{ dmg: 66, cd: 0.9, amount: 1, hops: 10, perWeapon: 2, reach: 80, hopT: 0.04, seenR: 36, seenMul: 3, knock: 18 }`
+(§9.1: was `dmg` 58, `seenR` 30, `seenMul` 2).
 Every `cd` s one bolt hits a random enemy in view and is **forwarded**: every `hopT` s it hops to the nearest
 enemy within `reach` px (× area) that this chain has not hit, `hops` times + `perWeapon` for every other weapon
 held, `dmg` a hop with no falloff. The last enemy of a **full** chain takes the "seen by everyone" blast (r
@@ -846,7 +850,8 @@ frame), dust on a kick; sfx `candyThrow` on every other toss, `explosion` at 0.5
 
 **Soap Opera** (`soap_opera`, Bubble Aura + Inner Monologue; package B, done). "EVOLUTION! You leave a trail of
 soap bubbles. Each one traps an enemy in a dramatic misunderstanding."
-`{ dmg: 24, cd: 0.4, amount: 1, area: 1, radius: 22, slow: 0.62, knock: 12, every: 14, max: 24, life: 3.5, hold: 1.6, pop: 90, popR: 26, br: 8 }`.
+`{ dmg: 30, cd: 0.4, amount: 1, area: 1, radius: 30, slow: 0.62, knock: 12, every: 12, max: 24, life: 4.5, hold: 2.2, pop: 120, popR: 26, br: 8 }`
+(§9.1: was `dmg` 24, `radius` 22, `every` 14, `life` 3.5, `hold` 1.6, `pop` 90).
 While she moves, a soap bubble (`w_soap_bubble`, touch r `br`) is left every `every` px where she just was
 (`life` s × duration, `max` alive + 2 per extra amount; when full the oldest free one makes way). The first
 enemy that touches one is lifted and held inside it (`Enemy.stun` + `z`) for `hold` s × duration (elites
@@ -861,7 +866,8 @@ rim), a ring + droplets on the pop, "?!" at most every 1.4 s; sfx `bubblePop`.
 
 **Refraction Overload** (`refraction_overload`, Prism Beam + Lucky Clover; package B, done). "EVOLUTION! One
 beam. It hits something, splits in three, and each of those has opinions."
-`{ dmg: 28, cd: 1.5, amount: 1, duration: 0.7, area: 1, len: 130, len2: 90, len3: 60, fan: 28, width: 3.5, tick: 0.1, knock: 10, d2: 18, d3: 12 }`.
+`{ dmg: 36, cd: 1.5, amount: 1, duration: 0.7, area: 1, len: 130, len2: 90, len3: 60, fan: 28, width: 3.5, tick: 0.1, knock: 10, d2: 24, d3: 16 }`
+(§9.1: was `dmg` 28, `d2` 18, `d3` 12).
 Every `cd` s one `duration` s beam at the nearest enemy (len `len`, +1 root beam per 2 amount, max 3). From
 the first enemy it touches it splits into 3 beams fanned ±`fan`° around its own direction (len `len2`,
 `d2` a tick); each of those splits once more on its first enemy (9 beams, len `len3`, `d3` a tick). A child
@@ -974,9 +980,10 @@ Loop's ×0.01.
 
 **"Holding Back" Fireball** (`holding_back`, Cheat Fireball + Twin Charm; Isekai-kun). "EVOLUTION! He is
 holding back. This is him holding back: a stream of perfectly ordinary fireballs." A stream: one small
-fireball every `cd` 0.14 s at the nearest enemy (`speed` 230, blast r `blast` 15 × area, `dmg` 26, knock
-20), +1 stream (at the next-nearest enemy) per 2 amount; no "Did I overdo it?" cast. Every `sneeze` 100th
-fireball he sneezes: one base-weapon overdo blast (`sneezeDmg` 156, r `sneezeBlast` 70, the crater).
+fireball every `cd` 0.14 s at the nearest enemy (`speed` 230, blast r `blast` 24 × area, `dmg` 48, knock
+20), +1 stream (at the next-nearest enemy) per 2 amount; no "Did I overdo it?" cast. Every `sneeze` 50th
+fireball he sneezes: one base-weapon overdo blast (`sneezeDmg` 320, r `sneezeBlast` 90, the crater).
+(§9.1: was `dmg` 26, `blast` 15, `sneeze` 100, `sneezeDmg` 156, `sneezeBlast` 70.)
 **Versus Meteor Lv.99999** (slow, huge, on the biggest crowd): constant single-target and line pressure, no
 screen-clearing hit. Sprites: none new (`w_fireball` at 0.6 scale, no trail). Fx: the small blast is sparks
 and a thin ring, not an explosion (no `explosion` event; budget 10 a frame); status-window pop
@@ -988,9 +995,10 @@ this pair waits for the sibling pass.
 **Free Delivery** (`free_delivery`, Horn of Reincarnation + Magnet Star; Truck-kun). "EVOLUTION! The horn
 now pulls. Parcels are delivered to the bumper. The parcels are enemies." The honk is reversed: every `cd`
 1.5 s a cone ahead (`len` 110 × area, half-angle `angle` 40°) **pulls** every enemy in it up to `pull` 80 px
-toward the drop spot just off the bumper (a `dmg` 30 tug; elites half, bosses and props 0), then
+toward the drop spot just off the bumper (a `dmg` 32 tug; elites half, bosses and props 0), then
 `slamAfter` 0.24 s later the delivery hits everything there (r `slamR` 22) for `slam` 130 and throws it
-ahead; every pickup in the cone is pulled too (food and chests included; gems are left to the magnet). The moving ram stays
+ahead; a boss the cone reaches is not pulled, so its parcel is delivered where it stands (the same `slam`,
+no knock: §9.1); every pickup in the cone is pulled too (food and chests included; gems are left to the magnet). The moving ram stays
 (`ram` 45). Its kills are isekai'd with the base weapon's extra-gem chance (`isekai` 0.25), quietly: one
 light pillar per delivery instead of one per kill (they all die in one spot, on the truck). No phantom
 trucks. **Versus Isekai Rush Hour** (360° honk, scheduled phantom trucks): aimed, greedy and close - he
@@ -1002,7 +1010,8 @@ needs the build around it.
 
 **Brown Sugar Railgun** (`brown_sugar_railgun`, Bubble Tea Cannon + Power Bow; package B, done). "EVOLUTION!
 One pearl through one very long straw. It does not bounce. It does not need to."
-`{ dmg: 190, cd: 1.3, amount: 1, speed: 520, knock: 70, reach: 440, falloff: 0.12, floor: 0.4, syrup: 2, syrupW: 6, syrupSlow: 0.65, syrupDps: 30 }`.
+`{ dmg: 540, cd: 1.05, amount: 1, speed: 520, knock: 70, reach: 440, falloff: 0.08, floor: 0.5, syrup: 2, syrupW: 8, syrupSlow: 0.65, syrupDps: 60 }`
+(§9.1: was `dmg` 190, `cd` 1.3, `falloff` 0.12, `floor` 0.4, `syrupW` 6, `syrupDps` 30).
 Every `cd` s a single pearl (`w_pearl_rail`) is fired at the nearest enemy and flies `reach` px in a straight
 line: pierce ∞, `dmg`, -`falloff` per enemy pierced (never under `floor`). Its line on the ground is a
 syrup streak for `syrup` s × duration (half width `syrupW` × area: speed × `syrupSlow`, `syrupDps` scaled
@@ -1030,7 +1039,8 @@ at most every 2 s, no trails; sfx `paperCrane` at most every 0.3 s.
 
 **Underground Mosh Pit** (`mosh_pit`, Idol Lightstick Wave + Plot Armor; package B, done). "EVOLUTION! The
 venue holds forty people. Every beat is a stomp, and every stomp is a shove."
-`{ dmg: 40, cd: 0.429, every: 1, amount: 1, range: 70, knock: 110, daze: 0.2, need: 6, stacks: 6, dr: 0.04, grow: 0.06 }`.
+`{ dmg: 46, cd: 0.429, every: 1, amount: 1, range: 78, knock: 110, daze: 0.2, need: 6, stacks: 6, dr: 0.04, grow: 0.06 }`
+(§9.1: was `dmg` 40, `range` 70).
 On every beat an instant 360° stomp around the hero (r `range` × area, `dmg`, `knock`, a `daze` s stun;
 bosses are not dazed). A beat that hits `need`+ enemies adds a stack of Crowd Surf (max `stacks`; all lost
 after 2 beats in a row below `need`): +`dr` damage reduction (a live stat modifier, removed on dispose) and
@@ -1045,7 +1055,7 @@ at -7 semitones.
 **All-You-Can-Eat Nabe** (`all_you_can_eat_nabe`, Kotatsu of Sloth + Bento Box). "EVOLUTION! The kotatsu
 gets a hot pot. Whatever wanders in gets cooked. Whatever gets cooked is dinner." Deploys as the base
 weapon (stand still `deploy` 0.4 s; `armor` 2 and `regen` 1 inside), r `radius` 80 × area: enemies inside
-are slowed 30 % (`slow` 0.7) and **cooked**: `dmg` 36 every `cd` 0.3 s, +`cook` 25 % per second they have
+are slowed 30 % (`slow` 0.7) and **cooked**: `dmg` 24 (§9.1: was 36) every `cd` 0.3 s, +`cook` 25 % per second they have
 stayed inside (max +`cookMax` 200 %); every `snackEvery` 12th enemy that dies inside (to anything) drops a
 snack (a mikan, heal `snackHeal` 4 × healing). Moving folds it at once and nothing travels with her (no
 folded aura). **Versus Eternal Winter Break** (the kotatsu comes along, pulls gems, lobs mikan): the

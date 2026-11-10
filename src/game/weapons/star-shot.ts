@@ -276,13 +276,15 @@ function fireComet(w: World, inst: WeaponInstance, S: WStats, index: number, n: 
   const sy = pl.y - 13;
   let a: number;
   if (n > 0) {
-    const t = top[index % n];
+    // the brightest star: with a boss in view, every fourth comet (the 1st, the 5th ...) is aimed at it
+    const t = top[0].def.boss && index % 4 === 0 ? top[0] : top[index % n];
     // (lead a little: the comet is slow and does not home)
     const d = Math.hypot(t.x - sx, t.y - t.cy - sy);
     const lead = Math.min(0.5, d / Math.max(1, S.speed)) * 0.6;
     a = Math.atan2(t.y - t.cy + t.vy * t.slow * lead - sy, t.x + t.vx * t.slow * lead - sx);
     // a second comet at the same target fans out a touch
     if (index >= n) a += (index & 1 ? 1 : -1) * 0.07 * Math.ceil((index - n + 1) / 2);
+    else if (index > 0 && t === top[0] && n > 1) a += (index % 8 === 0 ? -1 : 1) * 0.05;
   } else a = Math.atan2(pl.aimY, pl.aimX) + (index - 2) * 0.3;
   const p = w.spawnProjectile(inst);
   p.kind = PK_FREE;

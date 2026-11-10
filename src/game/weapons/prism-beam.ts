@@ -319,7 +319,7 @@ export const refractionOverload: WeaponDef = {
   sfx: "beam",
   evolved: true,
   desc: "EVOLUTION! One beam. It hits something, splits in three, and each of those has opinions.",
-  levels: [{ dmg: 28, cd: 1.5, amount: 1, duration: 0.7, area: 1, len: 130, len2: 90, len3: 60, fan: 28, width: 3.5, tick: 0.1, knock: 10, d2: 18, d3: 12 }],
+  levels: [{ dmg: 36, cd: 1.5, amount: 1, duration: 0.7, area: 1, len: 130, len2: 90, len3: 60, fan: 28, width: 3.5, tick: 0.1, knock: 10, d2: 24, d3: 16 }],
   upgrades: [],
   update(w, inst, dt) {
     if (!hooked.has(w)) {

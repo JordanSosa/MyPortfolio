@@ -810,7 +810,7 @@ const KINDS: Record<string, Kind> = {
   },
   evo2: {
     group: "run",
-    desc: "a SECOND evolution in play (docs/content/weapons.md §8): evo2:<evolved id> = its base weapon's hero (Hoshi for a general weapon) mid-Shoujo Academy with the weapon evolved down that route, 2 s of live play (film it: evo2:meowteor_hammer~180/15); evo2:<id>:calm = the run's first seconds, the weapon alone on a near-empty screen; evo2:<id>@<stage>",
+    desc: "a SECOND evolution in play (docs/content/weapons.md §8): evo2:<evolved id> = its base weapon's hero (Hoshi for a general weapon) mid-Shoujo Academy holding that evolution ALONE (the rest of the bot-picked build is put away, the passives stay), 2 s of live play (film it: evo2:meowteor_hammer~180/15); evo2:<id>:calm = the run's first seconds, the weapon alone on a near-empty screen; evo2:<id>@<stage>",
     list: () => secondEvos().map((x) => x.into),
     run: async (c, a) => {
       const [spec, st] = a.split("@");
@@ -824,20 +824,41 @@ const KINDS: Record<string, Kind> = {
       // (the warp's chest must not evolve the base weapon down another route behind our back: those are banished)
       const baseDef = WEAPONS.get(e.base);
       if (baseDef) for (const x of evolutionsOf(baseDef)) if (x.into !== id) w.banished.add(x.into);
-      if (moment !== "calm") warp(c, w, 200, 10);
+      // (warp without its settle: the build is made first, so the 4 s of settling are played with it)
+      if (moment !== "calm") warp(c, w, 200, 10, 0);
       w.muted = true;
       let inst = w.hasWeapon(id);
-      if (!inst) {
-        const base = w.hasWeapon(e.base) ?? w.addWeapon(e.base, 1);
-        if (!base) throw new Error(`${hero} cannot hold ${e.base}`);
-        w.setWeaponLevel(base, base.def.levels.length);
-        if (w.passiveLevel(e.with) <= 0) w.addPassive(e.with, 1);
-        inst = w.evolveWeapon(base, id) ?? undefined;
+      try {
+        if (!inst) {
+          const base = w.hasWeapon(e.base) ?? w.addWeapon(e.base, 1);
+          if (!base) throw new Error(`${hero} cannot hold ${e.base}`);
+          w.setWeaponLevel(base, base.def.levels.length);
+          if (w.passiveLevel(e.with) <= 0) w.addPassive(e.with, 1);
+          inst = w.evolveWeapon(base, id) ?? undefined;
+        }
+        // the weapon ALONE (the passives stay): the bot-picked rest of the build - Hoshi's Galaxy Barrage for every
+        // general weapon - buried the evolution the scene is there to show, and its fx were blamed for their haze
+        for (let i = w.weapons.length - 1; i >= 0; i--) {
+          const o = w.weapons[i];
+          if (o === inst) continue;
+          o.def.dispose?.(w, o);
+          for (const p of o.projs) p.dead = true;
+          w.weapons.splice(i, 1);
+        }
+        w.buildVersion++;
+        if (moment !== "calm") {
+          // settle with the bot (seeded: the same film every time; scenario runs are invulnerable by default)
+          const bot = new Bot(c.o.seed ^ 0xe02);
+          simulate(w, 4, 1 / 30, bot);
+          drain(w, bot);
+          c.app.r.camera.snapTo(w.player.x, w.player.y - 8);
+        }
+      } finally {
+        w.muted = false;
       }
-      w.muted = false;
       if (inst?.def.id !== id) throw new Error(`evo2:${id}: the build holds ${w.weapons.map((x) => x.def.id).join(", ")}`);
-      // (calm: the run's first kills would open a level-up card over the film)
-      if (moment === "calm") w.xpNext = 1e9;
+      // (the next kills would open a level-up card over the film)
+      w.xpNext = 1e9;
       c.mark(`evo2 ${id} (${hero})`);
       await c.frames(120);
     },

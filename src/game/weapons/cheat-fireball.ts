@@ -328,7 +328,7 @@ export const holdingBack: WeaponDef = {
   color: C.orange,
   evolved: true,
   desc: "EVOLUTION! He is holding back. This is him holding back: a stream of perfectly ordinary fireballs.",
-  levels: [{ dmg: 26, cd: 0.14, amount: 1, speed: 230, blast: 15, knock: 20, sneeze: 100, sneezeDmg: 156, sneezeBlast: 70 }],
+  levels: [{ dmg: 48, cd: 0.14, amount: 1, speed: 230, blast: 24, knock: 20, sneeze: 50, sneezeDmg: 320, sneezeBlast: 90 }],
   upgrades: [],
   init(_w, inst) {
     inst.timer = 0.3;

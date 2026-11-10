@@ -315,9 +315,13 @@ function quietIsekai(w: World): void {
 
 /**
  * The delivery spot: `out` = the point just off the bumper, `DROP` px ahead of the body along (dx, dy).
- * (Not on the cab: a whole cone of enemies dying on top of the truck buried it in their own death fx.)
+ * (Not on the cab: a whole cone of enemies dying on top of the truck buried it in their own death fx. 30 px
+ * with a 4 px stop still put the front of the pile on his bonnet for a frame - the washout check read 32 % -
+ * so the parcels now stop `SHORT` px before a spot 38 px out.)
  */
-const DROP = 30;
+const DROP = 38;
+/** The pull stops this far (plus the enemy's radius) before the drop spot. */
+const SHORT = 8;
 function bumper(w: World, dx: number, dy: number, out: { x: number; y: number }): void {
   const p = w.player;
   out.x = p.x + dx * DROP;
@@ -353,7 +357,7 @@ function pullCone(w: World, inst: WeaponInstance, dx: number, dy: number, len: n
     hits++;
     if (e.def.boss || e.def.prop) continue;
     const resist = e.def.knockResist ?? 0;
-    const want = Math.min(pull * (e.elite ? 0.5 : 1) * (1 - resist), Math.max(0, td - e.r - 4));
+    const want = Math.min(pull * (e.elite ? 0.5 : 1) * (1 - resist), Math.max(0, td - e.r - SHORT));
     if (want > 1 && td > 1) {
       e.kx = (tx / td) * want * PULL_K;
       e.ky = (ty / td) * want * PULL_K;
@@ -382,7 +386,7 @@ function pullCone(w: World, inst: WeaponInstance, dx: number, dy: number, len: n
 }
 
 /** The delivery: everything on the bumper takes `slam` and is thrown ahead. */
-function deliver(w: World, inst: WeaponInstance, S: WStats, dx: number, dy: number): void {
+function deliver(w: World, inst: WeaponInstance, S: WStats, dx: number, dy: number, coneLen = 0, cosHalf = 1): void {
   bumper(w, dx, dy, pt);
   const cx = pt.x;
   const cy = pt.y;
@@ -408,6 +412,25 @@ function deliver(w: World, inst: WeaponInstance, S: WStats, dx: number, dy: numb
     hits++;
   }
   w.release();
+  // a boss does not come to the bumper (nothing pulls it): one that the horn's cone reaches gets its parcel where
+  // it stands, so the route is not dead weight in a boss fight
+  const boss = w.boss;
+  if (boss && !boss.dead && !boss.untargetable && coneLen > 0) {
+    const p = w.player;
+    const bx = boss.x - p.x;
+    const by = boss.y - boss.cy - (p.y - CFG.playerCy);
+    const bd = Math.sqrt(bx * bx + by * by);
+    const ex = boss.x - cx;
+    const ey = boss.y - boss.cy - cy;
+    const rr = R + boss.r;
+    const onBumper = ex * ex + ey * ey <= rr * rr;
+    if (!onBumper && bd <= coneLen + boss.r && (bd <= boss.r || (bx * dx + by * dy) / bd >= cosHalf - boss.r / Math.max(8, bd))) {
+      w.hitEnemy(boss, dmg, inst, ka, 0, 0, FREE, inst.def.color);
+      hits++;
+      hfx(w, FD_SLAM, boss.x, boss.y - boss.cy, dx, dy, R, 1);
+      return;
+    }
+  }
   if (hits > 0) hfx(w, FD_SLAM, cx, cy, dx, dy, R, hits + 100 * finished);
 }
 
@@ -418,7 +441,7 @@ export const freeDelivery: WeaponDef = {
   color: C.yellow,
   evolved: true,
   desc: "EVOLUTION! The horn now pulls. Parcels are delivered to the bumper. The parcels are enemies.",
-  levels: [{ dmg: 30, cd: 1.5, amount: 1, len: 110, angle: 40, pull: 80, knock: 150, ram: 45, slam: 130, slamR: 22, slamAfter: 0.24, isekai: 0.25 }],
+  levels: [{ dmg: 32, cd: 1.5, amount: 1, len: 110, angle: 40, pull: 80, knock: 150, ram: 45, slam: 130, slamR: 22, slamAfter: 0.24, isekai: 0.25 }],
   upgrades: [],
   init(w, inst) {
     quietIsekai(w);
@@ -434,7 +457,7 @@ export const freeDelivery: WeaponDef = {
       d.st -= dt;
       if (d.st < 0) {
         facing(w, dir);
-        deliver(w, inst, S, dir.x, dir.y);
+        deliver(w, inst, S, dir.x, dir.y, (S.L.len ?? 110) * S.area * (1 + 0.08 * w.talentRank("truck_air_horn")), Math.cos(((S.L.angle ?? 40) * Math.PI) / 180));
       }
     }
     inst.timer -= dt;

@@ -474,8 +474,9 @@ Feedback for each lives in `src/view/feedback.ts` (one `bus.on` per event).
 All registries are assembled with `import.meta.glob` in `src/game/registry.ts`:
 **adding a file is enough - no index file to edit.** Files whose names start
 with `_` are helpers (they simply don't export the registry array).
-Run `npm test` afterwards (the test script disables Vitest's fs module cache
-so new files are always picked up).
+Run `npm test` afterwards: `vitest.config.ts` keeps every module that calls
+`import.meta.glob` out of Vitest's fs module cache (`globModulesUncached`), so a new
+file in a registry folder is always picked up.
 
 ### Weapon (`src/game/weapons/<name>.ts`)
 

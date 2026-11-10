@@ -189,7 +189,7 @@ export const sakuraTempest: WeaponDef = {
   sfx: "slash",
   evolved: true,
   desc: "EVOLUTION! A 360° petal whirlwind every 0.8 s that flings petal blades.",
-  levels: [{ dmg: 28, cd: 0.8, amount: 6, area: 1, knock: 95, petalDmg: 14 }],
+  levels: [{ dmg: 33, cd: 0.8, amount: 6, area: 1, knock: 95, petalDmg: 17 }],
   upgrades: [],
   update(w, inst, dt) {
     const S = wstats(w, inst);
@@ -357,7 +357,7 @@ export const alreadyCut: WeaponDef = {
   sfx: "slash",
   evolved: true,
   desc: "EVOLUTION! One long cut the way you face. Nothing happens. Then she sheathes the blade.",
-  levels: [{ dmg: 62, cd: 1.3, amount: 1, area: 1, knock: 40, len: 150, wid: 14, wait: 0.45, moved: 0.5, petals: 3, petalDmg: 14 }],
+  levels: [{ dmg: 54, cd: 1.3, amount: 1, area: 1, knock: 40, len: 150, wid: 14, wait: 0.45, moved: 0.5, petals: 3, petalDmg: 14 }],
   upgrades: [],
   update(w, inst, dt) {
     const S = wstats(w, inst);

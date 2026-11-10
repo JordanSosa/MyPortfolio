@@ -336,7 +336,7 @@ export const soapOpera: WeaponDef = {
   hitSfx: "bubblePop",
   evolved: true,
   desc: "EVOLUTION! You leave a trail of soap bubbles. Each one traps an enemy in a dramatic misunderstanding.",
-  levels: [{ dmg: 24, cd: 0.4, amount: 1, area: 1, radius: 22, slow: 0.62, knock: 12, every: 14, max: 24, life: 3.5, hold: 1.6, pop: 90, popR: 26, br: 8 }],
+  levels: [{ dmg: 30, cd: 0.4, amount: 1, area: 1, radius: 30, slow: 0.62, knock: 12, every: 12, max: 24, life: 4.5, hold: 2.2, pop: 120, popR: 26, br: 8 }],
   upgrades: [],
   update(w, inst, dt) {
     const S = wstats(w, inst);

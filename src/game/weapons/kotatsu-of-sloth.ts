@@ -526,7 +526,7 @@ export const allYouCanEatNabe: WeaponDef = {
   color: 0xff9a3c,
   evolved: true,
   desc: "EVOLUTION! The kotatsu gets a hot pot. Whatever wanders in gets cooked. Whatever gets cooked is dinner.",
-  levels: [{ dmg: 36, cd: 0.3, amount: 1, radius: 80, slow: 0.7, deploy: 0.4, cook: 0.25, cookMax: 2, snackEvery: 12, snackHeal: 4, armor: 2, regen: 1, knock: 0 }],
+  levels: [{ dmg: 24, cd: 0.3, amount: 1, radius: 80, slow: 0.7, deploy: 0.4, cook: 0.25, cookMax: 2, snackEvery: 12, snackHeal: 4, armor: 2, regen: 1, knock: 0 }],
   upgrades: [],
   init(w) {
     nabeKills(w);

@@ -219,7 +219,7 @@ export const meowteorHammer: WeaponDef = {
   hitSfx: "orbitHit",
   evolved: true,
   desc: "EVOLUTION! 4 spiked yarn wrecking balls swing far out and SLAM on every swing. Blocking is somebody else's arc.",
-  levels: [{ dmg: 28, cd: 2.6, amount: 4, area: 1.15, speed: 4.4, knock: 90, every: 0.3, block: 1, mend: 2.2, rIn: 26, rOut: 74, slam: 26, slamDmg: 90 }],
+  levels: [{ dmg: 46, cd: 2.0, amount: 4, area: 1.15, speed: 4.4, knock: 110, every: 0.3, block: 1, mend: 2.2, rIn: 26, rOut: 74, slam: 30, slamDmg: 170 }],
   upgrades: [],
   update(w, inst, dt) {
     const S = wstats(w, inst);

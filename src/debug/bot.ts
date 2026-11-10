@@ -34,23 +34,26 @@ function recipeHeld(w: World, id: string): boolean {
 }
 
 /**
- * How much a passive is worth as a recipe (0 = it evolves nothing held). One weapon evolves once, so a weapon is
- * worth ONE recipe however many routes it has:
- *  - the passive of a route while no route of that weapon is covered: the full value shared between its routes
- *    (either passive will do, so neither is urgent - with two routes each at full value the bot spent its early
- *    level-ups on twice as many passives instead of weapon levels, and Dream Meadow got measurably harder);
- *  - the held passive of the only covered route: the full value (levelling it, as before);
- *  - a passive whose weapon's other route is already covered: a small one (a choice, not a second evolution).
+ * How much a passive is worth as a recipe (0 = it evolves nothing held). One weapon evolves once, so each held
+ * weapon wants ONE passive, as it did when weapons had a single evolution:
+ *  - the full value for the passive of the weapon's FIRST evolution (the classic recipe: the one the stage
+ *    balance and the lab's calibration were fitted with, and the one an early account has discovered), or of a
+ *    later route that is already in the build (it IS the route now) - while no other route of that weapon is
+ *    covered;
+ *  - a small one for any other route's passive: a choice that may fall into her lap, not a goal.
+ * With every route's passive at full value, 8-12 of the 16 passives were "a recipe" for a 4-6 weapon build: the bot
+ * spent its early level-ups on passives instead of weapon levels, a measurement artefact that cost Dream Meadow P2
+ * about 4 points of clear rate on its own (docs/content/weapons.md section 9.1).
  */
 function recipeValue(w: World, passive: string): number {
   let s = 0;
+  const held = w.passiveLevel(passive) > 0;
   for (const inst of w.weapons) {
     if (!evolutionWith(inst.def, passive)) continue;
     const evos = evolutionsOf(inst.def);
     let covered = false;
     for (const e of evos) if (e.with !== passive && w.passiveLevel(e.with) > 0) covered = true;
-    if (covered) s += 3;
-    else s += w.passiveLevel(passive) > 0 ? 26 : 26 / evos.length;
+    s += !covered && (held || evos[0].with === passive) ? 26 : 3;
   }
   return s;
 }

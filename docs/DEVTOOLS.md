@@ -775,8 +775,13 @@ Nothing was moved or deleted: the tag sits on the test in place. A file whose do
 
 Two details:
 
-- The fast run keeps Vitest's fs module cache. I checked that it picks up files added to or removed from an
-  `import.meta.glob` folder (the registries).
+- The fast run keeps Vitest's fs module cache, except for the modules that call `import.meta.glob` (the
+  registries, `src/art/manifest.ts`, `src/art/sprites/index.ts`, `src/view/evo2-fx.ts`): their transform is a
+  list of the files that matched, and the cache keys a module by its own text. Vitest only bails out on the
+  literal `import.meta.glob(`, which a typed call (`import.meta.glob<Mod>(...)`) never contains, so a new
+  `evo2-*` file stayed invisible until a cache entry was deleted. `globModulesUncached()` in `vitest.config.ts`
+  tells the cache to skip them (check: `DEBUG=vitest:cache:memory npx vitest run tests/evo2.test.ts` prints
+  "bailed out by a custom generator" for each).
 - `maxWorkers` = cores. The default left one core idle, and the fast run took 9.2 s instead of 7.7 s.
 
 ## 8. Proof: Season 2's bugs, re-detected
