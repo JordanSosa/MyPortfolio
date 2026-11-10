@@ -13,6 +13,13 @@
  * Evolution: Dere Dere Harisen (+ Friendship Bracelet) - a heart-shaped fan
  * smacks all around Akane; smacked enemies become projectiles (60 % to up to
  * 3 victims each); every smack heals 1 HP per enemy hit (max 3). "...baka ♡"
+ * Second evolution: Tsun Tsun Drill Harisen (+ Speed Lines) - every `cd` s the fan, rolled into a drill,
+ *   thrusts at the nearest enemy in reach (else where Akane faces): a capsule `len` x `width` px (x area)
+ *   that ticks `ticks` times over `thrust` s for `dmg` each. Every tick but the last holds what it hits
+ *   and drags it `drag` of the way to the tip; the last one launches everything (`knock`) as human
+ *   missiles (`missile` x dmg x ticks to up to 3 victims each). No heal, no daze worth the name.
+ *   Extra Amount queues further thrusts (behind her, then ±90°). The view draws the drill from the cue
+ *   HFX_AKANE_DRILL (src/view/evo2/c.ts).
  *
  * Akane's talents read here (both forms): Ricochet Bonk (+20 % of the hit as
  * collision damage per rank), Harisen of Ultimate Denial (forward and ±60°),
@@ -184,7 +191,10 @@ export const bakaHarisen: WeaponDef = {
     { dmg: 40, cd: 1.25, amount: 2, area: 1.4, knock: 260, stun: 0.5 },
   ],
   upgrades: ["Backhand: also smacks behind you", "Damage +8, bigger fan", "Cooldown −17%, longer daze", "Damage +10, even bigger fan, every 5th smack is a MEGA BAKA"],
-  evolutions: [{ into: DERE, with: "friendship_bracelet" }],
+  evolutions: [
+    { into: DERE, with: "friendship_bracelet" },
+    { into: "tsun_tsun_drill", with: "speed_lines" },
+  ],
   // mastery Limit Breaks (docs/content/weapons.md §4): Lv6 at rank 5, Lv7 at rank 10
   limitBreak: [
     { dmg: 0.25, area: 0.1, text: "LIMIT BREAK — Thicker Paper: +25% damage, +10% fan size" },
@@ -325,4 +335,120 @@ function dereSmack(w: World, inst: WeaponInstance, S: WStats, mul: number): void
   st.bakaPop(pl.x + Math.cos(a) * 40, pl.y - 28, false, 1, true);
 }
 
-export const weapons: WeaponDef[] = [bakaHarisen, dereDereHarisen];
+// ---------------------------------------------------------------- Tsun Tsun Drill Harisen
+const DRILL = "tsun_tsun_drill";
+/** heroFx cue: a drill thrust starts (x, y = Akane's middle, x2 = angle, y2 = seconds, r = length). */
+export const HFX_AKANE_DRILL = "akane_drill";
+
+/** One tick of the thrust along `a`: hit what the capsule holds, then drag it to the tip or (`last`) launch it. Returns enemies hit. */
+function drillTick(w: World, inst: WeaponInstance, S: WStats, a: number, last: boolean): number {
+  const pl = w.player;
+  const L = S.L;
+  const len = (L.len ?? 70) * S.area;
+  const hw = (L.width ?? 12) * 0.5 * S.area;
+  const ox = pl.x;
+  const oy = pl.y - CFG.playerCy;
+  const ca = Math.cos(a);
+  const sa = Math.sin(a);
+  const st = heroesA(w);
+  const fly = S.dmg * (L.missile ?? 0.6) * (L.ticks ?? 4) * (ricochet(w) / 0.4);
+  const drag = L.drag ?? 0.5;
+  const buf = w.acquire();
+  const n = w.grid.query(ox + ca * len * 0.5, oy + sa * len * 0.5, len * 0.5 + hw + 16, buf);
+  let hits = 0;
+  for (let k = 0; k < n; k++) {
+    const e = w.enemies.items[buf[k]];
+    if (!e || e.dead) continue;
+    const ex = e.x - ox;
+    const ey = e.y - e.cy - oy;
+    const along = ex * ca + ey * sa;
+    if (along < -e.r || along > len + e.r) continue;
+    const side = ey * ca - ex * sa;
+    const lim = hw + e.r;
+    if (side > lim || side < -lim) continue;
+    w.hitEnemy(e, S.dmg, inst, a, last ? S.knock : 0, 0, DRILL, inst.def.color);
+    hits++;
+    if (e.dead || e.def.boss || e.def.prop) continue;
+    if (last) {
+      st.fly(e, fly, 0.5, 3, inst, DRILL);
+      continue;
+    }
+    // held on the drill and wound towards its tip (heavy enemies less)
+    daze(e, 0.15);
+    const g = drag * (1 - (e.def.knockResist ?? 0)) * (e.elite ? 0.4 : 1);
+    e.x += (ox + ca * len - e.x) * g;
+    e.y += (oy + sa * len + e.cy - e.y) * g;
+    e.kx = e.ky = 0;
+  }
+  w.release();
+  return hits;
+}
+
+function thrust(w: World, inst: WeaponInstance, S: WStats, a: number): void {
+  const pl = w.player;
+  const d = inst.data;
+  d.aim = a;
+  d.th = 0;
+  d.tt = 0;
+  hfx(w, HFX_AKANE_DRILL, pl.x, pl.y - CFG.playerCy, a, S.L.thrust ?? 0.3, (S.L.len ?? 70) * S.area);
+  fired(w, inst, pl.x, pl.y);
+}
+
+export const tsunTsunDrill: WeaponDef = {
+  id: DRILL,
+  name: "Tsun Tsun Drill Harisen",
+  icon: "icon_tsun_tsun_drill",
+  color: C.red,
+  sfx: "fanSmack",
+  evolved: true,
+  desc: "EVOLUTION! The fan rolls into a drill. It's not like she is aiming at you. She is, though.",
+  levels: [{ dmg: 30, cd: 0.9, amount: 1, len: 76, width: 12, ticks: 4, thrust: 0.3, knock: 360, missile: 0.6, drag: 0.5 }],
+  upgrades: [],
+  update(w, inst, dt) {
+    const d = inst.data;
+    const S = wstats(w, inst);
+    const L = S.L;
+    const ticks = L.ticks ?? 4;
+    const pl = w.player;
+    const cy = pl.y - CFG.playerCy;
+    if ((d.th ?? ticks) < ticks) {
+      d.tt = (d.tt ?? 0) - dt;
+      if (d.tt <= 0) {
+        d.tt += (L.thrust ?? 0.3) / Math.max(1, ticks - 1);
+        d.th++;
+        const last = d.th >= ticks;
+        const a = d.aim ?? 0;
+        let hits = drillTick(w, inst, S, a, last);
+        if (w.talentRank("akane_ultimate_denial") > 0) hits += drillTick(w, inst, S, a + DENIAL, last) + drillTick(w, inst, S, a - DENIAL, last);
+        if (last) {
+          const len = (L.len ?? 70) * S.area;
+          if (hits > 0) heroesA(w).bakaPop(pl.x + Math.cos(a) * len, cy + Math.sin(a) * len - 12, false);
+          // (Amount: the next thrust of the volley)
+          if ((d.q ?? 0) > 0) {
+            d.q--;
+            const k = d.qk ?? 0;
+            d.qk = k + 1;
+            thrust(w, inst, S, (d.base ?? 0) + EXTRA[k % EXTRA.length]);
+          }
+        }
+      }
+    }
+    inst.timer -= dt;
+    if (inst.timer > 0 || (d.th ?? ticks) < ticks) return;
+    const len = (L.len ?? 70) * S.area;
+    const e = w.nearestEnemy(pl.x, cy, len);
+    if (!e && !w.nearestEnemy(pl.x, cy, len + 30)) {
+      inst.timer = 0.1;
+      return;
+    }
+    inst.timer = S.cd;
+    d.n = (d.n ?? 0) + 1;
+    if (d.n % 5 === 0 && w.talentRank("akane_twin_tail_tornado") > 0) drillSpin(w, inst, S, 1);
+    d.base = e ? Math.atan2(e.y - e.cy - cy, e.x - pl.x) : Math.atan2(pl.aimY, pl.aimX);
+    d.q = Math.max(0, S.amount - 1);
+    d.qk = 0;
+    thrust(w, inst, S, d.base);
+  },
+};
+
+export const weapons: WeaponDef[] = [bakaHarisen, dereDereHarisen, tsunTsunDrill];

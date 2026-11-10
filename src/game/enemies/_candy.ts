@@ -22,7 +22,7 @@ import { cue } from "./_cue";
 export const CANDY_IDS: ReadonlySet<string> = new Set(["gummy_bear", "candy_corn", "donut_roller", "marshmallow_brute", "lollipop_mage"]);
 
 /** Fire weapons that toast a Marshmallow Brute (enemies.md: Dark Flame Dragon, Cheat Fireball + evolutions). */
-export const FIRE_SOURCES: ReadonlySet<string> = new Set(["dark_flame_dragon", "unsealed_abyss_dragon", "cheat_fireball", "cheat_meteor"]);
+export const FIRE_SOURCES: ReadonlySet<string> = new Set(["dark_flame_dragon", "unsealed_abyss_dragon", "unbandaged_right_arm", "cheat_fireball", "cheat_meteor", "holding_back"]);
 
 /** Shield Wall: damage factor, neighbour radius / count. */
 export const SHIELD_MUL = 0.6;

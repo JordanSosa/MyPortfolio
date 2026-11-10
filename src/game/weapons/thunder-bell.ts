@@ -5,6 +5,10 @@
  * area (bigger at Lv3 / Lv5).
  * Evolution: Raijin Drum (+ Power Bow) - a drum beat at the hero calls 8 huge
  * branching bolts that each blast an area and still chain.
+ * Second evolution: Group Chat Lightning (+ Friendship Bracelet) - one bolt on a random enemy that is
+ *   FORWARDED: it hops to the nearest enemy it has not hit yet (`hops` + `perWeapon` per other weapon held,
+ *   one hop every `hopT` s, no damage falloff); the last enemy of a full chain takes a blast. No burst and no
+ *   screen flash: steady chains that reward dense packs and a wide build.
  *
  * Sim side: a bell projectile (no hit shape) follows its target and calls
  * strike() when its fuse runs out. Lightning, blasts and flashes are
@@ -14,7 +18,7 @@ import { C } from "../../art/palette";
 import { PK_MANAGED, type Enemy, type ProjHook, type WeaponDef, type WeaponInstance } from "../types";
 import type { World } from "../world";
 import { wstats } from "./_shared";
-import { WFX_BOLT, WFX_BOLT_BIG, WFX_CHAIN, WFX_DRUM, alive, fireSfx, randomTargetsInView, sfxAt, wfx } from "./_fx";
+import { WFX_BOLT, WFX_BOLT_BIG, WFX_CHAIN, WFX_DRUM, alive, fireSfx, heroFx, randomTargetsInView, sfxAt, wfx } from "./_fx";
 
 const targets: Enemy[] = [];
 /** uids hit by the current strike (chain never revisits). */
@@ -149,7 +153,10 @@ export const thunderBell: WeaponDef = {
     { dmg: 42, cd: 1.2, amount: 4, chain: 5, reach: 66, splash: 18, knock: 36 },
   ],
   upgrades: ["+1 strike", "Damage +8, chains to 1 more enemy", "+1 strike, cooldown -14%", "Damage +10, +1 chain, bigger strike blasts"],
-  evolutions: [{ into: "raijin_drum", with: "power_bow" }],
+  evolutions: [
+    { into: "raijin_drum", with: "power_bow" },
+    { into: "group_chat_lightning", with: "friendship_bracelet" },
+  ],
   // mastery Limit Breaks (docs/content/weapons.md §4): Lv6 at rank 5, Lv7 at rank 10
   limitBreak: [
     { amount: 1, dmg: 0.15, text: "LIMIT BREAK — Extra Bell: +1 strike, +15% damage" },
@@ -207,4 +214,132 @@ export const raijinDrum: WeaponDef = {
   },
 };
 
-export const weapons: WeaponDef[] = [thunderBell, raijinDrum];
+// ---------------------------------------------------------------- Group Chat Lightning
+
+/** View cues (heroFx). The first bolt: from the sky (x, y) onto (x2, y2). */
+export const FX_CHAT_BOLT = "e2a_bolt";
+/** A forward: hop n from (x, y) to (x2, y2). */
+export const FX_CHAT_HOP = "e2a_hop";
+/** "Seen by everyone": the blast on the last enemy of a full chain at (x, y), radius r, n = the chain's length. */
+export const FX_CHAT_SEEN = "e2a_seen";
+
+const CHAT_MAX = 48;
+/** The chain in flight of one instance (it lives over many steps: its own struck list). */
+interface Chat {
+  struck: Int32Array;
+  n: number;
+  x: number;
+  y: number;
+  hop: number;
+  hops: number;
+  /** Seconds to the next forward. */
+  t: number;
+  live: boolean;
+}
+const chats = new WeakMap<WeaponInstance, Chat>();
+function chatOf(inst: WeaponInstance): Chat {
+  let c = chats.get(inst);
+  if (!c) chats.set(inst, (c = { struck: new Int32Array(CHAT_MAX), n: 0, x: 0, y: 0, hop: 0, hops: 0, t: 0, live: false }));
+  return c;
+}
+
+let accChat: Chat | null = null;
+const acceptForward = (id: number): boolean => {
+  const e = (accW as World).enemies.items[id];
+  if (!e || e.dead || e.def.prop || e.untargetable) return false;
+  const c = accChat as Chat;
+  for (let i = 0; i < c.n; i++) if (c.struck[i] === e.uid) return false;
+  return true;
+};
+
+/** Forward the bolt once (or end the chain: a full one ends on the "seen by everyone" blast). */
+function forward(w: World, inst: WeaponInstance, c: Chat): void {
+  const S = wstats(w, inst);
+  const L = S.L;
+  const dmg = S.dmg;
+  const knock = S.knock;
+  const area = S.area;
+  let e: Enemy | null = null;
+  if (c.hop < c.hops) {
+    accW = w;
+    accChat = c;
+    const id = w.grid.nearest(c.x, c.y, (L.reach ?? 70) * area, acceptForward);
+    accW = null;
+    accChat = null;
+    if (id >= 0) e = w.enemies.items[id];
+  }
+  if (!e) {
+    c.live = false;
+    if (c.hop < c.hops || c.hop === 0) return;
+    const r = (L.seenR ?? 30) * area;
+    heroFx(w, FX_CHAT_SEEN, c.x, c.y, c.x, c.y, r, c.hop);
+    nStruck = 0;
+    blast(w, inst, c.x, c.y, r, dmg * (L.seenMul ?? 2), knock * 2);
+    return;
+  }
+  const ey = e.y - e.cy;
+  if (c.n < CHAT_MAX) c.struck[c.n++] = e.uid;
+  heroFx(w, FX_CHAT_HOP, c.x, c.y, e.x, ey, 0, c.hop);
+  const a = Math.atan2(ey - c.y, e.x - c.x);
+  c.x = e.x;
+  c.y = ey;
+  c.hop++;
+  w.hitEnemy(e, dmg, inst, a, knock, 0, inst.def.id, inst.def.color);
+}
+
+export const groupChatLightning: WeaponDef = {
+  id: "group_chat_lightning",
+  name: "Group Chat Lightning",
+  icon: "icon_group_chat_lightning",
+  color: C.aqua,
+  sfx: "thunder",
+  evolved: true,
+  desc: "EVOLUTION! One bolt, forwarded to everyone. Nobody asked to be added.",
+  levels: [{ dmg: 58, cd: 0.9, amount: 1, hops: 10, perWeapon: 2, reach: 70, hopT: 0.04, seenR: 30, seenMul: 2, knock: 18 }],
+  upgrades: [],
+  update(w, inst, dt) {
+    const c = chatOf(inst);
+    const d = inst.data;
+    if (c.live) {
+      c.t -= dt;
+      while (c.live && c.t <= 0) {
+        forward(w, inst, c);
+        c.t += inst.def.levels[0].hopT ?? 0.04;
+      }
+    }
+    inst.timer -= dt;
+    if (inst.timer <= 0 && !c.live && (d.queue ?? 0) <= 0) {
+      const S = wstats(w, inst);
+      inst.timer = S.cd;
+      d.queue = Math.min(6, S.amount);
+    }
+    if (c.live || (d.queue ?? 0) <= 0) return;
+    // the next bolt of the volley (extra Amount: one after the other, each its own chain)
+    if (randomTargetsInView(w, 1, targets) === 0) {
+      d.queue = 0;
+      inst.timer = Math.min(inst.timer, 0.2);
+      return;
+    }
+    d.queue--;
+    const S = wstats(w, inst);
+    const L = S.L;
+    const dmg = S.dmg;
+    const knock = S.knock;
+    const e = targets[0];
+    const x = e.x;
+    const y = e.y - e.cy;
+    c.n = 0;
+    c.struck[c.n++] = e.uid;
+    c.x = x;
+    c.y = y;
+    c.hop = 0;
+    c.hops = Math.min(CHAT_MAX - 1, Math.round((L.hops ?? 10) + (L.perWeapon ?? 2) * Math.max(0, w.weapons.length - 1)));
+    c.t = L.hopT ?? 0.04;
+    c.live = true;
+    heroFx(w, FX_CHAT_BOLT, x + (w.rng.next() - 0.5) * 24, y - 170, x, y);
+    fireSfx(w, inst, x, y);
+    w.hitEnemy(e, dmg, inst, DOWN, knock, 0, inst.def.id, inst.def.color);
+  },
+};
+
+export const weapons: WeaponDef[] = [thunderBell, raijinDrum, groupChatLightning];

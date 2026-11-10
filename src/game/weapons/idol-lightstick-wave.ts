@@ -12,6 +12,10 @@
  * Evolution: Sold-Out Dome Tour (+ Twin Charm) - spotlight waves on every beat
  * (4 arcs 90° apart, rotating 45° per beat) and every 8 beats an ENCORE! that
  * hits every enemy in view; +12% per combo rank.
+ * Second evolution: Underground Mosh Pit (+ Plot Armor) - no waves: every beat is a 360° STOMP around the
+ * hero (instant, `range` x area, a short daze and a hard shove). A beat that hits `need`+ enemies adds a
+ * stack of Crowd Surf (max `stacks`, all lost after 2 beats below that): each stack is `dr` damage
+ * reduction and `grow` more stomp radius. No ENCORE, no combo bonus: she is tankier the deeper she stands.
  *
  * A wave is a PK_MANAGED projectile at its origin without a world hit shape
  * (r = 0): its hook grows the front and hits every enemy whose near edge the
@@ -23,9 +27,10 @@
  */
 import { CFG } from "../config";
 import { PK_MANAGED, type ProjHook, type WeaponDef, type WeaponInstance } from "../types";
+import type { StatMod } from "../stats";
 import type { World } from "../world";
 import { wstats, type WStats } from "./_shared";
-import { A2_ENCORE, A2_WAVE, CHORUS_BEATS, a2fx, beatEvery, beatIndex, beatLen, cdMul, crowdMul, keyDmg } from "./_arsenal2";
+import { A2_ENCORE, A2_WAVE, CHORUS_BEATS, a2fx, beatEvery, beatIndex, beatLen, cdMul, crowdMul, dropStatMod, keyDmg } from "./_arsenal2";
 
 /** Wave variants (Projectile.oy). */
 export const WAVE_ARC = 0;
@@ -194,7 +199,10 @@ export const idolLightstickWave: WeaponDef = {
     { dmg: 18, cd: 0.857, amount: 2, every: 2, arc: 150, range: 96, knock: 46, chorus: 3 },
   ],
   upgrades: ["Both sides wave", "Damage +4, waves reach farther", "Waves on every 2nd beat", "Damage +4, wider waves, the Chorus deals double"],
-  evolutions: [{ into: "sold_out_dome_tour", with: "twin_charm" }],
+  evolutions: [
+    { into: "sold_out_dome_tour", with: "twin_charm" },
+    { into: "mosh_pit", with: "plot_armor" },
+  ],
   // mastery Limit Breaks (docs/content/weapons.md §4): a Limit Break amount = +1 arc
   limitBreak: [
     { dmg: 0.2, area: 0.15, text: "LIMIT BREAK — Front Row: +20% damage, +15% reach" },
@@ -227,4 +235,98 @@ export const soldOutDomeTour: WeaponDef = {
   },
 };
 
-export const weapons: WeaponDef[] = [idolLightstickWave, soldOutDomeTour];
+// ---------------------------------------------------------------- Underground Mosh Pit (second evolution)
+
+/** heroFx cue (src/view/evo2/b.ts): a stomp at (x, y): r = its radius, n = Crowd Surf stacks after it. */
+export const MOSH_STOMP = "e2_stomp";
+/** Beats below `need` hits before Crowd Surf is lost. */
+const MOSH_SILENT = 2;
+
+/** Crowd Surf's damage reduction (one live stat modifier per instance; data.surf = stacks). */
+const SURF = new WeakMap<WeaponInstance, StatMod>();
+
+/** One stomp: everything within R of the hero's body, at once. Returns the enemies hit. */
+function stomp(w: World, inst: WeaponInstance, S: WStats, R: number): number {
+  const pl = w.player;
+  const cx = pl.x;
+  const cy = pl.y - CFG.playerCy;
+  const daze = S.L.daze ?? 0.2;
+  const dmg = S.dmg;
+  const knock = S.knock;
+  const color = inst.def.color;
+  const buf = w.acquire();
+  const n = w.grid.query(cx, cy, R + 16, buf);
+  const items = w.enemies.items;
+  let hits = 0;
+  for (let q = 0; q < n; q++) {
+    const e = items[buf[q]];
+    if (!e || e.dead) continue;
+    const dx = e.x - cx;
+    const dy = e.y - e.cy - cy;
+    const rr = R + e.r;
+    if (dx * dx + dy * dy > rr * rr) continue;
+    if (!e.def.prop) {
+      hits++;
+      if (!e.def.boss) e.stun = Math.max(e.stun, daze);
+    }
+    w.hitEnemy(e, dmg, inst, Math.atan2(dy, dx), knock, 0, inst.def.id, color);
+  }
+  w.release();
+  return hits;
+}
+
+export const moshPit: WeaponDef = {
+  id: "mosh_pit",
+  name: "Underground Mosh Pit",
+  icon: "icon_mosh_pit",
+  color: 0xff5fa8,
+  sfx: "lightstick",
+  evolved: true,
+  desc: "EVOLUTION! The venue holds forty people. Every beat is a stomp, and every stomp is a shove.",
+  // (cd = 60 / 140 for tooling; the sim stomps on the stage's beat)
+  levels: [{ dmg: 40, cd: 0.429, every: 1, amount: 1, range: 70, knock: 110, daze: 0.2, need: 6, stacks: 6, dr: 0.04, grow: 0.06 }],
+  upgrades: [],
+  update(w, inst) {
+    const d = inst.data;
+    if (!SURF.has(inst)) {
+      const per = inst.def.levels[0].dr ?? 0.04;
+      const mod: StatMod = (s) => {
+        s.dmgReduction += per * (d.surf ?? 0);
+      };
+      SURF.set(inst, mod);
+      w.statMods.push(mod);
+    }
+    const first = newBeats(w, inst);
+    if (first < 0) return;
+    const last = d.beat;
+    const pl = w.player;
+    for (let b = first; b <= last; b++) {
+      const S = wstats(w, inst);
+      const L = S.L;
+      const surf = d.surf ?? 0;
+      const R = (L.range ?? 62) * S.area * (1 + (L.grow ?? 0.06) * surf);
+      const need = L.need ?? 6;
+      const cap = L.stacks ?? 6;
+      const hits = stomp(w, inst, S, R);
+      let now = surf;
+      if (hits >= need) {
+        d.quiet = 0;
+        now = Math.min(cap, surf + 1);
+      } else {
+        d.quiet = (d.quiet ?? 0) + 1;
+        if (d.quiet >= MOSH_SILENT) now = 0;
+      }
+      if (now !== surf) {
+        d.surf = now;
+        w.statsDirty = true;
+      }
+      a2fx(w, MOSH_STOMP, pl.x, pl.y - CFG.playerCy, pl.x, pl.y, R, now);
+    }
+  },
+  dispose(w, inst) {
+    dropStatMod(w, SURF.get(inst));
+    SURF.delete(inst);
+  },
+};
+
+export const weapons: WeaponDef[] = [idolLightstickWave, soldOutDomeTour, moshPit];

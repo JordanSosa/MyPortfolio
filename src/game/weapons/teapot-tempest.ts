@@ -17,6 +17,11 @@
  * puddle on her path (Warm Tea at the evolution's `heal`); six sturdier cups
  * (`block` 2) fling hot droplets at enemies outside the moat, kills inside heal
  * and drop petit fours.
+ * Second evolution: Table-Flip Tea Service (+ Speed Lines) - five cups orbit (contact `dmg`, `block` 1) and
+ *   every `cd` s the cup nearest an enemy is FLUNG at it as a spinning saucer (`fling` px/s x projSpeed,
+ *   `flingDmg`, `flingKnock`, turns back after `pierce` hits or `range` px, hits again on the way home to its
+ *   slot); a flung cup does not guard. No moat, no kill-heals; Warm Tea stays: a puddle on her path every
+ *   `pour` s (the base weapon's Lv5 puddle and `heal`).
  *
  * Pudding's talents read here (both forms where it makes sense): Free Refills
  * (+0.5 s puddle life and Warm Tea per rank), Extra Cups (+1 cup per rank), Tea
@@ -26,7 +31,8 @@
  *
  * Cups and puddles are owned projectiles (p.a = 0 cup, 1 puddle) with no
  * sprite: src/view/heroes-a-fx.ts draws them (cup tilt from p.b = tip time,
- * scale 0 = broken, puddle frames from age / life); inst.data.warm / warmMax =
+ * scale 0 = broken, puddle frames from age / life; a flung Table-Flip cup is p.a = 4 with the sprite
+ * `w_saucer`, drawn by the generic drawer); inst.data.warm / warmMax =
  * Warm Tea seconds left / its full length (the view's steam ring). Puddles
  * tick on CH_MISC so they never share a re-hit window with the cups (slot
  * channel).
@@ -44,6 +50,8 @@ import { GUARD_MAX, guardBlock, guardBody, guardOf, guardTick } from "./_orbital
 const CUP = 0;
 const PUDDLE = 1;
 const MOAT = 2;
+/** A Table-Flip cup away from its slot (p.hw = 1 flying out / 2 coming home, p.hh = px left, p.angV = hits left, (ox, oy) = its slot). */
+const FLUNG = 4;
 const MAX_PUDDLES = 6;
 const ORBIT_R = 30;
 /** Flying Teacup Service puddles use Teapot Tempest's Lv5 numbers. */
@@ -138,7 +146,7 @@ function orbitCups(w: World, inst: WeaponInstance, n: number, mine: number, R: n
   const g = guardOf(inst);
   guardTick(w, g, mend, inst.def.color, dt);
   let have = 0;
-  for (let i = 0; i < inst.projs.length; i++) if (inst.projs[i].a === CUP) have++;
+  for (let i = 0; i < inst.projs.length; i++) if (inst.projs[i].a === CUP || inst.projs[i].a === FLUNG) have++;
   while (have < n) {
     const p = w.spawnProjectile(inst);
     p.kind = PK_MANAGED;
@@ -156,13 +164,24 @@ function orbitCups(w: World, inst: WeaponInstance, n: number, mine: number, R: n
   d.rot = ((d.rot ?? 0) + spin * dt) % TAU;
   for (let i = 0; i < inst.projs.length; i++) {
     const p = inst.projs[i];
-    if (p.a !== CUP) continue;
+    if (p.a !== CUP && p.a !== FLUNG) continue;
     if (k >= n) {
       p.dead = true;
       continue;
     }
     const a = d.rot + (k / n) * TAU;
     p.ang = a;
+    if (p.a === FLUNG) {
+      // Table-Flip: away from its slot (it flies home to (ox, oy)); nothing guards there meanwhile
+      p.ox = pl.x + Math.cos(a) * R;
+      p.oy = pl.y - CFG.playerCy + Math.sin(a) * R * 0.8;
+      if (k < GUARD_MAX) {
+        g.x[k] = g.y[k] = 1e9;
+        g.r[k] = 0;
+      }
+      k++;
+      continue;
+    }
     p.x = pl.x + Math.cos(a) * R;
     p.y = pl.y - CFG.playerCy + Math.sin(a) * R * 0.8;
     p.dmg = dmg;
@@ -357,7 +376,10 @@ export const teapotTempest: WeaponDef = {
     { dmg: 14, cd: 2.0, amount: 4, speed: 3.2, every: 0.45, puddleR: 20, puddleDmg: 12, life: 5, heal: 3, knock: 30, block: 1, mend: 2.2 },
   ],
   upgrades: ["+1 teacup", "Damage +3, hotter, wider puddles, warmer tea", "+1 teacup, spills more often", "Damage +3, bigger, longer puddles, much warmer tea"],
-  evolutions: [{ into: "eternal_tea_party", with: "bento_box" }],
+  evolutions: [
+    { into: "eternal_tea_party", with: "bento_box" },
+    { into: "table_flip_service", with: "speed_lines" },
+  ],
   // mastery Limit Breaks (docs/content/weapons.md §4): Lv6 at rank 5, Lv7 at rank 10
   limitBreak: [
     { amount: 1, dmg: 0.15, text: "LIMIT BREAK — Guest Cup: +1 teacup, +15% damage" },
@@ -564,4 +586,145 @@ export function puddingC6(w: World): void {
   });
 }
 
-export const weapons: WeaponDef[] = [teapotTempest, eternalTeaParty];
+// ---------------------------------------------------------------- Table-Flip Tea Service
+/** A saucer on its way out counts its hits and turns back after `pierce` of them. */
+const saucerHit: ProjHitHook = (p) => {
+  if (p.a === FLUNG && p.hw === 1 && --p.angV <= 0) saucerBack(p);
+};
+
+function saucerBack(p: Projectile): void {
+  p.hw = 2;
+  p.nHits = 0;
+}
+
+/** Fling the up cup nearest to `t` at it. Returns false when no cup is home. */
+function fling(w: World, inst: WeaponInstance, S: WStats, t: Enemy): boolean {
+  const ty = t.y - t.cy;
+  let c: Projectile | null = null;
+  let bd = Infinity;
+  for (let i = 0; i < inst.projs.length; i++) {
+    const p = inst.projs[i];
+    if (p.a !== CUP || p.dead || p.r <= 0) continue;
+    const dx = p.x - t.x;
+    const dy = p.y - ty;
+    const d2 = dx * dx + dy * dy;
+    if (d2 < bd) {
+      bd = d2;
+      c = p;
+    }
+  }
+  if (!c) return false;
+  const L = S.L;
+  const a = Math.atan2(ty - c.y, t.x - c.x);
+  c.a = FLUNG;
+  c.kind = PK_FREE;
+  c.speed = S.speed;
+  c.vx = Math.cos(a) * c.speed;
+  c.vy = Math.sin(a) * c.speed;
+  c.hw = 1;
+  c.hh = (L.range ?? 150) * Math.sqrt(S.area);
+  c.angV = S.pierce;
+  c.b = 0;
+  c.r = 7 * S.area;
+  c.scale = S.area;
+  c.dmg = (L.flingDmg ?? 40) * (S.dmg / Math.max(1e-6, L.dmg));
+  c.knock = L.flingKnock ?? 160;
+  c.hitEvery = 0;
+  c.nHits = 0;
+  c.onHit = saucerHit;
+  c.sprite = "w_saucer";
+  c.rotMode = ROT_SPIN;
+  c.spin = 18;
+  c.shadow = 6;
+  c.trail = "saucer";
+  fired(w, inst, c.x, c.y);
+  return true;
+}
+
+/** Flung saucers: out for `range` px (the world moves them), then home to their slot; landing makes them cups again. */
+function saucers(inst: WeaponInstance, dt: number): void {
+  for (let i = 0; i < inst.projs.length; i++) {
+    const p = inst.projs[i];
+    if (p.a !== FLUNG || p.dead) continue;
+    if (p.hw === 1) {
+      p.hh -= p.speed * dt;
+      if (p.hh <= 0) saucerBack(p);
+      continue;
+    }
+    const dx = p.ox - p.x;
+    const dy = p.oy - p.y;
+    const d = Math.sqrt(dx * dx + dy * dy);
+    const sp = p.speed * 1.25;
+    if (d > sp * dt + 2) {
+      p.vx = (dx / d) * sp;
+      p.vy = (dy / d) * sp;
+      continue;
+    }
+    // home: a cup again (orbitCups places and arms it from the next step)
+    p.a = CUP;
+    p.kind = PK_MANAGED;
+    p.vx = p.vy = 0;
+    p.x = p.ox;
+    p.y = p.oy;
+    p.r = CUP_R;
+    p.scale = 1;
+    p.knock = 30;
+    p.sprite = "";
+    p.rotMode = 0;
+    p.rot = 0;
+    p.shadow = 0;
+    p.trail = "";
+  }
+}
+
+export const tableFlipService: WeaponDef = {
+  id: "table_flip_service",
+  name: "Table-Flip Tea Service",
+  icon: "icon_table_flip_service",
+  color: C.gold,
+  sfx: "teacup",
+  evolved: true,
+  desc: "EVOLUTION! The customer was rude. Cups and saucers are served at speed. The tea is still warm.",
+  levels: [
+    {
+      dmg: 18, cd: 0.9, amount: 5, speed: 260, pierce: 6, every: 0.45, spin: 3.6, flingDmg: 40, flingKnock: 160, range: 150, knock: 30,
+      pour: 3, puddleR: 20, puddleDmg: 12, life: 5, heal: 3, block: 1, mend: 2.2,
+    },
+  ],
+  upgrades: [],
+  update(w, inst, dt) {
+    prune(inst);
+    const S = wstats(w, inst);
+    const L = S.L;
+    const pl = w.player;
+    const extra = w.talentRank("pudding_extra_cups");
+    const n = Math.min(10, S.amount + extra);
+    const R = ORBIT_R * Math.sqrt(S.area);
+    saucers(inst, dt);
+    orbitCups(w, inst, n, S.amount - w.stats.amount + extra, R, L.spin ?? 3.6, S.dmg, L.every ?? 0.45, inst.slot, L.block ?? 1, L.mend ?? 2.2, dt);
+    // every cd s: the cup nearest an enemy is served, at speed
+    inst.timer -= dt;
+    if (inst.timer <= 0) {
+      const t = w.nearestEnemy(pl.x, pl.y - CFG.playerCy, R + (L.range ?? 150) * Math.sqrt(S.area));
+      inst.timer = t && fling(w, inst, S, t) ? S.cd : 0.12;
+    }
+    // Warm Tea stays on the menu: a puddle on her path every `pour` s
+    const d = inst.data;
+    d.pour = (d.pour ?? 0.5) - dt;
+    if (d.pour <= 0) {
+      d.pour = (L.pour ?? 3) * w.stats.cooldown;
+      const at = spillSpot(w, pl.x, pl.y);
+      const life = ((L.life ?? 5) + 0.5 * w.talentRank("pudding_refill")) * w.stats.duration;
+      teaPuddle(w, inst, at.x, at.y, (L.puddleR ?? 20) * S.area * (ceremony(w) ? 2 : 1), (L.puddleDmg ?? 12) * (S.dmg / Math.max(1e-6, L.dmg)), life);
+      hfx(w, HFX_PUD_SPILL, at.x, at.y - 4, pl.x, pl.y - 14);
+    }
+    capPuddles(inst);
+    warmTea(w, inst, L.heal ?? 3, dt);
+    cupToss(w, inst, dt);
+  },
+  dispose(_w, inst) {
+    killOwned(inst);
+  },
+};
+
+export const weapons: WeaponDef[] = [teapotTempest, eternalTeaParty, tableFlipService];

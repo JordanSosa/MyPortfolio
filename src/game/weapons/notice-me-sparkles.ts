@@ -12,6 +12,12 @@
  * and every 6 s a KIRA KIRA MOMENT charms every non-boss in the aura (bosses
  * are Distracted, their pattern pauses 1 s, once per 12 s per boss).
  *
+ * Second evolution: Who Are You Again? (+ Heart Locket) - the aura (r `radius`, `sting` a tick) charms
+ * briefly (`duration` s); when a charm ends, or the charmed enemy dies, a HEARTBREAK burst goes off on it:
+ * r `burst` x area for `dmg` + `hpShare` of its max HP (that share is capped at `hpCap`; bosses take `dmg`
+ * flat), and every other non-boss in the burst rolls the charm at once: a chain, paced at `rate` bursts a
+ * second (`heartbreaks(inst)`: the queue). Short charms are the ammunition - no charmed army, no Kira moment.
+ *
  * Senpai's talents read here: Magnetic Personality (+1.5 charm points per
  * rank), Fan Club (+2 max per rank), Meaningful Glance (every 4 s a random
  * enemy in view is charmed / a boss stunned 0.5 s) and Love Triangle (chain
@@ -20,7 +26,7 @@
  */
 import { C } from "../../art/palette";
 import { CFG } from "../config";
-import type { WeaponDef, WeaponInstance } from "../types";
+import type { Enemy, WeaponDef, WeaponInstance } from "../types";
 import type { World } from "../world";
 import { charm, charmRules, charmedCount, distract, isCharmed } from "./_charm";
 import { HB, hfx } from "./_hb";
@@ -28,14 +34,17 @@ import { wstats, type WStats } from "./_shared";
 
 const ID = "notice_me_sparkles";
 const EVO = "shoujo_filter";
+const WHO = "who_are_you_again";
+/** heroFx cue (src/view/evo2/d.ts): a heartbreak burst at (x, y), radius r; n = enemies it hit. */
+export const WHO_BURST = "evo2d_heartbreak";
 
 /** Max counted admirers for the current level (base + 2 per extra amount + 2 per Fan Club rank). */
 function maxCharmed(w: World, S: WStats): number {
   return (S.L.max ?? 4) + 2 * Math.max(0, S.amount - 1) + 2 * w.talentRank("senpai_fan_club");
 }
 
-/** One aura pulse: damage everything inside, then charm rolls. */
-function pulse(w: World, inst: WeaponInstance, S: WStats, R: number, evo: boolean): void {
+/** One aura pulse: `dmg` to everything inside, then charm rolls (`mul` = the admirers' attack multiplier, `boom` = hearts explode). */
+function pulse(w: World, inst: WeaponInstance, S: WStats, R: number, dmg: number, mul: number, boom: boolean): void {
   const pl = w.player;
   const cx = pl.x;
   const cy = pl.y - CFG.playerCy;
@@ -43,8 +52,6 @@ function pulse(w: World, inst: WeaponInstance, S: WStats, R: number, evo: boolea
   const chance = (L.charm ?? 0.08) + 0.015 * w.talentRank("senpai_magnetic");
   const secs = S.duration;
   const max = maxCharmed(w, S);
-  const mul = evo ? (L.charmDmgMul ?? 3) : 2;
-  const boom = evo || inst.level >= 5;
   const buf = w.acquire();
   const n = w.grid.query(cx, cy, R + 12, buf);
   const items = w.enemies.items;
@@ -55,7 +62,7 @@ function pulse(w: World, inst: WeaponInstance, S: WStats, R: number, evo: boolea
     const dy = e.y - e.cy - cy;
     const rr = R + e.r * 0.5;
     if (dx * dx + dy * dy > rr * rr) continue;
-    if (w.hitEnemy(e, S.dmg, inst, Math.atan2(dy, dx), S.knock, 0, inst.def.id, inst.def.color)) continue;
+    if (w.hitEnemy(e, dmg, inst, Math.atan2(dy, dx), S.knock, 0, inst.def.id, inst.def.color)) continue;
     if (e.def.boss || isCharmed(w, e)) continue;
     const c = e.elite ? chance * 0.5 : chance;
     if (charmedCount(w) >= max || w.rng.next() >= c) continue;
@@ -108,7 +115,7 @@ export function glance(w: World): void {
     hfx(w, HB.GLANCE, pl.x, pl.y - 14, e.x, y, 0, 1, e);
     return;
   }
-  const inst = w.hasWeapon(EVO) ?? w.hasWeapon(ID);
+  const inst = w.hasWeapon(EVO) ?? w.hasWeapon(WHO) ?? w.hasWeapon(ID);
   const S = inst ? wstats(w, inst) : null;
   const secs = S ? S.duration : 3 * w.stats.duration;
   const evo = inst?.def.id === EVO;
@@ -131,7 +138,10 @@ export const noticeMeSparkles: WeaponDef = {
     { dmg: 7, cd: 0.45, amount: 1, radius: 48, charm: 0.14, duration: 4, max: 10, knock: 8 },
   ],
   upgrades: ["Wider aura, more charming", "Damage +2, up to 6 admirers", "Charm lasts longer, ticks faster", "Damage +2, bigger aura, up to 10 admirers; heartbreak explodes"],
-  evolutions: [{ into: EVO, with: "main_character_aura" }],
+  evolutions: [
+    { into: EVO, with: "main_character_aura" },
+    { into: WHO, with: "heart_locket" },
+  ],
   limitBreak: [
     { area: 0.15, dmg: 0.2, text: "LIMIT BREAK — Extra Sparkle: +15% aura, +20% damage" },
     { dmg: 0.2, cd: 0.88, text: "MASTERED — Unbearable Charisma: +20% damage, ticks 12% faster" },
@@ -147,7 +157,7 @@ export const noticeMeSparkles: WeaponDef = {
     inst.timer -= dt;
     if (inst.timer > 0) return;
     inst.timer = Math.max(0.15, S.cd);
-    pulse(w, inst, S, inst.data.r, false);
+    pulse(w, inst, S, inst.data.r, S.dmg, 2, inst.level >= 5);
   },
 };
 
@@ -182,8 +192,98 @@ export const shoujoFilter: WeaponDef = {
     inst.timer -= dt;
     if (inst.timer > 0) return;
     inst.timer = Math.max(0.12, S.cd);
-    pulse(w, inst, S, d.r, true);
+    pulse(w, inst, S, d.r, S.dmg, S.L.charmDmgMul ?? 3, true);
   },
 };
 
-export const weapons: WeaponDef[] = [noticeMeSparkles, shoujoFilter];
+// ---------------------------------------------------------------- Who Are You Again?
+
+/** Heartbreak bursts waiting for their turn: x, y, damage, origin uid (4 numbers each). */
+const QUEUES = new WeakMap<WeaponInstance, number[]>();
+const QUEUE_MAX = 40;
+
+/** Bursts queued on a Who Are You Again? instance (tests, the dev console). */
+export function heartbreaks(inst: WeaponInstance): number {
+  return (QUEUES.get(inst)?.length ?? 0) / 4;
+}
+
+/** One heartbreak burst: damage in r `burst` x area, then everybody else in it rolls the charm. */
+function heartbreak(w: World, inst: WeaponInstance, S: WStats, x: number, y: number, dmg: number, origin: number): void {
+  const L = S.L;
+  const R = (L.burst ?? 32) * S.area;
+  const chance = (L.charm ?? 0.25) + 0.015 * w.talentRank("senpai_magnetic");
+  const max = maxCharmed(w, S);
+  const buf = w.acquire();
+  const n = w.grid.query(x, y, R + 12, buf);
+  const items = w.enemies.items;
+  let hits = 0;
+  for (let k = 0; k < n; k++) {
+    const e = items[buf[k]] as Enemy | undefined;
+    if (!e || e.dead) continue;
+    const dx = e.x - x;
+    const dy = e.y - e.cy - y;
+    const rr = R + e.r;
+    if (dx * dx + dy * dy > rr * rr) continue;
+    hits++;
+    if (w.hitEnemy(e, e.def.boss ? S.dmg : dmg, inst, Math.atan2(dy, dx), S.knock * 5, 0, WHO, inst.def.color)) continue;
+    if (e.def.boss || e.def.prop || e.uid === origin || isCharmed(w, e)) continue;
+    if (charmedCount(w) >= max || w.rng.next() >= (e.elite ? chance * 0.5 : chance)) continue;
+    if (charm(w, e, S.duration, { max, links: 3 })) hfx(w, HB.CHARM, e.x, e.y - e.cy * 2, e.x, e.y, 0, 1, e);
+  }
+  w.release();
+  hfx(w, WHO_BURST, x, y, x, y, R, hits);
+}
+
+export const whoAreYouAgain: WeaponDef = {
+  id: WHO,
+  name: "Who Are You Again?",
+  icon: "icon_who_are_you_again",
+  color: C.pinkLight,
+  sfx: "sparkleCharm",
+  evolved: true,
+  desc: "EVOLUTION! He looks right at them. Then he asks their name. The heartbreak is area damage.",
+  levels: [{ dmg: 30, cd: 0.45, amount: 1, radius: 56, charm: 0.25, duration: 2.5, max: 12, knock: 8, sting: 5, burst: 32, hpShare: 0.06, hpCap: 240, rate: 8 }],
+  upgrades: [],
+  init(w, inst) {
+    inst.timer = 0.2;
+    const q: number[] = [];
+    QUEUES.set(inst, q);
+    // (the book calls this on every ended charm, muted or not: the burst itself waits in the queue)
+    charmRules(w, {
+      triangle: w.talentRank("senpai_love_triangle") > 0,
+      onEnd: (_w, e) => {
+        if (q.length >= QUEUE_MAX * 4) return;
+        const L = inst.def.levels[0];
+        q.push(e.x, e.y - e.cy, Math.min(L.hpCap ?? 240, (L.hpShare ?? 0.06) * e.maxHp), e.uid);
+      },
+    });
+  },
+  update(w, inst, dt) {
+    const S = wstats(w, inst);
+    const d = inst.data;
+    const R = (S.L.radius ?? 56) * S.area;
+    easeRadius(inst, R, dt);
+    // the chain: at most `rate` bursts a second, oldest first
+    const q = QUEUES.get(inst);
+    d.bt = Math.max(0, (d.bt ?? 0) - dt);
+    if (q && q.length > 0 && d.bt <= 0) {
+      d.bt = 1 / (S.L.rate ?? 8);
+      const x = q[0];
+      const y = q[1];
+      const share = q[2];
+      const origin = q[3];
+      q.splice(0, 4);
+      heartbreak(w, inst, S, x, y, S.dmg + share, origin);
+    }
+    inst.timer -= dt;
+    if (inst.timer > 0) return;
+    inst.timer = Math.max(0.12, S.cd);
+    pulse(w, inst, S, d.r, (S.L.sting ?? 5) * (S.dmg / Math.max(1e-6, S.L.dmg)), 2, false);
+  },
+  dispose(w, inst) {
+    charmRules(w, { onEnd: null });
+    QUEUES.delete(inst);
+  },
+};
+
+export const weapons: WeaponDef[] = [noticeMeSparkles, shoujoFilter, whoAreYouAgain];

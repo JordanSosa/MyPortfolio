@@ -585,7 +585,7 @@ export class HeroesBFx {
   // ---------------------------------------------------------------- Senpai
   private drawSenpaiAura(time: number): void {
     const w = this.w as World;
-    const inst = w.hasWeapon("shoujo_filter") ?? w.hasWeapon("notice_me_sparkles");
+    const inst = w.hasWeapon("shoujo_filter") ?? w.hasWeapon("who_are_you_again") ?? w.hasWeapon("notice_me_sparkles");
     if (!inst) return;
     const R = inst.data.r ?? 0;
     if (R <= 1) return;

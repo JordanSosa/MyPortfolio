@@ -74,6 +74,8 @@ const ABYSS = "unsealed_abyss_dragon";
 const ABYSS_GRADE: Grade = { tint: [0.82, 0.76, 0.94], lift: [0.03, 0.0, 0.08], saturation: 0.86, contrast: 1.05, brightness: 0.9, hue: 0 };
 const TEA = "teapot_tempest";
 const PARTY = "eternal_tea_party";
+/** Second evolution (weapons.md §8): the same cups, puddles and Warm Tea; a flung cup is a generic `w_saucer` projectile. */
+const FLIP = "table_flip_service";
 const ALDENTE = "al_dente_armageddon";
 const ROBOT = "get_in_the_robot";
 /** Vignette the stage normally runs with (bestiary-fx BASE_VIGNETTE). */
@@ -373,7 +375,7 @@ export class HeroesAFx {
         continue;
       }
       if (!cam.inView(p.x, p.y, 60)) continue;
-      if ((src === TEA || src === PARTY) && !p.sprite) this.drawTea(p, time);
+      if ((src === TEA || src === PARTY || src === FLIP) && !p.sprite) this.drawTea(p, time);
       else if (src === ALDENTE && p.a === SAUCE) this.drawSauce(p, time);
       else if (src === "aoi_jet_dash") this.drawJetFlame(p);
       else if (src === ROBOT) {
@@ -637,7 +639,7 @@ export class HeroesAFx {
    */
   private drawWarmTea(time: number): void {
     const w = this.w as World;
-    const inst = w.hasWeapon(TEA) ?? w.hasWeapon(PARTY);
+    const inst = w.hasWeapon(TEA) ?? w.hasWeapon(PARTY) ?? w.hasWeapon(FLIP);
     if (!inst) return;
     const left = inst.data.warm ?? 0;
     const full = inst.data.warmMax ?? 0;

@@ -3,6 +3,10 @@
  * behind; extra Amount adds up / down / diagonal arcs).
  * Evolution: Sakura Tempest (+ Big Ribbon) - a 360 degree whirlwind every 0.8 s
  * that also flings petal blades.
+ * Second evolution: Already Cut (+ Swift Shoes) - one long line cut along the way she last moved: no damage
+ *   on the cut, everything on the line is MARKED and takes it all at once when she sheathes the blade
+ *   (`wait` s later; +`moved` if she walked on meanwhile). Marks that die shed petal blades down the line.
+ *   Directional and delayed, the highest single-line burst, nothing behind her.
  *
  * Rin's talents (talents/rin.ts) read here, for both forms: Wide Stance (+6%
  * area per rank), Petal Storm (each slash launches 1-3 homing petal blades),
@@ -12,6 +16,7 @@ import { C } from "../../art/palette";
 import { TAU } from "../../core/math";
 import { PK_ATTACHED, PK_FREE, ROT_SPIN, SHAPE_CIRCLE, SHAPE_ELLIPSE, type Enemy, type WeaponDef, type WeaponInstance } from "../types";
 import type { World } from "../world";
+import { heroFx, sfxAt } from "./_fx";
 import { fired, wstats, type WStats } from "./_shared";
 
 /** Direction offsets for slash #k: front, back, up, down, then diagonals. */
@@ -139,7 +144,10 @@ export const petalSlash: WeaponDef = {
     { dmg: 30, cd: 0.9, amount: 2, area: 1.3, knock: 85 },
   ],
   upgrades: ["Also slashes behind you", "Damage +6, area +15%", "Cooldown -18%", "Damage +8, area +15%"],
-  evolutions: [{ into: "sakura_tempest", with: "big_ribbon" }],
+  evolutions: [
+    { into: "sakura_tempest", with: "big_ribbon" },
+    { into: "already_cut", with: "swift_shoes" },
+  ],
   // mastery Limit Breaks (docs/content/weapons.md §4): Lv6 at rank 5, Lv7 at rank 10
   limitBreak: [
     { dmg: 0.2, area: 0.15, text: "LIMIT BREAK — Whetstone: +20% damage, +15% area" },
@@ -230,4 +238,181 @@ export const sakuraTempest: WeaponDef = {
   },
 };
 
-export const weapons: WeaponDef[] = [petalSlash, sakuraTempest];
+// ---------------------------------------------------------------- Already Cut
+
+/** View cues (heroFx). The cut: a line from (x, y) to (x2, y2), half-width r. */
+export const FX_CUT = "e2a_cut";
+/** An enemy on the line was marked (`enemy`, n = its uid; the mark resolves `r` s later). */
+export const FX_CUT_MARK = "e2a_mark";
+/** The sheath click at the hero (x, y): n = marks resolved, r = 1 when she moved on (the bonus). */
+export const FX_CUT_CLICK = "e2a_click";
+
+const MARKS = 48;
+/** The pending cut of one instance: who is marked, where she stood, the line's angle. */
+interface Cut {
+  es: (Enemy | null)[];
+  uids: Int32Array;
+  n: number;
+  /** Seconds until the sheath click (<= 0: nothing pending). */
+  t: number;
+  /** Damage multiplier of this cut (Crescent Moon Draw: every 3rd one). */
+  mul: number;
+  px: number;
+  py: number;
+  ang: number;
+}
+const cuts = new WeakMap<WeaponInstance, Cut>();
+function cutOf(inst: WeaponInstance): Cut {
+  let c = cuts.get(inst);
+  if (!c) cuts.set(inst, (c = { es: new Array<Enemy | null>(MARKS).fill(null), uids: new Int32Array(MARKS), n: 0, t: 0, mul: 1, px: 0, py: 0, ang: 0 }));
+  return c;
+}
+
+/** Mark every enemy on the segment from (x, y) along `a` (length len, half-width hw) that is not marked yet. */
+function markLine(w: World, c: Cut, x: number, y: number, a: number, len: number, hw: number, wait: number, dry = false): number {
+  const ca = Math.cos(a);
+  const sa = Math.sin(a);
+  const buf = w.acquire();
+  const n = w.grid.query(x + ca * len * 0.5, y + sa * len * 0.5, len * 0.5 + hw + 16, buf);
+  const items = w.enemies.items;
+  let on = 0;
+  for (let k = 0; k < n && c.n < MARKS; k++) {
+    const e = items[buf[k]];
+    if (!e || e.dead || e.def.prop) continue;
+    const dx = e.x - x;
+    const dy = e.y - e.cy - y;
+    const along = dx * ca + dy * sa;
+    if (along < -e.r || along > len + e.r || Math.abs(dy * ca - dx * sa) > hw + e.r) continue;
+    on++;
+    if (dry) break;
+    let seen = false;
+    for (let i = 0; i < c.n; i++)
+      if (c.uids[i] === e.uid) {
+        seen = true;
+        break;
+      }
+    if (seen) continue;
+    c.es[c.n] = e;
+    c.uids[c.n++] = e.uid;
+    heroFx(w, FX_CUT_MARK, e.x, e.y - e.cy, e.x, e.y - e.cy, wait, e.uid, e);
+  }
+  w.release();
+  return on;
+}
+
+/** A petal blade shed by a mark that died: straight on down the line from (x, y). */
+function shedPetal(w: World, inst: WeaponInstance, x: number, y: number, a: number, dmg: number): void {
+  const q = w.spawnProjectile(inst);
+  q.kind = PK_FREE;
+  q.x = x;
+  q.y = y;
+  q.speed = 170 * w.stats.projSpeed;
+  q.vx = Math.cos(a) * q.speed;
+  q.vy = Math.sin(a) * q.speed;
+  q.r = 4;
+  q.dmg = dmg;
+  q.pierce = 3;
+  q.knock = 30;
+  q.life = 0.6;
+  q.sprite = "ult_petal";
+  q.rotMode = ROT_SPIN;
+  q.spin = 14;
+  q.trail = "petal";
+}
+
+/** The sheath click: every mark that still stands takes the cut at once. */
+function sheathe(w: World, inst: WeaponInstance, S: WStats, c: Cut): void {
+  const pl = w.player;
+  const L = S.L;
+  const moved = Math.hypot(pl.x - c.px, pl.y - c.py) > 6;
+  const dmg = S.dmg * c.mul * (moved ? 1 + (L.moved ?? 0.5) : 1);
+  const pdmg = (L.petalDmg ?? 14) * w.stats.might * (inst.dmgMul ?? 1);
+  const petals = Math.round(L.petals ?? 3);
+  // (S is shared scratch: a hit's hooks may resolve another weapon's stats)
+  const knock = S.knock;
+  let shed = 18;
+  let hit = 0;
+  for (let i = 0; i < c.n; i++) {
+    const e = c.es[i];
+    c.es[i] = null;
+    if (!e || e.dead || e.uid !== c.uids[i]) continue;
+    hit++;
+    const x = e.x;
+    const y = e.y - e.cy;
+    // (knocked sideways off the line, alternating: the cut opens)
+    if (!w.hitEnemy(e, dmg, inst, c.ang + (i & 1 ? 1 : -1) * 1.2, knock, 0, inst.def.id, inst.def.color)) continue;
+    for (let k = 0; k < petals && shed > 0; k++, shed--) shedPetal(w, inst, x, y, c.ang + (k - (petals - 1) / 2) * 0.22, pdmg);
+  }
+  c.n = 0;
+  heroFx(w, FX_CUT_CLICK, pl.x, pl.y, pl.x, pl.y, moved ? 1 : 0, hit);
+  if (hit > 0) sfxAt(w, inst.def.id, "hitCrit", pl.x, pl.y);
+}
+
+export const alreadyCut: WeaponDef = {
+  id: "already_cut",
+  name: "Already Cut",
+  icon: "icon_already_cut",
+  color: C.pinkLight,
+  sfx: "slash",
+  evolved: true,
+  desc: "EVOLUTION! One long cut the way you face. Nothing happens. Then she sheathes the blade.",
+  levels: [{ dmg: 95, cd: 1.3, amount: 1, area: 1, knock: 40, len: 150, wid: 14, wait: 0.45, moved: 0.5, petals: 3, petalDmg: 14 }],
+  upgrades: [],
+  update(w, inst, dt) {
+    const S = wstats(w, inst);
+    const c = cutOf(inst);
+    const L = S.L;
+    const wait = L.wait ?? 0.45;
+    if (c.t > 0) {
+      c.t -= dt;
+      if (c.t <= 0) sheathe(w, inst, S, c);
+    }
+    inst.timer -= dt;
+    if (inst.timer > 0) return;
+    // (never a second cut before the first one is sheathed)
+    inst.timer = Math.max(S.cd, wait + 0.1);
+    const pl = w.player;
+    const d = inst.data;
+    // Rin's talents on this route: Wide Stance widens it, every 3rd draw is a Crescent Moon cut (x2.5 as wide, x1.5)
+    let moon = false;
+    if (w.talentRank("rin_crescent_draw") > 0) {
+      d.vol = (d.vol ?? 0) + 1;
+      moon = d.vol % 3 === 0;
+    }
+    const area = S.area * stance(w);
+    const len = (L.len ?? 150) * area;
+    const hw = (L.wid ?? 14) * 0.5 * area * (moon ? 2.5 : 1);
+    const x = pl.x;
+    const y = pl.y - 8;
+    // the way she last moved; with nobody on that line, at the nearest enemy in reach (a cut is never wasted on air)
+    let a0 = Math.atan2(pl.aimY, pl.aimX);
+    if (markLine(w, c, x, y, a0, len, hw, wait, true) === 0) {
+      const e = w.nearestEnemy(x, y, len);
+      if (e) a0 = Math.atan2(e.y - e.cy - y, e.x - x);
+    }
+    c.px = pl.x;
+    c.py = pl.y;
+    c.ang = a0;
+    c.t = wait;
+    c.mul = moon ? 1.5 : 1;
+    // extra Amount fans more cuts around the first (never behind her)
+    const cutsN = Math.min(5, S.amount);
+    for (let k = 0; k < cutsN; k++) {
+      const a = a0 + (k & 1 ? 1 : -1) * 0.3 * Math.ceil(k / 2);
+      markLine(w, c, x, y, a, len, hw, wait);
+      heroFx(w, FX_CUT, x, y, x + Math.cos(a) * len, y + Math.sin(a) * len, hw, k);
+    }
+    // ... and Petal Storm's homing blades fly on the cut
+    const storm = w.talentRank("rin_petal_storm");
+    if (storm > 0) {
+      const n = w.nearestEnemies(x, y, 150, storm, near);
+      for (let i = 0; i < storm; i++) {
+        const t = n > 0 ? near[i % n] : null;
+        petalBlade(w, inst, t ? Math.atan2(t.y - t.cy - y, t.x - x) : a0 + (i - (storm - 1) / 2) * 0.4, 8 * w.stats.might * (inst.dmgMul ?? 1), 1, t);
+      }
+    }
+    fired(w, inst, pl.x, pl.y);
+  },
+};
+
+export const weapons: WeaponDef[] = [petalSlash, sakuraTempest, alreadyCut];

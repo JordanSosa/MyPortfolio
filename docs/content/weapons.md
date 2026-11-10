@@ -349,11 +349,13 @@ crumple, f3).
 
 | Lv | dmg | cd | amount | speed | range | pierce | knock | upgrade text |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | 9 | 1.2 | 3 | 170 | 100 | 1 | 25 | — |
-| 2 | 9 | 1.2 | 4 | 170 | 100 | 1 | 25 | "+1 crane" |
-| 3 | 12 | 1.2 | 4 | 180 | 115 | 1 | 25 | "Damage +3, wider patrol" |
-| 4 | 12 | 1.0 | 5 | 180 | 115 | 1 | 28 | "+1 crane, darts more often" |
-| 5 | 15 | 1.0 | 6 | 190 | 115 | 2 | 30 | "Damage +3, +1 crane, darts pierce 2" |
+| 1 | 11 | 1.2 | 3 | 170 | 100 | 1 | 25 | — |
+| 2 | 11 | 1.2 | 4 | 170 | 100 | 1 | 25 | "+1 crane" |
+| 3 | 17 | 1.1 | 4 | 180 | 115 | 2 | 25 | "Damage +6, wider patrol, darts pierce 2" |
+| 4 | 21 | 0.9 | 5 | 180 | 115 | 2 | 28 | "+1 crane, damage +4, darts more often" |
+| 5 | 30 | 0.8 | 6 | 190 | 115 | 3 | 30 | "Damage +9, +1 crane, darts pierce 3" |
+
+(Weapon bench pass, §9: dmg was 9 / 9 / 12 / 12 / 15, cd 1.2 / 1.2 / 1.2 / 1.0 / 1.0, pierce 1 / 1 / 1 / 1 / 2.)
 
 **Visuals.** `w_crane` (12×10×4 flap), rotated by velocity while darting,
 flipped to face its drift in the flock, trail `"paper"` (2 white `fx_px` per
@@ -410,11 +412,13 @@ its slow becomes ×0.3, regen ×3, and `fx_zzz` floats over the hero (sfx
 
 | Lv | dmg | cd | radius | slow | deploy | armor | regen | comfy | upgrade text |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| 1 | 4 | 0.5 | 40 | 0.6 | 0.6 | 1 | 0.5 | 5 | — |
-| 2 | 5 | 0.5 | 44 | 0.6 | 0.6 | 1 | 0.5 | 5 | "Damage +1, bigger blanket" |
-| 3 | 5 | 0.5 | 44 | 0.5 | 0.6 | 1 | 1.0 | 5 | "Cosier: stronger slow, more regen" |
-| 4 | 7 | 0.5 | 44 | 0.5 | 0.4 | 2 | 1.0 | 5 | "Damage +2, deploys faster, +1 armor inside" |
-| 5 | 9 | 0.5 | 52 | 0.5 | 0.4 | 2 | 1.0 | 5 | "Damage +2, bigger; enemies inside 3 s fall asleep and take +25% damage" |
+| 1 | 5 | 0.5 | 40 | 0.6 | 0.6 | 1 | 0.5 | 5 | — |
+| 2 | 7 | 0.5 | 44 | 0.6 | 0.6 | 1 | 1.0 | 5 | "Damage +2, bigger blanket, more regen" |
+| 3 | 9 | 0.5 | 44 | 0.5 | 0.6 | 2 | 1.5 | 5 | "Cosier: damage +2, stronger slow, more regen, +1 armor inside" |
+| 4 | 15 | 0.5 | 44 | 0.5 | 0.4 | 2 | 2.0 | 5 | "Damage +6, deploys faster, more regen" |
+| 5 | 28 | 0.5 | 52 | 0.5 | 0.4 | 3 | 2.5 | 5 | "Damage +13, bigger, +1 armor; enemies inside 3 s fall asleep and take +25% damage" |
+
+(Weapon bench pass, §9: dmg was 4 / 5 / 5 / 7 / 9, regen 0.5 / 0.5 / 1 / 1 / 1, armor 1 / 1 / 1 / 2 / 2.)
 
 `amount` stat: +8% radius per extra amount. Deploy plays sfx `snore` at vol 0.3,
 pitch +5 (a yawn).
@@ -442,9 +446,9 @@ evolution goes to its base weapon.
 | `cheat_meteor` | Meteor Lv.99999 | "EVOLUTION! He trained (once). Meteors fall on the biggest crowd; every third one is... a lot." | `{ dmg: 120, cd: 2.4, amount: 1, blast: 48, overdo: 3, overdoBlast: 110, small: 2, smallDmg: 30, knock: 160 }` |
 | `isekai_rush_hour` | Isekai Rush Hour | "EVOLUTION! The honk goes 360° and phantom trucks plough through crowds on a schedule." | `{ dmg: 40, cd: 1.5, amount: 1, radius: 72, knock: 220, ram: 45, truckEvery: 4, truckDmg: 90, truckSpeed: 480, isekai: 0.4 }` |
 | `tapioca_tsunami` | Tapioca Tsunami | "EVOLUTION! Giant boba pearls bounce 8 times and shed regular pearls on every bounce." | `{ dmg: 30, cd: 1.6, amount: 2, speed: 160, bounce: 8, shed: 3, shedDmg: 14, shedBounce: 2, knock: 60 }` |
-| `thousand_crane_wish` | Thousand Crane Wish | "EVOLUTION! Twelve golden cranes. Every 1,000 crane kills grants a Wish: a full heal and a golden crane storm." | `{ dmg: 22, cd: 0.7, amount: 12, speed: 210, range: 130, pierce: 3, knock: 30, wish: 1000, stormDmg: 200 }` |
+| `thousand_crane_wish` | Thousand Crane Wish | "EVOLUTION! Twelve golden cranes. Every 1,000 crane kills grants a Wish: a full heal and a golden crane storm." | `{ dmg: 36, cd: 0.7, amount: 12, speed: 210, range: 130, pierce: 4, knock: 30, wish: 1000, stormDmg: 200 }` (§9: dmg was 22, pierce 3) |
 | `sold_out_dome_tour` | Sold-Out Dome Tour | "EVOLUTION! Spotlight waves on every beat, and every 8 beats the whole screen gets an ENCORE." | `{ dmg: 22, every: 1, amount: 4, arc: 90, range: 110, knock: 50, encore: 8, encoreDmg: 40, rank: 0.12 }` |
-| `eternal_winter_break` | Eternal Winter Break | "EVOLUTION! The kotatsu comes with you, pulls in gems, and lobs mikan when you get Too Comfy." | `{ dmg: 14, cd: 0.4, amount: 1, radius: 64, slow: 0.4, armor: 2, regen: 1.5, comfy: 3, gemPull: 120, mikanEvery: 0.5, mikanDmg: 20 }` |
+| `eternal_winter_break` | Eternal Winter Break | "EVOLUTION! The kotatsu comes with you, pulls in gems, and lobs mikan when you get Too Comfy." | `{ dmg: 24, cd: 0.4, amount: 1, radius: 64, slow: 0.4, armor: 3, regen: 3, comfy: 3, gemPull: 120, mikanEvery: 0.5, mikanDmg: 20 }` (§9: dmg was 14, armor 2, regen 1.5) |
 
 Behaviour details:
 
@@ -660,7 +664,7 @@ Yarn Orbit keeps its 3 s on / 1.3 s off cycle: a ball broken at the end of the o
 when the next balls come out. With the guard in, Yarn Orbit / Cosmic Yarn got a small offence bump toward the
 weapon median (balance lab gauge, crowd DPS): Yarn Orbit Lv3 dmg 13 -> 14, Lv4 dmg 13 -> 14 and area 1.15 -> 1.2,
 Lv5 dmg 16 -> 20 and area 1.2 -> 1.3 (L5 1150 -> 1528, 0.67x -> 0.88x the median); Cosmic Yarn dmg 19 -> 27, area
-1 -> 1.15 (2113 -> 3382, 0.51x -> 0.81x the evolution median). Near the median, not the top: they defend too.
+1 -> 1.15 (2113 -> 3382, 0.51x -> 0.81x the evolution median). Near the median, not the top: they defend too. (The weapon bench pass, §9, raised both again: in real fights - not the gauge - they were 0.26x / 0.45x.)
 
 Weapons checked and left out (no orbiting contact bodies):
 
@@ -713,20 +717,20 @@ Status: `done` = implemented (the coverage test then checks id, name, base and p
 | Heart Boomerang | `heart-boomerang.ts` | Love Tornado (Twin Charm) | Unrequited Heart | `unrequited_heart` | Heart Locket | A | designed |
 | Thunder Bell | `thunder-bell.ts` | Raijin Drum (Power Bow) | Group Chat Lightning | `group_chat_lightning` | Friendship Bracelet | A | designed |
 | Candy Bomb | `candy-bomb.ts` | Sugar Nuke (Lucky Clover) | Konpeito Minefield | `konpeito_minefield` | Chibi Charm | A | designed |
-| Bubble Aura | `bubble-aura.ts` | Ocean Dome (Heart Locket) | Soap Opera | `soap_opera` | Inner Monologue | B | designed |
-| Prism Beam | `prism-beam.ts` | Rainbow Cannon (Swift Shoes) | Refraction Overload | `refraction_overload` | Lucky Clover | B | designed |
-| Dark Flame Dragon | `dark-flame-dragon.ts` | Unsealed Abyss Dragon (Inner Monologue) | Unbandaged Right Arm | `unbandaged_right_arm` | Main Character Aura | C | designed |
-| Teapot Tempest | `teapot-tempest.ts` | Eternal Tea Party (Bento Box) | Table-Flip Tea Service | `table_flip_service` | Speed Lines | C | designed |
-| Micro Missile Swarm | `micro-missile-swarm.ts` | Al Dente Armageddon (Speed Lines) | Final Episode Budget Missile | `budget_missile` | Big Ribbon | C | designed |
-| Baka Harisen | `baka-harisen.ts` | Dere Dere Harisen (Friendship Bracelet) | Tsun Tsun Drill Harisen | `tsun_tsun_drill` | Speed Lines | C | designed |
-| Notice-Me Sparkles | `notice-me-sparkles.ts` | Shoujo Filter (Main Character Aura) | Who Are You Again? | `who_are_you_again` | Heart Locket | D | designed |
-| Henshin Burst | `henshin-burst.ts` | Infinite Henshin Loop (Plot Armor) | Skip Intro | `skip_intro` | Wish Charm | D | designed |
-| Cheat Fireball | `cheat-fireball.ts` | Meteor Lv.99999 (Training Montage) | "Holding Back" Fireball | `holding_back` | Twin Charm | D | designed |
-| Horn of Reincarnation | `horn-of-reincarnation.ts` | Isekai Rush Hour (Swift Shoes) | Free Delivery | `free_delivery` | Magnet Star | D | designed |
-| Bubble Tea Cannon | `bubble-tea-cannon.ts` | Tapioca Tsunami (Big Ribbon) | Brown Sugar Railgun | `brown_sugar_railgun` | Power Bow | B | designed |
-| Paper Crane Flock | `paper-crane-flock.ts` | Thousand Crane Wish (Wish Charm) | Failed Exam Storm | `failed_exam_storm` | Training Montage | B | designed |
-| Idol Lightstick Wave | `idol-lightstick-wave.ts` | Sold-Out Dome Tour (Twin Charm) | Underground Mosh Pit | `mosh_pit` | Plot Armor | B | designed |
-| Kotatsu of Sloth | `kotatsu-of-sloth.ts` | Eternal Winter Break (Chibi Charm) | All-You-Can-Eat Nabe | `all_you_can_eat_nabe` | Bento Box | D | designed |
+| Bubble Aura | `bubble-aura.ts` | Ocean Dome (Heart Locket) | Soap Opera | `soap_opera` | Inner Monologue | B | done |
+| Prism Beam | `prism-beam.ts` | Rainbow Cannon (Swift Shoes) | Refraction Overload | `refraction_overload` | Lucky Clover | B | done |
+| Dark Flame Dragon | `dark-flame-dragon.ts` | Unsealed Abyss Dragon (Inner Monologue) | Unbandaged Right Arm | `unbandaged_right_arm` | Main Character Aura | C | done |
+| Teapot Tempest | `teapot-tempest.ts` | Eternal Tea Party (Bento Box) | Table-Flip Tea Service | `table_flip_service` | Speed Lines | C | done |
+| Micro Missile Swarm | `micro-missile-swarm.ts` | Al Dente Armageddon (Speed Lines) | Final Episode Budget Missile | `budget_missile` | Big Ribbon | C | done |
+| Baka Harisen | `baka-harisen.ts` | Dere Dere Harisen (Friendship Bracelet) | Tsun Tsun Drill Harisen | `tsun_tsun_drill` | Speed Lines | C | done |
+| Notice-Me Sparkles | `notice-me-sparkles.ts` | Shoujo Filter (Main Character Aura) | Who Are You Again? | `who_are_you_again` | Heart Locket | D | done |
+| Henshin Burst | `henshin-burst.ts` | Infinite Henshin Loop (Plot Armor) | Skip Intro | `skip_intro` | Wish Charm | D | done |
+| Cheat Fireball | `cheat-fireball.ts` | Meteor Lv.99999 (Training Montage) | "Holding Back" Fireball | `holding_back` | Twin Charm | D | done |
+| Horn of Reincarnation | `horn-of-reincarnation.ts` | Isekai Rush Hour (Swift Shoes) | Free Delivery | `free_delivery` | Magnet Star | D | done |
+| Bubble Tea Cannon | `bubble-tea-cannon.ts` | Tapioca Tsunami (Big Ribbon) | Brown Sugar Railgun | `brown_sugar_railgun` | Power Bow | B | done |
+| Paper Crane Flock | `paper-crane-flock.ts` | Thousand Crane Wish (Wish Charm) | Failed Exam Storm | `failed_exam_storm` | Training Montage | B | done |
+| Idol Lightstick Wave | `idol-lightstick-wave.ts` | Sold-Out Dome Tour (Twin Charm) | Underground Mosh Pit | `mosh_pit` | Plot Armor | B | done |
+| Kotatsu of Sloth | `kotatsu-of-sloth.ts` | Eternal Winter Break (Chibi Charm) | All-You-Can-Eat Nabe | `all_you_can_eat_nabe` | Bento Box | D | done |
 
 Passive load after all 20 (first + second evolutions): Power Bow 3, Wish Charm 3, Big Ribbon 3, Twin Charm 3,
 Swift Shoes 3, Lucky Clover 3, Speed Lines 3, Heart Locket 3; Magnet Star 2, Plot Armor 2, Main Character
@@ -818,45 +822,75 @@ her): aimed, depth-first, best into a deep pack behind a front line, nothing beh
 (`fx_beam` tinted white -> cyan -> a rainbow tier). Fx: beams drawn as Rainbow Cannon's are (opaque hero
 rule in `drawBeams`), a prism glint (`P.flare`) at every split; sfx `beam`.
 
-**Unbandaged Right Arm** (`unbandaged_right_arm`, Dark Flame Dragon + Main Character Aura; Kuro).
+**Unbandaged Right Arm** (`unbandaged_right_arm`, Dark Flame Dragon + Main Character Aura; Kuro; done).
 "EVOLUTION! The bandages come off. Mr. Toasty wraps around his right arm. He has been waiting to say this
-line." The familiars merge into a flaming claw: every `cd` 0.9 s a wide claw swipe in the facing direction
-(cone len 54 × area, half-angle 70°), `dmg` 46, Burn 10 DPS for 4 s, +60 % crit damage on burning enemies;
-every 4th swipe is the named attack (text pop, len × 1.5, guaranteed crit). **Versus Unsealed Abyss
-Dragon** (an orbiting dragon that breathes and judges on its own): short range and aimed by facing, by far
-the higher burst, he has to walk into the crowd. Sprites: `w_abyss_claw` 40×32×4 (orange flames, as the base
-weapon: the flames are still orange), `fx_bandage` 8×8×2 scraps. Fx: scraps of bandage on the 4th swipe,
-the claw with `Flag.Focus` (it sweeps across her); sfx `fireball`, `slash`.
+line."
+`{ dmg: 90, cd: 0.9, amount: 1, len: 58, angle: 70, burnDps: 16, burn: 4, critBurn: 0.6, nth: 4, knock: 40 }`.
+No familiars: every `cd` s (while anything is within 1.5 × the reach) a flaming claw swipes a cone (length
+`len` × area, half-angle `angle`°) where Kuro **faces** (his last move direction: no auto-aim), `dmg` and Burn
+(`burnDps` for `burn` s, Kindling / Seal Broken apply); a crit on a burning enemy (the swipes and the burn
+ticks they leave) deals +`critBurn` crit damage (`World.dmgTaken`); every `nth` swipe is the named attack:
+length × 1.5, a guaranteed crit, a text pop. Extra Amount / Kuro C6 add follow-up swipes 0.18 s apart, the
+first behind him. No death bursts, no judgement jet; Eyepatch: Off still fires; a fire source for Marshmallow
+toasting. **Versus Unsealed Abyss Dragon** (an orbiting dragon that breathes and judges on its own): 0.70× its
+crowd DPS on the gauge (2,389 vs 3,420; the gauge's hero walks a circle, so the cone covers 39 % of the ring),
+boss 76 vs 61; on the weapon bench (bot, real stages) power 1.58 vs 1.95, crowd 1.17 vs 1.76, boss 2.15 vs
+2.36: the burst is there when he walks into the crowd, nothing covers his back. Sprites: `w_abyss_claw`
+40×32×4 (orange flames, the felt-tip violet outline), `fx_bandage` 8×8×2, `icon_unbandaged_right_arm`. Fx
+(`src/view/evo2/c.ts`): the claw from the cue `HFX_KURO_CLAW` (`Flag.Focus`, grows out of his arm), flame
+puffs, an ember off his hand; the named attack: bandage scraps, one of four lines ("DARK FLAME CLAW!" ...),
+a small shake; sfx `slash`, `fireball` on the named one.
 
-**Table-Flip Tea Service** (`table_flip_service`, Teapot Tempest + Speed Lines; Pudding). "EVOLUTION! The
-customer was rude. Cups and saucers are served at speed. The tea is still warm." Five cups orbit at r 30
-(contact `dmg` 18, Orbital Guard `block` 1, `mend` 2.2); every `cd` 0.9 s the cup nearest an enemy is
-**flung** as a spinning saucer (speed 260 × projSpeed, pierce 6, `dmg` 40, strong knockback), flies 150 px
-and returns to its slot; a flung cup does not guard and leaves no moat. Warm Tea stays: a puddle on her
-path every 3 s (as the base weapon at Lv5), so the route never costs Pudding her healing, only the moat's.
-**Versus Eternal Tea Party** (a moat, six sturdy cups, kill-heals): ranged knockback offence and a thinner
-guard. Sprites: `w_saucer` 12×12×4 (spin). Fx: the cup drawer of `heroes-a-fx.ts` reads the same projectile
-fields (a flung cup: `p.a` = 2), a short speed-line trail (`TRAILS`), no marker on an empty slot; sfx
-`teacup`.
+**Table-Flip Tea Service** (`table_flip_service`, Teapot Tempest + Speed Lines; Pudding; done). "EVOLUTION!
+The customer was rude. Cups and saucers are served at speed. The tea is still warm."
+`{ dmg: 18, cd: 0.9, amount: 5, speed: 260, pierce: 6, every: 0.45, spin: 3.6, flingDmg: 40, flingKnock: 160, range: 150, knock: 30, pour: 3, puddleR: 20, puddleDmg: 12, life: 5, heal: 3, block: 1, mend: 2.2 }`.
+Five cups orbit at r 30 × √area (contact `dmg` every `every` s, Orbital Guard `block` 1 / `mend` 2.2); every
+`cd` s the up cup nearest the nearest enemy (within the orbit + `range`) is **flung** at it as a spinning
+saucer (`speed` × projSpeed, `flingDmg`, `flingKnock`): it turns back after `pierce` hits or `range` px
+(× √area), hits again on the way home (1.25 × speed) and lands in its own slot. A flung cup does not guard
+and is never replaced in the ring. No moat, no kill-heals, no petit fours. Warm Tea stays: a puddle on her
+path every `pour` s (the base weapon's Lv5 puddle, `heal` 3 HP/s), Flying Teacup Service / Extra Cups / Tea
+Ceremony / Free Refills apply. **Versus Eternal Tea Party** (a moat, six sturdy cups, kill-heals): 1.04× its
+crowd DPS on the gauge (2,201 vs 2,125), boss 112 vs 57; bench power 0.67 vs 0.45, damage taken ×0.28 vs
+×0.14: ranged knockback offence, half the protection. Sprites: `w_saucer` 12×12×4, `icon_table_flip_service`.
+Fx: cups, puddles and Warm Tea by the teacup drawer of `heroes-a-fx.ts` (the same projectile fields; a flung
+cup is `p.a` = 4 with the sprite, drawn by the generic drawer), a dotted wake (`TRAILS.saucer`), no marker on
+an empty slot; sfx `teacup`.
 
-**Final Episode Budget Missile** (`budget_missile`, Micro Missile Swarm + Big Ribbon; Aoi). "EVOLUTION! The
-whole animation budget went into one missile. It has a face." Every `cd` 3.2 s ONE large missile launches
-slowly (speed 90 -> 240, turn 2.2 rad/s) at the densest cluster in view and explodes: r 70 × area, `dmg` 240,
-knock 220, and a crater that burns for 2 s (r 40, 20 DPS). While it flies the swarm's small missiles are
-not fired ("off-model stills"): 4 tiny ones (dmg 12) in the last second before the next launch. **Versus
-Al Dente Armageddon** (24-missile salvos everywhere): one telegraphed hit that deletes a pack, very area
-hungry, bad against spread-out fast enemies. Sprite: `w_budget_missile` 24×16×2 (a face, a sweat drop),
-`fx_crater` 32×20×2 decal. Fx: a smoke trail (`TRAILS`), the blast through the generic big explosion with
-`coverHero` when it lands near her; sfx `missile`, `explosionBig`.
+**Final Episode Budget Missile** (`budget_missile`, Micro Missile Swarm + Big Ribbon; Aoi; done).
+"EVOLUTION! The whole animation budget went into one missile. It has a face."
+`{ dmg: 120, cd: 3.2, amount: 1, speed: 240, speed0: 90, turn: 2.2, blast: 58, knock: 220, craterR: 36, craterDps: 16, crater: 2, tiny: 4, tinyDmg: 14, tinyBlast: 14, tinySpeed: 150 }`.
+Every `cd` s ONE big missile launches from the mech's back (`speed0` -> `speed` px/s over 1.2 s, turn `turn`
+rad/s, much sharper the longer it flies) at the densest pack in view (24 sampled enemies, the most
+neighbours; a pack right on top of Aoi counts half), stops for nothing on the way and explodes on it: r
+`blast` × area (Cluster Warheads apply), `dmg`, `knock`, a big explosion of its own source, and a crater (r
+`craterR`, `craterDps` for `crater` s). In the last second before the next launch, and only if the big one
+has landed, `tiny` small missiles (the base weapon's, `tinyDmg`; +2 per extra Amount, +1 per Extended
+Magazine rank) go out one by one. FULL BURST: every 5th launch is two big ones. The C6 drone fires the small
+ones. **Versus Al Dente Armageddon** (24-missile salvos everywhere): 1.73× its crowd DPS on the gauge's
+immortal dense crowd, its best case (4,583 vs 2,651), boss 61 vs 180; bench power 1.06 vs 1.02, crowd 1.66
+vs 1.07, boss 0.57 vs 1.07: one telegraphed hit that deletes a pack, poor on a single target. (Started at
+240 / r 70: 3.8× on the gauge.) Sprites: `w_budget_missile` 24×16×2, `fx_budget_crater` 32×20×2 (`fx_crater`
+was taken), `icon_budget_missile`. Fx: a smoke trail (`TRAILS.budget`), a small blinking mark under its
+target, the generic big explosion (shake, `coverHero`) plus smoke and a blue ring, the crater decal with
+embers; sfx `missile`, `explosionBig`.
 
-**Tsun Tsun Drill Harisen** (`tsun_tsun_drill`, Baka Harisen + Speed Lines; Akane). "EVOLUTION! The fan
-rolls into a drill. It's not like she is aiming at you. She is, though." Every `cd` 1.0 s a drill thrust in
-the facing direction: a capsule 70 × 12 px (× area) that ticks 4 times over 0.3 s (`dmg` 22 a tick),
-drags every enemy it holds to the tip, then launches them (knock 360): launched enemies are projectiles as
-with the base weapon's ricochet (60 % of `dmg` × 4 to what they hit). No heal. **Versus Dere Dere Harisen**
-(360° heart smack, heals, stuns): the tsun route - a narrow, far-reaching line and the arsenal's biggest
-knockback, no sustain. Sprite: `w_drill_fan` 32×16×4 (a paper spiral, red-orange rim like her twin-tails).
-Fx: `fx_baka` f0 on the launch (rate-limited as today), spiral speed lines; sfx `fanSmack`, `baka`.
+**Tsun Tsun Drill Harisen** (`tsun_tsun_drill`, Baka Harisen + Speed Lines; Akane; done). "EVOLUTION! The
+fan rolls into a drill. It's not like she is aiming at you. She is, though."
+`{ dmg: 30, cd: 0.9, amount: 1, len: 76, width: 12, ticks: 4, thrust: 0.3, knock: 360, missile: 0.6, drag: 0.5 }`.
+Every `cd` s a drill thrust at the nearest enemy within `len` (else where she faces; the base weapon's
+auto-aim: a 12 px lane aimed by facing alone missed everything on a phone): a capsule `len` × `width` px
+(× area) from her middle that ticks `ticks` times over `thrust` s for `dmg` each. Every tick but the last
+holds what it hits and winds it `drag` of the way to the tip (bosses and props never, elites less); the last
+launches everything along the lane (`knock`) as human missiles (`missile` × `dmg` × `ticks` to up to 3
+victims each, Ricochet Bonk applies). No heal, no real daze. Ultimate Denial adds the ±60° lanes, Twin-Tail
+Tornado its drill spin every 5th thrust, extra Amount queues further thrusts (behind her, then ±90°); a
+BAKA! roll at the tip on a launch that hit. **Versus Dere Dere Harisen** (360° heart smack, heals, stuns):
+0.89× its crowd DPS on the gauge (6,467 vs 7,229), boss 144 vs 73; bench power 0.81 vs 0.98, damage taken
+×0.45 vs ×0.05: the tsun route, reach and the arsenal's biggest knockback, no sustain. (Started at `dmg`
+22 / `cd` 1.0: bench power 0.48.) Sprites: `w_drill_fan` 32×16×4, `icon_tsun_tsun_drill`. Fx: the drill from
+the cue `HFX_AKANE_DRILL` (`Flag.Focus`), spiral speed lines down the lane, rays and a ring at the tip on the
+launch, `fx_baka` through the usual pop rule; sfx `fanSmack`, `baka`.
 
 **Who Are You Again?** (`who_are_you_again`, Notice-Me Sparkles + Heart Locket; Senpai). "EVOLUTION! He
 looks right at them. Then he asks their name. The heartbreak is area damage." The aura charms as the base
@@ -946,3 +980,121 @@ entries above. The recipe: `docs/ARCHITECTURE.md` §4 "Adding a second evolution
 | **C** (4) | Unbandaged Right Arm, Table-Flip Tea Service, Final Episode Budget Missile, Tsun Tsun Drill Harisen | `src/view/heroes-a-fx.ts`, `weapons/_heroes-a.ts`, `weapons/_orbital.ts` |
 | **D** (5) | Who Are You Again?, Skip Intro, "Holding Back" Fireball, Free Delivery, All-You-Can-Eat Nabe | `src/view/heroes-b-fx.ts`, `weapons/_charm.ts`, `_hb.ts`, `_truck.ts`; `src/view/arsenal2-fx.ts` (kotatsu) |
 
+---
+
+## 9. Weapon bench pass (Season 3)
+
+The owner approved a "weapon balance check": rank every weapon by measurement instead of by feel
+(`npm run balance:lab -- --weapons`, method and limits in docs/DEVTOOLS.md §4.1). Each weapon is benched at Lv1,
+Lv5 and as every evolution, alone and inside a reference build, on its signature hero (`*`; general weapons on
+Hoshi). `power` / `crowd` / `boss` / `camp` are ratios to the tier's median weapon; `taken x` is the damage the
+hero takes (net of healing) with the weapon against the same kit without it; `camp` columns are the same build
+played standing ground. The figure in brackets is the value before this pass.
+
+**Lv1 (P2 × Dream Meadow, King Puff)**
+
+| # | weapon | hero | power (before) | crowd | boss | taken x | camp | camp taken x | flag |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | Cheat Fireball | isekai_kun* | 4.02 | 2.42 | 5.94 | 0.72 | 5.05 | 0.86 | STRONG |
+| 2 | Star Shot | hoshi* | 3.09 | 2.31 | 4.11 | 0.58 | 2.84 | 0.80 | STRONG |
+| 3 | Notice-Me Sparkles | senpai* | 2.71 | 1.05 | 4.59 | 0.89 | 1.31 | 0.97 | STRONG |
+| 4 | Teapot Tempest | pudding* | 2.04 | 1.82 | 2.43 | 0.59 | 1.00 | 1.03 | STRONG |
+| 5 | Henshin Burst | magical_girl_47* | 2.03 | 1.42 | 2.80 | 0.74 | 2.29 | 0.74 | STRONG |
+| 6 | Thunder Bell | hoshi | 2.00 | 3.03 | 1.13 | 0.96 | 2.43 | 1.12 | STRONG |
+| 7 | Micro Missile Swarm | aoi* | 1.94 | 1.29 | 2.73 | 0.93 | 1.20 | 0.80 | STRONG |
+| 8 | Dark Flame Dragon | kuro* | 1.43 | 1.02 | 1.96 | 1.01 | 1.00 | 0.97 |  |
+| 9 | Idol Lightstick Wave | hoshi | 1.28 | 1.36 | 1.30 | 0.79 | 1.89 | 0.94 |  |
+| 10 | Candy Bomb | hoshi | 1.05 | 1.11 | 1.07 | 0.96 | 0.94 | 1.10 |  |
+| 11 | Heart Boomerang | hoshi | 0.95 | 1.05 | 0.93 | 0.74 | 0.94 | 1.15 |  |
+| 12 | Petal Slash | rin* | 0.81 | 0.96 | 0.73 | 0.89 | 1.12 | 1.03 |  |
+| 13 | Prism Beam | hoshi | 0.81 | 0.94 | 0.73 | 0.84 | 0.76 | 0.96 |  |
+| 14 | Bubble Tea Cannon | hoshi | 0.79 | 1.06 | 0.57 | 0.87 | 0.81 | 0.95 |  |
+| 15 | Yarn Orbit | mochi* | 0.63 (0.41) | 0.87 | 0.44 | 0.73 | 0.64 (0.38) | 0.93 |  |
+| 16 | Paper Crane Flock | hoshi | 0.50 | 0.79 | 0.25 | 0.89 | 0.30 | 0.98 | WEAK |
+| 17 | Horn of Reincarnation | truck_kun* | 0.43 | 0.61 | 0.28 | 0.40 | 1.20 | 0.95 | SUPPORT |
+| 18 | Baka Harisen | akane* | 0.31 | 0.42 | 0.23 | 0.80 | 0.69 | 1.02 |  |
+| 19 | Bubble Aura | hoshi | 0.27 | 0.45 | 0.11 | 0.66 | 0.76 (0.76) | 0.93 |  |
+| 20 | Kotatsu of Sloth | hoshi | 0.01 | 0.01 | 0.00 | 0.96 | 0.75 (0.59) | 0.94 |  |
+
+**Lv5 (P3 × Candy Kingdom, Gingerbread Golem)**
+
+| # | weapon | hero | power (before) | crowd | boss | taken x | camp | camp taken x | flag |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | Cheat Fireball | isekai_kun* | 7.39 | 4.21 | 10.31 | 0.46 | 5.35 | 0.44 | STRONG |
+| 2 | Notice-Me Sparkles | senpai* | 2.68 | 2.18 | 3.09 | 0.94 | 2.08 | 0.39 | STRONG |
+| 3 | Dark Flame Dragon | kuro* | 1.74 | 1.67 | 1.75 | 1.24 | 1.40 | 0.83 | STRONG |
+| 4 | Star Shot | hoshi* | 1.37 | 1.15 | 1.54 | 0.79 | 0.54 | 0.86 |  |
+| 5 | Prism Beam | hoshi | 1.32 | 1.34 | 1.25 | 1.10 | 1.08 | 0.91 |  |
+| 6 | Heart Boomerang | hoshi | 1.28 | 1.26 | 1.25 | 1.06 | 1.04 | 0.85 |  |
+| 7 | Thunder Bell | hoshi | 1.19 | 1.46 | 0.88 | 0.95 | 0.72 | 1.11 |  |
+| 8 | Idol Lightstick Wave | hoshi | 1.06 | 1.12 | 0.95 | 1.24 | 1.22 | 0.79 |  |
+| 9 | Teapot Tempest | pudding* | 1.05 | 1.16 | 0.92 | 0.22 | 0.90 | 0.82 |  |
+| 10 | Candy Bomb | hoshi | 1.02 | 1.08 | 0.93 | 1.09 | 0.96 | 0.90 |  |
+| 11 | Bubble Tea Cannon | hoshi | 0.98 | 1.08 | 0.85 | 0.63 | 0.43 | 0.84 |  |
+| 12 | Henshin Burst | magical_girl_47* | 0.92 | 0.58 | 1.23 | 0.10 | 1.24 | 0.31 |  |
+| 13 | Petal Slash | rin* | 0.89 | 0.61 | 1.15 | 0.72 | 1.29 | 0.72 |  |
+| 14 | Micro Missile Swarm | aoi* | 0.83 | 0.58 | 1.05 | 0.95 | 0.79 | 0.70 |  |
+| 15 | Horn of Reincarnation | truck_kun* | 0.71 | 0.29 | 1.10 | 0.16 | 1.20 | 0.52 |  |
+| 16 | Yarn Orbit | mochi* | 0.59 (0.26) | 0.69 | 0.47 | 0.60 | 0.49 (0.31) | 0.89 | SUPPORT |
+| 17 | Baka Harisen | akane* | 0.53 | 0.38 | 0.65 | 0.15 | 1.09 | 0.61 | SUPPORT |
+| 18 | Paper Crane Flock | hoshi | 0.49 (0.17) | 0.59 | 0.37 | 1.05 | 0.12 (0.04) | 1.01 | WEAK |
+| 19 | Bubble Aura | hoshi | 0.20 | 0.32 | 0.07 | 0.75 | 0.67 (0.47) | 0.80 |  |
+| 20 | Kotatsu of Sloth | hoshi | 0.01 | 0.02 | 0.00 | 0.97 | 0.64 (0.24) | 0.74 |  |
+
+**Evolutions (P4 × Shoujo Academy, Council President)**
+
+| # | weapon | hero | power (before) | crowd | boss | taken x | camp | camp taken x | flag |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | Galaxy Barrage | hoshi* | 7.12 | 1.80 | 12.51 | 0.36 | 2.75 | 0.70 | STRONG |
+| 2 | Meteor Lv.99999 | isekai_kun* | 3.70 | 4.05 | 3.39 | 0.69 | 5.72 | 0.70 | STRONG |
+| 3 | Tapioca Tsunami | hoshi | 2.91 | 2.38 | 3.47 | 0.57 | 3.40 | 0.76 | STRONG |
+| 4 | Unsealed Abyss Dragon | kuro* | 2.14 | 1.56 | 2.74 | 0.67 | 1.90 | 0.90 | STRONG |
+| 5 | Love Tornado | hoshi | 1.86 | 1.72 | 2.03 | 0.54 | 2.34 | 1.00 | STRONG |
+| 6 | Shoujo Filter | senpai* | 1.43 | 1.85 | 1.02 | 0.40 | 1.43 | 0.61 |  |
+| 7 | Raijin Drum | hoshi | 1.22 | 1.35 | 1.09 | 1.00 | 1.54 | 0.94 |  |
+| 8 | Sold-Out Dome Tour | hoshi | 1.13 | 1.36 | 0.91 | 0.71 | 1.23 | 0.90 |  |
+| 9 | Al Dente Armageddon | aoi* | 1.05 | 0.90 | 1.21 | 0.87 | 0.99 | 0.86 |  |
+| 10 | Dere Dere Harisen | akane* | 1.04 | 0.66 | 1.43 | 0.05 | 0.81 | 0.16 |  |
+| 11 | Rainbow Cannon | hoshi | 1.00 | 1.28 | 0.73 | 0.75 | 1.63 | 0.78 |  |
+| 12 | Infinite Henshin Loop | magical_girl_47* | 0.89 | 0.71 | 1.07 | 0.01 | 1.01 | 0.01 |  |
+| 13 | Sugar Nuke | hoshi | 0.85 | 1.15 | 0.55 | 1.16 | 0.96 | 0.88 |  |
+| 14 | Thousand Crane Wish | hoshi | 0.76 (0.36) | 0.69 | 0.84 | 0.78 | 0.37 (0.22) | 0.88 |  |
+| 15 | Sakura Tempest | rin* | 0.76 | 0.53 | 1.00 | 0.58 | 0.83 | 0.76 |  |
+| 16 | Isekai Rush Hour | truck_kun* | 0.76 | 0.88 | 0.64 | 0.42 | 1.00 | 0.58 |  |
+| 17 | Cosmic Yarn | mochi* | 0.71 (0.45) | 0.45 | 0.97 | 0.53 | 0.54 (0.37) | 1.02 |  |
+| 18 | Ocean Dome | hoshi | 0.56 (0.48) | 0.77 | 0.35 | 0.38 | 0.87 (0.72) | 0.80 | SUPPORT |
+| 19 | Eternal Tea Party | pudding* | 0.50 | 0.51 | 0.50 | 0.14 | 0.43 | 0.39 | SUPPORT |
+| 20 | Meowteor Hammer | mochi* | 0.40 | 0.48 | 0.32 | 0.76 | 0.29 | 0.99 | WEAK |
+| 21 | Eternal Winter Break | hoshi | 0.14 (0.08) | 0.21 | 0.08 | 0.48 | 0.81 (0.56) | 0.68 | SUPPORT |
+
+**Tuned** (EXPANSION §2: fix only what is broken; these were dead weight, 0.0-0.3x the median with no
+protection to show for it):
+
+| Weapon | Change | Bench before -> after |
+| --- | --- | --- |
+| Yarn Orbit | dmg 10 / 10 / 14 / 14 / 20 -> 14 / 14 / 20 / 22 / 32; area 1 / 1 / 1.15 / 1.2 / 1.3 -> 1.1 / 1.1 / 1.25 / 1.35 / 1.45 (the 3 s on / 1.3 s off cycle and the guard are unchanged) | Lv1 0.41 -> 0.63, Lv5 0.26 -> 0.59 and it now cuts the damage taken by 40 % (SUPPORT) |
+| Cosmic Yarn | dmg 27 -> 36, area 1.15 -> 1.3 (stays an upgrade of the bigger Lv5 ring) | 0.45 -> 0.71; taken x 0.53 |
+| Paper Crane Flock | dmg 9 / 9 / 12 / 12 / 15 -> 11 / 11 / 17 / 21 / 30; cd 1.2 / 1.2 / 1.2 / 1.0 / 1.0 -> 1.2 / 1.2 / 1.1 / 0.9 / 0.8; pierce 1 / 1 / 1 / 1 / 2 -> 1 / 1 / 2 / 2 / 3 | Lv5 0.17 -> 0.49 (still the low end: the bot keeps losing its fold streak) |
+| Thousand Crane Wish | dmg 22 -> 36, pierce 3 -> 4 | 0.36 -> 0.76 |
+| Kotatsu of Sloth | dmg 4 / 5 / 5 / 7 / 9 -> 5 / 7 / 9 / 15 / 28; regen 0.5 / 0.5 / 1 / 1 / 1 -> 0.5 / 1 / 1.5 / 2 / 2.5; armor 1 / 1 / 1 / 2 / 2 -> 1 / 1 / 2 / 2 / 3 | standing ground: Lv1 0.59 -> 0.75, Lv5 0.24 -> 0.64, damage taken -6 % -> -26 % (the bot never stands still: its bot-played row stays ~0) |
+| Eternal Winter Break | dmg 14 -> 24, armor 2 -> 3, regen 1.5 -> 3 | standing ground 0.56 -> 0.81, damage taken -23 % -> -32 % (bot-played -52 %: SUPPORT) |
+| Bubble Aura | Lv3-5 dmg 9 / 11 / 14 -> 11 / 15 / 21 | Lv5 standing ground 0.47 -> 0.67 (bot-played 0.17 -> 0.20: the bot kites out of a 42 px aura) |
+| Ocean Dome | dmg 14 -> 21 (a tick no weaker than the Lv5 aura it replaces) | 0.48 -> 0.56; taken x 0.46 -> 0.38 |
+
+Stage clear rates (default lab report, Hoshi / Rin / Kuro, before -> after): every intended cell within a few
+points (Dream Meadow P2 61 -> 62 %, Shoujo Academy P4 49 -> 49 %, Beach P5 46 -> 48 %, Final Arc P6 53 -> 60 %),
+the largest move is Candy Kingdom P3 22 -> 35 % (target 40-70 %). Mochi (`--heroes mochi`): Dream Meadow P2
+36 -> 38 %, Candy Kingdom P3 8 -> 13 %, Beach P5 39 -> 47 %.
+
+**Left alone on purpose** (strong, not broken - the owner decides):
+
+- **Cheat Fireball / Meteor Lv.99999** (4-7x): the overdone cast is ~19 normal casts' worth. Isekai-kun's stage
+  clear rates sit with the other heroes' (`--heroes isekai_kun`: 60 / 26 / 47 / 55 / 73 % at the intended cells
+  against 61 / 22 / 49 / 46 / 53 %), so it is his identity, not a trivial strategy.
+- **Galaxy Barrage** (boss 12.5x: the Council President in ~35 s against ~145 s for the kit alone). Boss HP is
+  tuned around Hoshi (85 % of the progression simulator's runs), so cutting it would raise walls everywhere.
+- **Tapioca Tsunami** (2.9x), **Notice-Me Sparkles** (2.7x), **Dark Flame Dragon / Unsealed Abyss Dragon** (1.7-2.1x).
+- Low but doing their job: **Baka Harisen** (0.3-0.5x, damage taken -85 % at Lv5), **Eternal Tea Party** (0.5x,
+  -86 %), **Horn of Reincarnation Lv1** (0.43x, -60 %), **Ocean Dome**.
+- **Meowteor Hammer** (0.40x, 1.8x below its sibling Cosmic Yarn): the second-evolution pass balances it with
+  this tool (§8).

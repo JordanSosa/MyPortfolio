@@ -63,7 +63,7 @@ export const achievements: AchievementDef[] = [
     "Defeat 2,000 enemies with Micro Missile Swarm (or Al Dente Armageddon) in one run.",
     "heroes",
     2_000,
-    asHero(null, (c) => (c.run?.killsByWeapon.micro_missile_swarm ?? 0) + (c.run?.killsByWeapon.al_dente_armageddon ?? 0)),
+    asHero(null, (c) => (c.run?.killsByWeapon.micro_missile_swarm ?? 0) + (c.run?.killsByWeapon.al_dente_armageddon ?? 0) + (c.run?.killsByWeapon.budget_missile ?? 0)),
     { gems: 80 },
   ),
   clear("clear_akane", "akane", "N-Not Like I Wanted to Win", "Clear a stage as Akane."),

@@ -96,13 +96,14 @@ export const yarnOrbit: WeaponDef = {
   hitSfx: "orbitHit",
   desc: "Yarn balls orbit you, bonking enemies and blocking their shots.",
   levels: [
-    { dmg: 10, cd: 1.3, amount: 3, area: 1, duration: 3, speed: 3.4, knock: 45, every: 0.4, block: 1, mend: 2.5 },
-    { dmg: 10, cd: 1.3, amount: 4, area: 1, duration: 3, speed: 3.4, knock: 45, every: 0.4, block: 1, mend: 2.5 },
-    { dmg: 14, cd: 1.3, amount: 4, area: 1.15, duration: 3, speed: 3.4, knock: 50, every: 0.34, block: 1, mend: 2.5 },
-    { dmg: 14, cd: 1.2, amount: 5, area: 1.2, duration: 3.5, speed: 3.6, knock: 50, every: 0.34, block: 1, mend: 2.5 },
-    { dmg: 20, cd: 1.1, amount: 5, area: 1.3, duration: 3.5, speed: 4.2, knock: 55, every: 0.28, block: 1, mend: 2.2 },
+    // (weapon bench pass, docs/content/weapons.md section 9: dmg was 10 / 10 / 14 / 14 / 20, now 16 / 16 / 23 / 25 / 37; area - the ball size, so the guard - and the 3 s on / 1.3 s off cycle are unchanged)
+    { dmg: 16, cd: 1.3, amount: 3, area: 1, duration: 3, speed: 3.4, knock: 45, every: 0.4, block: 1, mend: 2.5 },
+    { dmg: 16, cd: 1.3, amount: 4, area: 1, duration: 3, speed: 3.4, knock: 45, every: 0.4, block: 1, mend: 2.5 },
+    { dmg: 23, cd: 1.3, amount: 4, area: 1.15, duration: 3, speed: 3.4, knock: 50, every: 0.34, block: 1, mend: 2.5 },
+    { dmg: 25, cd: 1.2, amount: 5, area: 1.2, duration: 3.5, speed: 3.6, knock: 50, every: 0.34, block: 1, mend: 2.5 },
+    { dmg: 37, cd: 1.1, amount: 5, area: 1.3, duration: 3.5, speed: 4.2, knock: 55, every: 0.28, block: 1, mend: 2.2 },
   ],
-  upgrades: ["+1 yarn ball", "Damage +4, area +15%, bonks faster", "+1 yarn ball, bigger, lasts longer", "Damage +6, area +10%, spins and bonks faster"],
+  upgrades: ["+1 yarn ball", "Damage +7, area +15%, bonks faster", "+1 yarn ball, damage +2, bigger, lasts longer", "Damage +12, area +10%, spins and bonks faster"],
   evolutions: [
     { into: "cosmic_yarn", with: "magnet_star" },
     { into: "meowteor_hammer", with: "power_bow" },
@@ -173,7 +174,7 @@ export const cosmicYarn: WeaponDef = {
   hitSfx: "orbitHit",
   evolved: true,
   desc: "EVOLUTION! 6 permanent planets orbit you: they pull in gems and soak up enemy shots.",
-  levels: [{ dmg: 27, cd: 0, amount: 6, area: 1.15, speed: 2.6, knock: 65, every: 0.26, block: 3, mend: 1.5 }],
+  levels: [{ dmg: 38, cd: 0, amount: 6, area: 1.15, speed: 2.6, knock: 65, every: 0.26, block: 3, mend: 1.5 }],
   upgrades: [],
   update(w, inst, dt) {
     const S = wstats(w, inst);

@@ -9,6 +9,9 @@
  * 2 bounces, 0.7 scale).
  * Evolution: Tapioca Tsunami (+ Big Ribbon) - giant pearls bounce 8 times and
  * shed 3 regular pearls on every bounce.
+ * Second evolution: Brown Sugar Railgun (+ Power Bow) - ONE pearl in a straight line across the screen:
+ *   it pierces everything (each enemy pierced costs it `falloff` of its damage, down to `floor`) and leaves
+ *   a syrup streak on the ground (`syrup` s: a slow and `syrupDps`). Lanes instead of pinball.
  *
  * Pearls are PK_FREE projectiles with a light homing toward their current
  * target (the world re-targets a lost one) and pierce Infinity: the onHit hook
@@ -18,9 +21,10 @@
  * pop / split / shed cues in src/view/arsenal2-fx.ts.
  */
 import { TAU } from "../../core/math";
-import { PK_FREE, ROT_SPIN, type Enemy, type ProjHitHook, type ProjHook, type Projectile, type WeaponDef, type WeaponInstance } from "../types";
+import { PK_FREE, PK_MANAGED, ROT_SPIN, ROT_VELOCITY, type Enemy, type ProjHitHook, type ProjHook, type Projectile, type WeaponDef, type WeaponInstance } from "../types";
 import type { World } from "../world";
-import { fired, wstats } from "./_shared";
+import { fired, killOwned, own, prune, wstats } from "./_shared";
+import { heroFx } from "./_fx";
 import { A2_BOBA_POP, A2_BOBA_SHED, A2_BOBA_SPLIT, a2fx, keyDmg } from "./_arsenal2";
 import { slowEnemy } from "./_heroes-a";
 
@@ -190,7 +194,10 @@ export const bubbleTeaCannon: WeaponDef = {
     { dmg: 21, cd: 1.15, amount: 3, speed: 160, bounce: 6, knock: 36, split: 1 },
   ],
   upgrades: ["+1 pearl", "Damage +4, +1 bounce", "+1 pearl, cooldown −12%", "Damage +5, +2 bounces, pearls split into 2 mini pearls on their last bounce"],
-  evolutions: [{ into: "tapioca_tsunami", with: "big_ribbon" }],
+  evolutions: [
+    { into: "tapioca_tsunami", with: "big_ribbon" },
+    { into: "brown_sugar_railgun", with: "power_bow" },
+  ],
   // mastery Limit Breaks (docs/content/weapons.md §4): Lv6 at rank 5, Lv7 at rank 10
   limitBreak: [
     { amount: 1, dmg: 0.1, text: "LIMIT BREAK — Extra Pearls: +1 pearl, +10% damage" },
@@ -233,4 +240,134 @@ export const tapiocaTsunami: WeaponDef = {
   },
 };
 
-export const weapons: WeaponDef[] = [bubbleTeaCannon, tapiocaTsunami];
+// ---------------------------------------------------------------- Brown Sugar Railgun (second evolution)
+
+/** heroFx cue (src/view/evo2/b.ts): a rail shot left the straw at (x, y); r = its angle. */
+export const RAIL_FIRE = "e2_rail";
+/** Seconds between a streak's ticks on one enemy. */
+const SYRUP_TICK = 0.25;
+/** Fan between the pearls of a multi-pearl shot (rad). */
+const RAIL_FAN = (6 * Math.PI) / 180;
+
+/** Each enemy pierced costs the pearl `falloff` of its damage (scratch: a = full damage, b = pierced, ox = falloff, oy = floor). */
+const railHit: ProjHitHook = (p, _w, e) => {
+  if (e.def.prop) return;
+  p.b++;
+  p.dmg = p.a * Math.max(p.oy, 1 - p.ox * p.b);
+};
+
+/**
+ * The syrup streak (owned, PK_MANAGED, no hit circle): a line from (ox, oy) along `ang` that grows with
+ * the pearl (a = full length, speed = the pearl's) and holds for the rest of its life: enemies on it
+ * (half width hh) are slowed to vz and ticked for dmg every SYRUP_TICK on the weapon's channel. b = the
+ * length so far (the view draws that much).
+ */
+const syrupHook: ProjHook = (p, w) => {
+  const len = (p.b = Math.min(p.a, p.age * p.speed));
+  const ca = Math.cos(p.ang);
+  const sa = Math.sin(p.ang);
+  const buf = w.acquire();
+  const n = w.grid.query(p.ox + ca * len * 0.5, p.oy + sa * len * 0.5, len * 0.5 + p.hh + 14, buf);
+  const items = w.enemies.items;
+  const now = w.t;
+  for (let k = 0; k < n; k++) {
+    const e = items[buf[k]];
+    if (!e || e.dead || e.def.prop) continue;
+    const ex = e.x - p.ox;
+    // (the streak lies on the ground: the enemy's feet)
+    const ey = e.y - p.oy;
+    const along = ex * ca + ey * sa;
+    if (along < -e.r || along > len + e.r) continue;
+    const side = -ex * sa + ey * ca;
+    const lim = p.hh + e.r;
+    if (side > lim || side < -lim) continue;
+    slowEnemy(e, p.vz, 0.3);
+    if (now - e.lastHit[p.ch] < SYRUP_TICK) continue;
+    e.lastHit[p.ch] = now;
+    w.hitEnemy(e, p.dmg, p.owner, p.ang, 0, 0, p.source, BOBA_COLOR);
+  }
+  w.release();
+};
+
+export const brownSugarRailgun: WeaponDef = {
+  id: "brown_sugar_railgun",
+  name: "Brown Sugar Railgun",
+  icon: "icon_brown_sugar_railgun",
+  color: BOBA_COLOR,
+  sfx: "boba",
+  evolved: true,
+  desc: "EVOLUTION! One pearl through one very long straw. It does not bounce. It does not need to.",
+  levels: [{ dmg: 190, cd: 1.3, amount: 1, speed: 520, knock: 70, reach: 440, falloff: 0.12, floor: 0.4, syrup: 2, syrupW: 6, syrupSlow: 0.65, syrupDps: 30 }],
+  upgrades: [],
+  update(w, inst, dt) {
+    prune(inst);
+    inst.timer -= dt;
+    if (inst.timer > 0) return;
+    const S = wstats(w, inst);
+    const L = S.L;
+    const pl = w.player;
+    const sx = pl.x + pl.face * 4;
+    const sy = pl.y - 10;
+    const t = w.nearestEnemy(sx, sy, 190);
+    if (!t) {
+      inst.timer = 0.1;
+      return;
+    }
+    inst.timer = S.cd;
+    const a0 = Math.atan2(t.y - t.cy - sy, t.x - sx);
+    // +1 pearl per 2 amount, fanned
+    const n = Math.min(5, 1 + ((S.amount - 1) >> 1));
+    const reach = (L.reach ?? 440) * Math.sqrt(S.area);
+    const speed = S.speed;
+    for (let i = 0; i < n; i++) {
+      const a = a0 + (i - (n - 1) / 2) * RAIL_FAN;
+      const p = w.spawnProjectile(inst);
+      p.kind = PK_FREE;
+      p.x = sx;
+      p.y = sy;
+      p.vx = Math.cos(a) * speed;
+      p.vy = Math.sin(a) * speed;
+      p.speed = speed;
+      p.r = 5 * S.area;
+      p.dmg = p.a = S.dmg;
+      p.b = 0;
+      p.ox = L.falloff ?? 0.12;
+      p.oy = L.floor ?? 0.4;
+      p.knock = S.knock;
+      p.pierce = Infinity;
+      p.hitEvery = 0;
+      p.life = reach / speed;
+      p.sprite = "w_pearl_rail";
+      p.fps = 12;
+      p.scale = Math.min(S.area, 1 + (S.area - 1) * 0.6);
+      p.rotMode = ROT_VELOCITY;
+      p.rot = a;
+      p.trail = "boba_big";
+      p.onHit = railHit;
+      // its syrup, on the ground under the line
+      const s = w.spawnProjectile(inst);
+      s.kind = PK_MANAGED;
+      s.r = 0;
+      s.ox = s.x = sx;
+      s.oy = s.y = pl.y;
+      s.ang = a;
+      s.a = reach;
+      s.b = 0;
+      s.speed = speed;
+      s.hh = (L.syrupW ?? 6) * S.area;
+      s.vz = L.syrupSlow ?? 0.65;
+      s.dmg = (((L.syrupDps ?? 10) * S.dmg) / Math.max(1e-6, L.dmg)) * SYRUP_TICK;
+      s.pierce = Infinity;
+      s.life = (L.syrup ?? 2) * S.duration;
+      s.update = syrupHook;
+      own(inst, s);
+    }
+    fired(w, inst, sx, sy);
+    heroFx(w, RAIL_FIRE, sx, sy, sx, sy, a0, n);
+  },
+  dispose(_w, inst) {
+    killOwned(inst);
+  },
+};
+
+export const weapons: WeaponDef[] = [bubbleTeaCannon, tapiocaTsunami, brownSugarRailgun];

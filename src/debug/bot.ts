@@ -167,7 +167,7 @@ export class Bot {
 
   /** Park (stand still) while holding the Kotatsu of Sloth and nothing presses: up to 3.6 s, then move on a while. */
   private camp(w: World, pressure: number, crowd: number, hpK: number, dt: number): boolean {
-    if (!w.hasWeapon("kotatsu_of_sloth") && !w.hasWeapon("eternal_winter_break")) return false;
+    if (!w.hasWeapon("kotatsu_of_sloth") && !w.hasWeapon("eternal_winter_break") && !w.hasWeapon("all_you_can_eat_nabe")) return false;
     if (this.campCd > 0) {
       this.campCd -= dt;
       return false;

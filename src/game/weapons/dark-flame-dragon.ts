@@ -10,6 +10,13 @@
  * Evolution: Unsealed Abyss Dragon (+ Inner Monologue) - a black-violet dragon
  * circles Kuro breathing actually-black flames outward, judges the strongest
  * enemy with a jet every `cd` s, and burning enemies that die explode.
+ * Second evolution: Unbandaged Right Arm (+ Main Character Aura) - no familiars: Mr. Toasty wraps around
+ *   Kuro's right arm and every `cd` s a flaming claw swipes a wide cone (length `len` x area, half-angle
+ *   `angle` deg) where Kuro FACES (no auto-aim: he walks into the crowd), `dmg` + Burn (`burnDps` for `burn`
+ *   s); crits against burning enemies deal +`critBurn` crit damage (the weapon's hits and its burn ticks);
+ *   every `nth` swipe is the named attack: length x 1.5, a guaranteed crit. Extra Amount (and Kuro C6) adds
+ *   follow-up swipes 0.18 s apart, the first one behind him. The view draws the claw from the cue
+ *   HFX_KURO_CLAW (src/view/evo2/c.ts).
  *
  * Kuro's talents read here (both forms): Dark Flame Kindling (+15 % burn per
  * rank), The Seal Is Broken (black flames, burn x2; its +15 % damage taken is
@@ -57,7 +64,7 @@ function sequel(w: World): number {
 }
 
 /** Hit everything in the cone from (ox, oy) along `a` (length L, half-angle ha) on the slot channel; burn it. */
-function cone(w: World, inst: WeaponInstance, ox: number, oy: number, a: number, L: number, ha: number, dmg: number, knock: number, every: number, burnDps: number, burnT: number): void {
+function cone(w: World, inst: WeaponInstance, ox: number, oy: number, a: number, L: number, ha: number, dmg: number, knock: number, every: number, burnDps: number, burnT: number, crit = 0): void {
   const buf = w.acquire();
   const n = w.grid.query(ox, oy, L + 16, buf);
   const items = w.enemies.items;
@@ -83,7 +90,7 @@ function cone(w: World, inst: WeaponInstance, ox: number, oy: number, a: number,
     }
     if (now - e.lastHit[ch] < every) continue;
     e.lastHit[ch] = now;
-    w.hitEnemy(e, dmg, inst, a, knock, 0, inst.def.id, inst.def.color);
+    w.hitEnemy(e, dmg, inst, a, knock, crit, inst.def.id, inst.def.color);
     if (!e.dead) st.burn(e, burnDps, burnT);
   }
   w.release();
@@ -180,7 +187,10 @@ export const darkFlameDragon: WeaponDef = {
     { dmg: 9, cd: 1.9, amount: 2, duration: 1.1, len: 72, angle: 28, burnDps: 6, burn: 3, knock: 10 },
   ],
   upgrades: ["Damage +1, longer flames", "+1 dragon (the sequel)", "Damage +2, cooldown −14%, burns last longer", "Damage +2, a bigger, longer, hotter breath"],
-  evolutions: [{ into: "unsealed_abyss_dragon", with: "inner_monologue" }],
+  evolutions: [
+    { into: "unsealed_abyss_dragon", with: "inner_monologue" },
+    { into: "unbandaged_right_arm", with: "main_character_aura" },
+  ],
   // mastery Limit Breaks (docs/content/weapons.md §4): Lv6 at rank 5, Lv7 at rank 10
   limitBreak: [
     { dmg: 0.2, area: 0.15, text: "LIMIT BREAK — Seal Weakening: +20% damage, +15% flame size" },
@@ -361,4 +371,79 @@ export const unsealedAbyssDragon: WeaponDef = {
   },
 };
 
-export const weapons: WeaponDef[] = [darkFlameDragon, unsealedAbyssDragon];
+// ---------------------------------------------------------------- Unbandaged Right Arm
+const ARM = "unbandaged_right_arm";
+/** heroFx cue: a claw swipe (x, y = Kuro's middle, x2 = angle, r = reach, n = 1 the named attack). */
+export const HFX_KURO_CLAW = "kuro_claw";
+const SWIPE_GAP = 0.18;
+const armHooked = new WeakSet<World>();
+
+function swipe(w: World, inst: WeaponInstance, S: WStats, a: number, named: boolean): void {
+  const pl = w.player;
+  const L0 = S.L;
+  const dk = S.dmg / Math.max(1e-6, L0.dmg);
+  const L = (L0.len ?? 54) * S.area * (named ? 1.5 : 1);
+  const oy = pl.y - CFG.playerCy;
+  cone(w, inst, pl.x, oy, a, L, (L0.angle ?? 70) * DEG, S.dmg, S.knock, 0, (L0.burnDps ?? 10) * dk * burnMul(w), (L0.burn ?? 4) * w.stats.duration, named ? 1 : 0);
+  hfx(w, HFX_KURO_CLAW, pl.x, oy, a, 0, L, named ? 1 : 0);
+  fired(w, inst, pl.x, oy);
+}
+
+export const unbandagedRightArm: WeaponDef = {
+  id: ARM,
+  name: "Unbandaged Right Arm",
+  icon: "icon_unbandaged_right_arm",
+  color: C.orange,
+  sfx: "slash",
+  evolved: true,
+  desc: "EVOLUTION! The bandages come off. Mr. Toasty wraps around his right arm. He has been waiting to say this line.",
+  levels: [{ dmg: 90, cd: 0.9, amount: 1, len: 58, angle: 70, burnDps: 16, burn: 4, critBurn: 0.6, nth: 4, knock: 40 }],
+  upgrades: [],
+  init(w) {
+    if (armHooked.has(w)) return;
+    armHooked.add(w);
+    // crits on burning enemies: + `critBurn` crit damage (the swipes and the burn they leave)
+    const st = heroesA(w);
+    const k = unbandagedRightArm.levels[0].critBurn ?? 0.6;
+    w.dmgTaken.push((e, source, crit) => (crit && source === ARM && st.burning(e) ? 1 + k / w.stats.critMult : 1));
+  },
+  update(w, inst, dt) {
+    const S = wstats(w, inst);
+    const st = heroesA(w);
+    st.burnOwner = inst;
+    st.burnSource = ARM;
+    st.burstDmg = 0;
+    const d = inst.data;
+    // follow-up swipes (Amount, Kuro C6): behind him, in front, behind...
+    if ((d.q ?? 0) > 0) {
+      d.qt = (d.qt ?? 0) - dt;
+      if (d.qt <= 0) {
+        d.qt += SWIPE_GAP;
+        d.q--;
+        d.qk = (d.qk ?? 0) + 1;
+        swipe(w, inst, S, (d.aim ?? 0) + (d.qk % 2 ? Math.PI : 0), false);
+      }
+    }
+    inst.timer -= dt;
+    if (inst.timer <= 0) {
+      const pl = w.player;
+      // (the arm rests while nothing is anywhere near: no swiping at thin air)
+      if (!w.nearestEnemy(pl.x, pl.y - CFG.playerCy, (S.L.len ?? 54) * S.area * 1.5 + 24)) inst.timer = 0.1;
+      else {
+        inst.timer = S.cd;
+        d.n = (d.n ?? 0) + 1;
+        d.aim = Math.atan2(pl.aimY, pl.aimX);
+        swipe(w, inst, S, d.aim, d.n % (S.L.nth ?? 4) === 0);
+        d.q = Math.min(MAX_FAMILIARS, S.amount + sequel(w)) - 1;
+        d.qt = SWIPE_GAP;
+        d.qk = 0;
+      }
+    }
+    eyepatch(w, inst, dt);
+  },
+  dispose(_w, inst) {
+    killOwned(inst);
+  },
+};
+
+export const weapons: WeaponDef[] = [darkFlameDragon, unsealedAbyssDragon, unbandagedRightArm];

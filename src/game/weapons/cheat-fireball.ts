@@ -14,6 +14,11 @@
  * is r `overdoBlast`, x3 damage, crater r 40 for 3 s, "...did I overdo it again?".
  * Between meteors, `small` regular fireballs every 1.2 s (`smallDmg`).
  *
+ * Second evolution: "Holding Back" Fireball (+ Twin Charm) - a stream: every `cd` s one small fireball
+ * (speed `speed`, small blast r `blast` x area, `dmg`, no explosion event: the view sparks it) at the
+ * nearest enemy, +1 stream at the next-nearest per 2 extra amount. No overdone casts; every `sneeze`-th
+ * fireball is a sneeze instead: one overdone blast of the base weapon (`sneezeDmg`, r `sneezeBlast`).
+ *
  * Isekai-kun's talents read here: "Lv.9999" (+8 % blast per rank), Overdone
  * (rank 1 every 4th cast, rank 2 +20 % overdone blast, rank 3 every 3rd),
  * "Did I Overdo It AGAIN?" (every overdone detonation bursts into 6 regular
@@ -30,6 +35,11 @@ import { fired, own, prune, wstats, type WStats } from "./_shared";
 
 const ID = "cheat_fireball";
 const EVO = "cheat_meteor";
+const HOLD = "holding_back";
+/** heroFx cues (src/view/evo2/d.ts): a small fireball popped at (x, y), radius r / a volley left the hand (n = fireballs so far) / the sneeze. */
+export const HOLD_POP = "evo2d_pop";
+export const HOLD_SHOT = "evo2d_shot";
+export const HOLD_SNEEZE = "evo2d_sneeze";
 const RANGE = 180;
 const targets: Enemy[] = [];
 const pt = { x: 0, y: 0 };
@@ -79,6 +89,26 @@ const detonate: ProjHook = (p, w) => {
   hfx(w, HB.OVERDO, p.x, p.y, p.x, p.y, p.hw, 0);
   // "Did I Overdo It AGAIN?": the overdone fireball bursts into 6 regular ones
   if (w.talentRank("isekai_overdid_again") > 0) burstSix(w, inst, p.x, p.y, p.hh, p.knock);
+};
+
+/** A small "ordinary" fireball's pop (Holding Back): the blast without World.explode's event (p.hw = radius). */
+const smallPop: ProjHook = (p, w) => {
+  const inst = p.owner;
+  const R = p.hw;
+  const buf = w.acquire();
+  const n = w.grid.query(p.x, p.y, R + 16, buf);
+  const items = w.enemies.items;
+  for (let k = 0; k < n; k++) {
+    const e = items[buf[k]] as Enemy | undefined;
+    if (!e || e.dead) continue;
+    const dx = e.x - p.x;
+    const dy = e.y - e.cy - p.y;
+    const rr = R + e.r;
+    if (dx * dx + dy * dy > rr * rr) continue;
+    w.hitEnemy(e, p.dmg, inst, Math.atan2(dy, dx), p.knock, 0, HOLD, C.orange);
+  }
+  w.release();
+  hfx(w, HOLD_POP, p.x, p.y, p.x, p.y, R);
 };
 
 /** Fireball steering: explode on the first enemy it touches (no contact damage of its own). */
@@ -165,7 +195,10 @@ export const cheatFireball: WeaponDef = {
     { dmg: 52, cd: 1.5, amount: 3, speed: 120, blast: 28, overdo: 4, knock: 110 },
   ],
   upgrades: ["Damage +6, bigger boom", "+1 fireball", "Damage +10, cooldown −17%, bigger boom", "Damage +8, +1 fireball, overdoes it every 4th cast"],
-  evolutions: [{ into: EVO, with: "training_montage" }],
+  evolutions: [
+    { into: EVO, with: "training_montage" },
+    { into: HOLD, with: "twin_charm" },
+  ],
   limitBreak: [
     { amount: 1, dmg: 0.1, text: "LIMIT BREAK — Dual Cast (Accidentally): +1 fireball, +10% damage" },
     { dmg: 0.25, area: 0.2, text: "MASTERED — Lv.10000: +25% damage, +20% blast" },
@@ -286,4 +319,59 @@ export const cheatMeteor: WeaponDef = {
   },
 };
 
-export const weapons: WeaponDef[] = [cheatFireball, cheatMeteor];
+// ---------------------------------------------------------------- "Holding Back" Fireball
+
+export const holdingBack: WeaponDef = {
+  id: HOLD,
+  name: '"Holding Back" Fireball',
+  icon: "icon_holding_back",
+  color: C.orange,
+  evolved: true,
+  desc: "EVOLUTION! He is holding back. This is him holding back: a stream of perfectly ordinary fireballs.",
+  levels: [{ dmg: 15, cd: 0.14, amount: 1, speed: 230, blast: 12, knock: 20, sneeze: 100, sneezeDmg: 156, sneezeBlast: 70 }],
+  upgrades: [],
+  init(_w, inst) {
+    inst.timer = 0.3;
+  },
+  update(w, inst, dt) {
+    if (inst.projs.length) prune(inst);
+    inst.timer -= dt;
+    if (inst.timer > 0) return;
+    const pl = w.player;
+    const sx = pl.x + pl.face * 5;
+    const sy = pl.y - 13;
+    const S = wstats(w, inst);
+    const streams = Math.min(6, 1 + Math.floor((S.amount - 1) / 2));
+    const n = w.nearestEnemies(sx, sy, 190, streams, targets);
+    if (n === 0) {
+      inst.timer = 0.1;
+      return;
+    }
+    // (a step can owe more than one volley at a tiny cooldown: the timer keeps the remainder)
+    inst.timer += Math.max(0.05, S.cd);
+    const d = inst.data;
+    const blast = (S.L.blast ?? 12) * S.area * blastK(w);
+    const every = Math.max(10, S.L.sneeze ?? 100);
+    for (let i = 0; i < streams; i++) {
+      const t = targets[i % n];
+      const a = Math.atan2(t.y - t.cy - sy, t.x - sx) + (i >= n ? w.rng.spread(0.3) : w.rng.spread(0.04));
+      d.cast = (d.cast ?? 0) + 1;
+      if (d.cast % every === 0) {
+        // the sneeze: one overdone blast of the base weapon
+        const k = S.dmg / Math.max(1e-6, S.L.dmg);
+        fireball(w, inst, sx, sy, a, S.speed * 0.6, (S.L.sneezeDmg ?? 156) * k, (S.L.sneezeBlast ?? 70) * S.area * blastK(w), 110, true, S.dmg);
+        w.bumpStat("overdos");
+        hfx(w, HOLD_SNEEZE, sx, sy);
+        continue;
+      }
+      const p = fireball(w, inst, sx, sy, a, S.speed, S.dmg, blast, S.knock, false, S.dmg);
+      p.b = 3;
+      p.scale = 0.6;
+      p.trail = "";
+      p.onEnd = smallPop;
+    }
+    hfx(w, HOLD_SHOT, sx, sy, sx, sy, 0, d.cast);
+  },
+};
+
+export const weapons: WeaponDef[] = [cheatFireball, cheatMeteor, holdingBack];

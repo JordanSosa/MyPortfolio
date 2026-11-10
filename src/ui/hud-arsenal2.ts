@@ -20,7 +20,7 @@ export interface HudWeaponSlot {
 
 const K_BEAT: Keyframe[] = [{ transform: "scale(1)" }, { transform: "scale(1.28)", offset: 0.3 }, { transform: "scale(1)" }];
 const O_BEAT: KeyframeAnimationOptions = { duration: 180, easing: "ease-out" };
-const STICKS = new Set(["idol_lightstick_wave", "sold_out_dome_tour"]);
+const STICKS = new Set(["idol_lightstick_wave", "sold_out_dome_tour", "mosh_pit"]);
 const WISH = "thousand_crane_wish";
 const COUNTER_DT = 0.25;
 

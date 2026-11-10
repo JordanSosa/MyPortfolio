@@ -11,6 +11,13 @@
  * Evolution: Al Dente Armageddon (+ Speed Lines) - 24-missile salvos, the
  * trails are actual spaghetti, and every missile drops 3 sauce splats along
  * its flight that burn whatever walks through them.
+ * Second evolution: Final Episode Budget Missile (+ Big Ribbon) - every `cd` s ONE big missile launches
+ *   slowly (`speed0` -> `speed` px/s over 1.2 s, turn `turn` rad/s, much sharper the longer it flies) at the
+ *   densest pack in view and explodes there: r `blast` x area, `dmg`, `knock`, leaving a crater (r `craterR`,
+ *   `craterDps` for `crater` s). It does not stop for anything on the way. In the last second before the
+ *   next launch, and only if the big one has landed, `tiny` small missiles (the base weapon's, `tinyDmg`)
+ *   go out one by one. Extra Amount / Extended Magazine add tiny missiles; FULL BURST: every 5th launch
+ *   is two big ones.
  *
  * Aoi's talents read here (both forms): Extended Magazine (+1 missile per
  * rank), Cluster Warheads (+15 % blast per rank), FULL BURST (every 5th salvo
@@ -20,13 +27,16 @@
  * Missile scratch: target / targetUid, a = targets lost, b = wobble phase,
  * ang = base heading (the wobble rides on top), ox = turn rate, hw = blast
  * radius, oy = flight-time estimate and angV = sauce splats dropped (Al Dente).
+ * Budget missile scratch: target / targetUid, (ox, oy) = the aim point (follows the target while it lives),
+ * ang = heading, hw = blast radius, hh = turn rate; its crater is p.a = CRATER (drawn by src/view/evo2/c.ts).
+ * Both are owned by the weapon instance.
  */
 import { C } from "../../art/palette";
 import { TAU, approachAngle } from "../../core/math";
 import { CH_MISC } from "../config";
 import { PK_FREE, PK_MANAGED, ROT_VELOCITY, type Enemy, type ProjHook, type WeaponDef, type WeaponInstance } from "../types";
 import type { World } from "../world";
-import { fired, wstats, type WStats } from "./_shared";
+import { fired, killOwned, own, prune, wstats, type WStats } from "./_shared";
 import { randomTargetsInView } from "./_fx";
 import { HERO_TEXTS, HFX_AOI_SALVO, HFX_TEXT, heroesA, hfx } from "./_heroes-a";
 
@@ -202,7 +212,10 @@ export const microMissileSwarm: WeaponDef = {
     { dmg: 12, cd: 1.4, amount: 10, speed: 150, turn: 5, blast: 16, knock: 34 },
   ],
   upgrades: ["+2 missiles", "Damage +2, bigger blasts", "+2 missiles, cooldown −12%", "Damage +3, +2 missiles, sharper homing"],
-  evolutions: [{ into: "al_dente_armageddon", with: "speed_lines" }],
+  evolutions: [
+    { into: "al_dente_armageddon", with: "speed_lines" },
+    { into: "budget_missile", with: "big_ribbon" },
+  ],
   // mastery Limit Breaks (docs/content/weapons.md §4): a Limit Break amount = +2 missiles
   limitBreak: [
     { amount: 1, dmg: 0.1, text: "LIMIT BREAK — More Pasta: +2 missiles, +10% damage" },
@@ -233,14 +246,23 @@ export const alDenteArmageddon: WeaponDef = {
  * damage (Lv1 numbers when the swarm isn't held).
  */
 export function droneVolley(w: World, x: number, y: number): void {
-  const inst = w.hasWeapon("micro_missile_swarm") ?? w.hasWeapon(AL_DENTE) ?? null;
+  const inst = w.hasWeapon("micro_missile_swarm") ?? w.hasWeapon(AL_DENTE) ?? w.hasWeapon(BUDGET) ?? null;
   const evo = !!inst && inst.def.id === AL_DENTE;
   let dmg: number;
   let blast: number;
   let speed: number;
   let turn: number;
   let knock: number;
-  if (inst) {
+  if (inst && inst.def.id === BUDGET) {
+    // (the drone fires the budget route's small missiles, never the big one)
+    const S = wstats(w, inst);
+    const L = S.L;
+    dmg = (L.tinyDmg ?? 12) * (S.dmg / Math.max(1e-6, L.dmg));
+    blast = (L.tinyBlast ?? 14) * S.area;
+    speed = (L.tinySpeed ?? 150) * w.stats.projSpeed;
+    turn = 5;
+    knock = 30;
+  } else if (inst) {
     const S = wstats(w, inst);
     dmg = S.dmg;
     blast = (S.L.blast ?? 12) * S.area;
@@ -291,4 +313,163 @@ export function aoiDrone(w: World): void {
   });
 }
 
-export const weapons: WeaponDef[] = [microMissileSwarm, alDenteArmageddon];
+// ---------------------------------------------------------------- Final Episode Budget Missile
+const BUDGET = "budget_missile";
+/** p.a marker of a burning crater (a ground decal in the view). */
+export const CRATER = 8;
+
+/**
+ * The densest pack in view: of up to 24 random enemies in view, the one with the most neighbours around it
+ * (a pack right on top of Aoi counts half: the big one is for the crowd over there).
+ */
+function densest(w: World, r: number): Enemy | null {
+  const m = randomTargetsInView(w, 24, targets);
+  let best: Enemy | null = null;
+  let bn = -1;
+  for (let i = 0; i < m; i++) {
+    const e = targets[i];
+    let n = w.grid.query(e.x, e.y - e.cy, r, w.acquire());
+    w.release();
+    const dx = e.x - w.player.x;
+    const dy = e.y - w.player.y;
+    if (dx * dx + dy * dy < 48 * 48) n *= 0.5;
+    if (n > bn) {
+      bn = n;
+      best = e;
+    }
+  }
+  return best;
+}
+
+const budgetBoom: ProjHook = (p, w) => {
+  w.explode(p.x, p.y, p.hw, p.dmg, p.owner, p.knock, BUDGET, C.blue, true);
+  const L = budgetMissile.levels[0];
+  const c = w.spawnProjectile(p.owner, BUDGET);
+  c.kind = PK_MANAGED;
+  c.ch = CH_MISC;
+  c.x = p.x;
+  c.y = p.y;
+  c.r = (p.hw * (L.craterR ?? 40)) / (L.blast ?? 70);
+  c.dmg = (p.dmg * (L.craterDps ?? 20) * 0.5) / L.dmg;
+  c.knock = 0;
+  c.pierce = Infinity;
+  c.hitEvery = 0.5;
+  c.life = (L.crater ?? 2) * w.stats.duration;
+  c.a = CRATER;
+  if (p.owner) own(p.owner, c);
+};
+
+const budgetHook: ProjHook = (p, w, dt) => {
+  const t = p.target;
+  if (t && !t.dead && t.uid === p.targetUid) {
+    p.ox = t.x;
+    p.oy = t.y - t.cy;
+  }
+  const dx = p.ox - p.x;
+  const dy = p.oy - p.y;
+  const sp = p.speed * Math.min(1, p.b + (1 - p.b) * (p.age / 1.2));
+  const reach = sp * dt + 12;
+  if (dx * dx + dy * dy <= reach * reach) {
+    w.endProjectile(p);
+    return;
+  }
+  p.ang = approachAngle(p.ang, Math.atan2(dy, dx), p.hh * (1 + p.age * p.age * 3) * dt);
+  p.vx = Math.cos(p.ang) * sp;
+  p.vy = Math.sin(p.ang) * sp;
+  // (the face stays upright: mirrored, not upside down, when it flies left)
+  p.flipX = p.vx < 0;
+  p.rot = p.flipX ? p.ang - Math.PI : p.ang;
+};
+
+function launchBudget(w: World, inst: WeaponInstance, S: WStats, t: Enemy, a: number): void {
+  const pl = w.player;
+  const L = S.L;
+  const p = w.spawnProjectile(inst);
+  p.kind = PK_FREE;
+  p.x = pl.x - pl.face * 4;
+  p.y = pl.y - 17;
+  p.speed = S.speed;
+  p.b = (L.speed0 ?? 90) / Math.max(1, L.speed ?? 240);
+  p.ang = a;
+  p.vx = Math.cos(a) * S.speed * p.b;
+  p.vy = Math.sin(a) * S.speed * p.b;
+  p.target = t;
+  p.targetUid = t.uid;
+  p.ox = t.x;
+  p.oy = t.y - t.cy;
+  p.r = 0;
+  p.dmg = S.dmg;
+  p.knock = S.knock;
+  p.hw = (L.blast ?? 70) * S.area * (1 + 0.15 * w.talentRank("aoi_cluster"));
+  p.hh = L.turn ?? 2.2;
+  p.a = 0;
+  p.life = 4;
+  p.sprite = "w_budget_missile";
+  p.trail = "budget";
+  p.shadow = 9;
+  p.update = budgetHook;
+  p.onEnd = budgetBoom;
+  own(inst, p);
+  hfx(w, HFX_AOI_SALVO, p.x, p.y, p.x, p.y, 0, 1);
+  fired(w, inst, p.x, p.y);
+}
+
+export const budgetMissile: WeaponDef = {
+  id: BUDGET,
+  name: "Final Episode Budget Missile",
+  icon: "icon_budget_missile",
+  color: C.blue,
+  sfx: "missile",
+  evolved: true,
+  desc: "EVOLUTION! The whole animation budget went into one missile. It has a face.",
+  levels: [
+    {
+      dmg: 120, cd: 3.2, amount: 1, speed: 240, speed0: 90, turn: 2.2, blast: 58, knock: 220, craterR: 36, craterDps: 16, crater: 2,
+      tiny: 4, tinyDmg: 14, tinyBlast: 14, tinySpeed: 150,
+    },
+  ],
+  upgrades: [],
+  init(_w, inst) {
+    // (no small missiles before the first launch)
+    inst.data.k = 99;
+  },
+  update(w, inst, dt) {
+    const S = wstats(w, inst);
+    const L = S.L;
+    const d = inst.data;
+    let flying = false;
+    for (let i = prune(inst) - 1; i >= 0; i--) if (inst.projs[i].a !== CRATER) flying = true;
+    inst.timer -= dt;
+    // the last second: what is left of the budget, one small missile at a time
+    const tiny = Math.round((L.tiny ?? 4) + 2 * (S.amount - L.amount) + w.talentRank("aoi_magazine"));
+    while ((d.k ?? 0) < tiny && inst.timer <= 1 - (d.k ?? 0) / tiny) {
+      d.k = (d.k ?? 0) + 1;
+      if (flying || randomTargetsInView(w, 1, targets) === 0) continue;
+      const pl = w.player;
+      const x = pl.x - pl.face * 4;
+      launchMissile(w, inst, BUDGET, x, pl.y - 15, -Math.PI / 2 + w.rng.spread(70 * DEG), targets[0], (L.tinyDmg ?? 12) * (S.dmg / Math.max(1e-6, L.dmg)), (L.tinyBlast ?? 14) * S.area, (L.tinySpeed ?? 150) * w.stats.projSpeed, 5, 30, false);
+      fired(w, inst, x, pl.y - 15);
+    }
+    if (inst.timer > 0) return;
+    const t = densest(w, 50);
+    if (!t) {
+      inst.timer = 0.2;
+      return;
+    }
+    inst.timer = S.cd;
+    d.k = 0;
+    d.n = (d.n ?? 0) + 1;
+    launchBudget(w, inst, S, t, -Math.PI / 2 + w.rng.spread(35 * DEG));
+    if (w.talentRank("aoi_full_burst") > 0 && d.n % 5 === 0) {
+      // FULL BURST: the sequel got funded
+      launchBudget(w, inst, S, w.randomEnemyInView(-6) ?? t, -Math.PI / 2 + w.rng.spread(35 * DEG));
+      const pl = w.player;
+      hfx(w, HFX_TEXT, pl.x, pl.y - 30, pl.x, pl.y, 2, HERO_TEXTS.indexOf("FULL BURST!"));
+    }
+  },
+  dispose(_w, inst) {
+    killOwned(inst);
+  },
+};
+
+export const weapons: WeaponDef[] = [microMissileSwarm, alDenteArmageddon, budgetMissile];

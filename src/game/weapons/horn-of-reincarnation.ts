@@ -15,6 +15,14 @@
  * after a 0.4 s lane telegraph (`truckDmg`, pierce ∞, knockback 300 along the
  * lane); ram `ram`; isekai'd extra-gem chance `isekai`.
  *
+ * Second evolution: Free Delivery (+ Magnet Star) - the honk is reversed: every `cd` s the cone ahead
+ * (`len` x area, half-angle `angle`°) PULLS every enemy in it up to `pull` px toward the bumper (a `dmg`
+ * tug; elites half, bosses and props not at all) and the gems / coins in it to the truck; `slamAfter` s
+ * later the DELIVERY lands: everything on the bumper (r `slamR` x area) takes `slam` and is thrown ahead.
+ * The moving ram stays (`ram`), no phantom trucks. Its kills are isekai'd with the base weapon's extra-gem
+ * chance (`isekai`), but quietly (`quietIsekai`): everything dies ON the bumper, and a light pillar per
+ * kill there buried the truck - the view shows one pillar per delivery instead (FD_SLAM's kills).
+ *
  * Truck-kun's talents read here: Air Horn (+8 % cone length per rank), Bull Bar
  * (+20 % ram damage per rank, rammed enemies stunned 0.2 / 0.3 / 0.4 s),
  * Next-Life Guarantee (extra-gem chance, installIsekai) and Eighteen Wheeler
@@ -24,12 +32,19 @@ import { C } from "../../art/palette";
 import { CFG } from "../config";
 import { PK_FREE, ROT_FIXED, SHAPE_ELLIPSE, type WeaponDef, type WeaponInstance } from "../types";
 import type { World } from "../world";
-import { GHOST_TRUCK, HB, densest, hfx, installIsekai } from "./_hb";
+import { GHOST_TRUCK, HB, densest, extraGem, hfx, installIsekai } from "./_hb";
 import { fired, wstats, type WStats } from "./_shared";
 import { facing, ramming } from "./_truck";
 
 const ID = "horn_of_reincarnation";
 const EVO = "isekai_rush_hour";
+const FREE = "free_delivery";
+/** heroFx cues (src/view/evo2/d.ts): the reversed honk from (x, y) along (x2, y2), r = length, n = half-angle. */
+export const FD_PULL = "evo2d_pull";
+/** An enemy got pulled (it wears a parcel for a moment): `enemy`. */
+export const FD_PARCEL = "evo2d_parcel";
+/** The delivery landed on the bumper at (x, y) along (x2, y2); r = radius, n = enemies hit + 100 x the ones it finished. */
+export const FD_SLAM = "evo2d_slam";
 const dir = { x: 1, y: 0 };
 const pt = { x: 0, y: 0 };
 const LANE_HALF = 14;
@@ -131,7 +146,10 @@ export const hornOfReincarnation: WeaponDef = {
     { dmg: 36, cd: 1.5, amount: 2, len: 88, angle: 38, knock: 200, ram: 30 },
   ],
   upgrades: ["Louder honk, harder ram", "Damage +8, wider honk", "Cooldown −17%, ram damage +6", "Damage +10, longer honk, HONK-HONK"],
-  evolutions: [{ into: EVO, with: "swift_shoes" }],
+  evolutions: [
+    { into: EVO, with: "swift_shoes" },
+    { into: FREE, with: "magnet_star" },
+  ],
   limitBreak: [
     { dmg: 0.2, area: 0.15, text: "LIMIT BREAK — Air Horn Upgrade: +20% damage, +15% honk" },
     { cd: 0.85, dmg: 0.2, text: "MASTERED — Rush Hour: −15% cooldown, +20% damage" },
@@ -267,4 +285,183 @@ export const isekaiRushHour: WeaponDef = {
   },
 };
 
-export const weapons: WeaponDef[] = [hornOfReincarnation, isekaiRushHour];
+// ---------------------------------------------------------------- Free Delivery
+
+/** Knockback velocity that carries an enemy `px` (World decays e.kx by exp(-9 t)). */
+const PULL_K = 9;
+/** Parcels (view cues) per honk. */
+const PARCELS = 14;
+
+const QUIET = new WeakSet<World>();
+/** Kills this step by Free Delivery (the slam reports its own). */
+let finished = 0;
+
+/** Free Delivery's isekai'd kills: RunStats.isekaid and the extra gem, without a light pillar each (once per world). */
+function quietIsekai(w: World): void {
+  if (QUIET.has(w)) return;
+  QUIET.add(w);
+  w.hooks.on("kill", (k) => {
+    if (k.source !== FREE || k.boss) return;
+    finished++;
+    w.bumpStat("isekaid");
+    const inst = w.hasWeapon(FREE);
+    let c = (inst?.def.levels[0].isekai ?? 0.25) + nextLife(w);
+    while (c > 0) {
+      if (c >= 1 || w.rng.next() < c) extraGem(w, k.enemy, k.x, k.y);
+      c -= 1;
+    }
+  });
+}
+
+/**
+ * The delivery spot: `out` = the point just off the bumper, `DROP` px ahead of the body along (dx, dy).
+ * (Not on the cab: a whole cone of enemies dying on top of the truck buried it in their own death fx.)
+ */
+const DROP = 22;
+function bumper(w: World, dx: number, dy: number, out: { x: number; y: number }): void {
+  const p = w.player;
+  out.x = p.x + dx * DROP;
+  out.y = p.y - CFG.playerCy + dy * DROP;
+}
+
+/** The reversed honk: pull everything in the cone toward the bumper. Returns the enemies pulled. */
+function pullCone(w: World, inst: WeaponInstance, dx: number, dy: number, len: number, half: number, pull: number, dmg: number): number {
+  bumper(w, dx, dy, pt);
+  const bx = pt.x;
+  const by = pt.y;
+  const p = w.player;
+  const ox = p.x;
+  const oy = p.y - CFG.playerCy;
+  const cosH = Math.cos((half * Math.PI) / 180);
+  const buf = w.acquire();
+  const n = w.grid.query(ox, oy, len + 12, buf);
+  const items = w.enemies.items;
+  let hits = 0;
+  for (let k = 0; k < n; k++) {
+    const e = items[buf[k]];
+    if (!e || e.dead) continue;
+    const ex = e.x - ox;
+    const ey = e.y - e.cy - oy;
+    const d = Math.sqrt(ex * ex + ey * ey);
+    if (d > len + e.r) continue;
+    if (d > e.r && (ex * dx + ey * dy) / d < cosH - e.r / Math.max(8, d)) continue;
+    // the tug: toward the bumper, never past it (the hit's own knock is 0: the pull is set, not added)
+    const tx = bx - e.x;
+    const ty = by - (e.y - e.cy);
+    const td = Math.sqrt(tx * tx + ty * ty);
+    if (w.hitEnemy(e, dmg, inst, Math.atan2(ty, tx), 0, 0, FREE, inst.def.color)) continue;
+    hits++;
+    if (e.def.boss || e.def.prop) continue;
+    const resist = e.def.knockResist ?? 0;
+    const want = Math.min(pull * (e.elite ? 0.5 : 1) * (1 - resist), Math.max(0, td - e.r - 4));
+    if (want > 1 && td > 1) {
+      e.kx = (tx / td) * want * PULL_K;
+      e.ky = (ty / td) * want * PULL_K;
+      e.stun = Math.max(e.stun, 0.3);
+      if (hits <= PARCELS) hfx(w, FD_PARCEL, e.x, e.y, e.x, e.y, 0, 0, e);
+    }
+  }
+  w.release();
+  // free shipping: the gems and coins in the cone come along
+  const far = len * len;
+  const gems = w.gems;
+  for (let i = 0; i < gems.count; i++) {
+    const g = gems.items[i];
+    if (g.dead || g.state !== 0) continue;
+    const gx = g.x - ox;
+    const gy = g.y - oy;
+    const d2 = gx * gx + gy * gy;
+    if (d2 > far || gx * dx + gy * dy < cosH * Math.sqrt(d2)) continue;
+    g.state = 1;
+    g.speed = 90;
+  }
+  const picks = w.pickups;
+  for (let i = 0; i < picks.count; i++) {
+    const c = picks.items[i];
+    if (c.dead || c.kind !== "coin" || c.state !== 0) continue;
+    const gx = c.x - ox;
+    const gy = c.y - oy;
+    const d2 = gx * gx + gy * gy;
+    if (d2 > far || gx * dx + gy * dy < cosH * Math.sqrt(d2)) continue;
+    c.state = 1;
+    c.speed = 90;
+  }
+  hfx(w, FD_PULL, ox, oy, dx, dy, len, half);
+  return hits;
+}
+
+/** The delivery: everything on the bumper takes `slam` and is thrown ahead. */
+function deliver(w: World, inst: WeaponInstance, S: WStats, dx: number, dy: number): void {
+  bumper(w, dx, dy, pt);
+  const cx = pt.x;
+  const cy = pt.y;
+  const big = w.talentRank("truck_eighteen_wheeler") > 0 ? 1.5 : 1;
+  const R = (S.L.slamR ?? 16) * Math.sqrt(S.area) * big;
+  const bull = w.talentRank("truck_bull_bar");
+  const dmg = (S.L.slam ?? 85) * dmgK(S) * (1 + 0.2 * bull);
+  const ka = Math.atan2(dy, dx);
+  finished = 0;
+  const buf = w.acquire();
+  const n = w.grid.query(cx, cy, R + 14, buf);
+  const items = w.enemies.items;
+  let hits = 0;
+  for (let k = 0; k < n; k++) {
+    const e = items[buf[k]];
+    if (!e || e.dead) continue;
+    const ex = e.x - cx;
+    const ey = e.y - e.cy - cy;
+    const rr = R + e.r;
+    if (ex * ex + ey * ey > rr * rr) continue;
+    if (bull > 0 && !e.def.boss && !e.def.prop) e.stun = Math.max(e.stun, 0.1 + 0.1 * bull);
+    w.hitEnemy(e, dmg, inst, ka, S.knock, 0, FREE, inst.def.color);
+    hits++;
+  }
+  w.release();
+  if (hits > 0) hfx(w, FD_SLAM, cx, cy, dx, dy, R, hits + 100 * finished);
+}
+
+export const freeDelivery: WeaponDef = {
+  id: FREE,
+  name: "Free Delivery",
+  icon: "icon_free_delivery",
+  color: C.yellow,
+  evolved: true,
+  desc: "EVOLUTION! The horn now pulls. Parcels are delivered to the bumper. The parcels are enemies.",
+  levels: [{ dmg: 12, cd: 1.6, amount: 1, len: 110, angle: 40, pull: 60, knock: 150, ram: 40, slam: 85, slamR: 16, slamAfter: 0.24, isekai: 0.25 }],
+  upgrades: [],
+  init(w, inst) {
+    quietIsekai(w);
+    inst.timer = 0.3;
+    inst.data.st = -1;
+  },
+  update(w, inst, dt) {
+    const S = wstats(w, inst);
+    const d = inst.data;
+    ram(w, inst, S);
+    // the delivery lands `slamAfter` s after its honk, wherever the bumper is by then
+    if (d.st >= 0) {
+      d.st -= dt;
+      if (d.st < 0) {
+        facing(w, dir);
+        deliver(w, inst, S, dir.x, dir.y);
+      }
+    }
+    inst.timer -= dt;
+    if (inst.timer > 0) return;
+    const pl = w.player;
+    const len = (S.L.len ?? 110) * S.area * (1 + 0.08 * w.talentRank("truck_air_horn"));
+    if (!w.nearestEnemy(pl.x, pl.y - CFG.playerCy, len + 24)) {
+      inst.timer = 0.1;
+      return;
+    }
+    inst.timer = S.cd;
+    facing(w, dir);
+    const half = S.L.angle ?? 40;
+    pullCone(w, inst, dir.x, dir.y, len, half, S.L.pull ?? 60, S.dmg);
+    // Eighteen Wheeler: the horn pulls what is behind too (at 70 %, to the tailgate)
+    if (w.talentRank("truck_eighteen_wheeler") > 0) pullCone(w, inst, -dir.x, -dir.y, len, half, (S.L.pull ?? 60) * 0.7, S.dmg * 0.7);
+    d.st = S.L.slamAfter ?? 0.24;
+  },
+};
+
+export const weapons: WeaponDef[] = [hornOfReincarnation, isekaiRushHour, freeDelivery];

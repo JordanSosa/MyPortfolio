@@ -16,6 +16,10 @@
  * the burst heals 3 and always clears bullets; a narration pop at most once per
  * 30 s ("That's the 47th transformation this episode.").
  *
+ * Second evolution: Skip Intro (+ Wish Charm) - no henshin at all: the burst fires every `cd` s with no
+ * i-frames, no slow walk and no Panic Henshin; every `finEvery`-th burst is the stock-footage finisher
+ * (radius x `finArea`, damage x `finDmg`). Quick Change and Double Henshin still apply; C6 fires a burst.
+ *
  * Magical Girl #47's talents read here: Quick Change (-4 % cooldown per rank),
  * Panic Henshin+ (70 / 60 / 50 % threshold), Double Henshin (the burst repeats
  * 0.5 s later at 50 % with mirrored ribbons). C6: a henshin on every level-up
@@ -33,6 +37,15 @@ import { fired, wstats, type WStats } from "./_shared";
 
 const ID = "henshin_burst";
 const EVO = "infinite_henshin_loop";
+const SKIP = "skip_intro";
+/**
+ * Skip Intro's burst cue (src/view/evo2/d.ts draws it; same payload as HB.BURST): at twice the burst rate
+ * the base weapon's glow ring + shockwave kept the screen white, so this route has its own, lighter one.
+ */
+export const SKIP_BURST = "evo2d_skip";
+/** `n` bits of a Skip Intro burst: a skipped burst (always set), and its stock-footage finisher. */
+export const BURST_SKIP = 8;
+export const BURST_FINISHER = 16;
 const RIBBON_SPEED = 160;
 
 interface HenshinState {
@@ -101,14 +114,17 @@ function startHenshin(w: World, inst: WeaponInstance, S: WStats, why: number): v
   fired(w, inst, p.x, p.y);
 }
 
-/** The burst: circle damage + ribbons. `mul` = damage share (Double Henshin echo 0.5), `mirror` = echo. */
-function burst(w: World, inst: WeaponInstance, S: WStats, mul: number, mirror: boolean): void {
+/**
+ * The burst: circle damage + ribbons. `mul` = damage share (Double Henshin echo 0.5), `mirror` = echo,
+ * `rK` = radius factor and `bits` = extra HB.BURST bits (Skip Intro).
+ */
+function burst(w: World, inst: WeaponInstance, S: WStats, mul: number, mirror: boolean, rK = 1, bits = 0): void {
   const p = w.player;
   const cx = p.x;
   const cy = p.y - CFG.playerCy;
   const L = S.L;
   const evo = inst.def.id === EVO;
-  const R = (L.radius ?? 56) * S.area;
+  const R = (L.radius ?? 56) * S.area * rK;
   const dmg = S.dmg * mul;
   const knock = S.knock;
   const buf = w.acquire();
@@ -172,7 +188,7 @@ function burst(w: World, inst: WeaponInstance, S: WStats, mul: number, mirror: b
       }
     }
   }
-  hfx(w, HB.BURST, cx, cy, p.x, p.y, R, (mirror ? 1 : 0) | (evo ? 2 : 0) | (cleared > 0 ? 4 : 0));
+  hfx(w, bits & BURST_SKIP ? SKIP_BURST : HB.BURST, cx, cy, p.x, p.y, R, (mirror ? 1 : 0) | (evo ? 2 : 0) | (cleared > 0 ? 4 : 0) | bits);
   // the evolution's narrator, at most once per 30 s
   if (evo && mul >= 1) {
     const st = state(w);
@@ -216,6 +232,9 @@ function update(w: World, inst: WeaponInstance, dt: number): void {
 
 /** Trigger a henshin now (Magical Girl #47 C6: on every level-up). No-op while one is running. */
 export function forceHenshin(w: World): void {
+  // (Skip Intro has no henshin to trigger: its next burst fires now)
+  const skip = w.hasWeapon(SKIP);
+  if (skip) skip.data.charge = 1e9;
   const inst = henshinInst(w);
   if (!inst || (inst.data.hen ?? 0) > 0 || w.phase !== "play") return;
   startHenshin(w, inst, wstats(w, inst), 2);
@@ -236,7 +255,10 @@ export const henshinBurst: WeaponDef = {
     { dmg: 80, cd: 4.4, amount: 1, radius: 72, iframe: 0.6, ribbons: 8, ribbonDmg: 14, knock: 180 },
   ],
   upgrades: ["+6 ribbons fly out of the burst", "Damage +15, bigger burst", "Cooldown −12%, +2 ribbons", "Damage +20, the burst heals 5 HP and clears enemy bullets inside it"],
-  evolutions: [{ into: EVO, with: "plot_armor" }],
+  evolutions: [
+    { into: EVO, with: "plot_armor" },
+    { into: SKIP, with: "wish_charm" },
+  ],
   limitBreak: [
     { dmg: 0.25, area: 0.1, text: "LIMIT BREAK — Season 2 Costume: +25% damage, +10% burst" },
     { cd: 0.85, amount: 1, text: "MASTERED — Stock Footage: −15% cooldown, +2 ribbons" },
@@ -271,4 +293,39 @@ export const infiniteHenshinLoop: WeaponDef = {
   update,
 };
 
-export const weapons: WeaponDef[] = [henshinBurst, infiniteHenshinLoop];
+export const skipIntro: WeaponDef = {
+  id: SKIP,
+  name: "Skip Intro",
+  icon: "icon_skip_intro",
+  color: C.mint,
+  evolved: true,
+  desc: "EVOLUTION! The transformation sequence has been skipped. So has the invulnerability.",
+  levels: [{ dmg: 44, cd: 1.25, amount: 1, radius: 70, ribbons: 8, ribbonDmg: 14, knock: 160, finEvery: 5, finArea: 1.4, finDmg: 2 }],
+  upgrades: [],
+  init(_w, inst) {
+    inst.data.charge = 0.6;
+  },
+  update(w, inst, dt) {
+    const S = wstats(w, inst);
+    const d = inst.data;
+    if ((d.echo ?? 0) > 0) {
+      d.echo -= dt;
+      if (d.echo <= 0) burst(w, inst, S, 0.5, true, d.er ?? 1, BURST_SKIP);
+    }
+    d.charge = (d.charge ?? 0) + dt;
+    if (d.charge < chargeTime(w, S)) return;
+    d.charge = 0;
+    d.n = (d.n ?? 0) + 1;
+    // every `finEvery`-th burst is the stock-footage finisher: bigger, twice the damage
+    const fin = d.n % Math.max(2, S.L.finEvery ?? 5) === 0;
+    const rK = fin ? (S.L.finArea ?? 1.4) : 1;
+    burst(w, inst, S, fin ? (S.L.finDmg ?? 2) : 1, false, rK, BURST_SKIP | (fin ? BURST_FINISHER : 0));
+    // Double Henshin: the burst repeats 0.5 s later at 50 % with mirrored ribbons
+    if (w.talentRank("mg47_double_henshin") > 0) {
+      d.echo = 0.5;
+      d.er = rK;
+    }
+  },
+};
+
+export const weapons: WeaponDef[] = [henshinBurst, infiniteHenshinLoop, skipIntro];

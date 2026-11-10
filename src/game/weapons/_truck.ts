@@ -108,7 +108,7 @@ export function installTruck(w: World): TruckState {
 
 /** The live horn (or its evolution): the trailer rams with its numbers. */
 function hornInst(w: World): WeaponInstance | null {
-  return w.hasWeapon("isekai_rush_hour") ?? w.hasWeapon("horn_of_reincarnation") ?? null;
+  return w.hasWeapon("isekai_rush_hour") ?? w.hasWeapon("free_delivery") ?? w.hasWeapon("horn_of_reincarnation") ?? null;
 }
 
 /** Bull Bar stun on trailer hits too. */

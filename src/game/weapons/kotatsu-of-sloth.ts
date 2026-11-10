@@ -15,6 +15,12 @@
  * with the hero (r 48 and x0.6 damage while moving), pulls in gems, and when
  * Too Comfy (after 3 s) the aura grows x1.5 and hits x3 - weapons keep firing -
  * while mikan are lobbed at random enemies in view.
+ * Second evolution: All-You-Can-Eat Nabe (+ Bento Box) - deploys like the base weapon (stand still
+ * `deploy` s) with a hot pot: r `radius` x area, enemies inside are slowed (x`slow`) and COOKED: `dmg`
+ * every `cd` s, +`cook` per second each has stayed inside (max +`cookMax`); every `snackEvery`-th enemy
+ * that dies inside (to anything) drops a snack (heals `snackHeal`). Moving folds it at once: nothing
+ * travels with the hero, and there is no Too Comfy doze on this route. The view (src/view/evo2/d.ts)
+ * draws w_nabe from the same `Kotatsu` state.
  *
  * No projectiles for the aura (mikan are PK_FALL lobs): the state lives in a
  * `Kotatsu` per instance (`kotatsuOf`, read by src/view/arsenal2-fx.ts, which
@@ -27,8 +33,9 @@ import { PK_FALL, ROT_SPIN, type Enemy, type ProjHook, type WeaponDef, type Weap
 import type { World } from "../world";
 import { wstats, type WStats } from "./_shared";
 import { A2_KOTATSU_COMFY, A2_KOTATSU_DEPLOY, A2_KOTATSU_FOLD, A2_KOTATSU_SNORE, A2_KOTATSU_WAKE, A2_MIKAN, A2_SLEEP, a2fx, dropStatMod, keyDmg } from "./_arsenal2";
-import { daze, slowEnemy } from "./_heroes-a";
+import { daze, dropSnack, slowEnemy } from "./_heroes-a";
 
+const NABE = "all_you_can_eat_nabe";
 /** Folded (travelling) aura: radius, slow. */
 export const FOLDED_R = 18;
 const FOLDED_SLOW = 0.8;
@@ -68,6 +75,9 @@ export class Kotatsu {
   inside = new Map<number, number>();
   private next = new Map<number, number>();
   mod: StatMod | null = null;
+  /** All-You-Can-Eat Nabe: enemies that died inside so far, and the hottest cook bonus this step (0..cookMax). */
+  eaten = 0;
+  heat = 0;
   constructor(readonly evo: boolean) {}
 
   /** Swap the inside-time maps (the old "next" is cleared for this step). */
@@ -386,14 +396,18 @@ export const kotatsuOfSloth: WeaponDef = {
   sfx: "snore",
   desc: "Stand still and a kotatsu appears: a cosy aura that slows and lulls enemies. Stay too long and you get Too Comfy.",
   levels: [
-    { dmg: 4, cd: 0.5, amount: 1, radius: 40, slow: 0.6, deploy: 0.6, armor: 1, regen: 0.5, comfy: 5, knock: 0 },
-    { dmg: 5, cd: 0.5, amount: 1, radius: 44, slow: 0.6, deploy: 0.6, armor: 1, regen: 0.5, comfy: 5, knock: 0 },
-    { dmg: 5, cd: 0.5, amount: 1, radius: 44, slow: 0.5, deploy: 0.6, armor: 1, regen: 1.0, comfy: 5, knock: 0 },
-    { dmg: 7, cd: 0.5, amount: 1, radius: 44, slow: 0.5, deploy: 0.4, armor: 2, regen: 1.0, comfy: 5, knock: 0 },
-    { dmg: 9, cd: 0.5, amount: 1, radius: 52, slow: 0.5, deploy: 0.4, armor: 2, regen: 1.0, comfy: 5, knock: 0, sleep: 1 },
+    // (weapon bench pass, docs/content/weapons.md section 9: dmg was 4 / 5 / 5 / 7 / 9, regen 0.5 / 0.5 / 1 / 1 / 1, armor 1 / 1 / 1 / 2 / 2)
+    { dmg: 5, cd: 0.5, amount: 1, radius: 40, slow: 0.6, deploy: 0.6, armor: 1, regen: 0.5, comfy: 5, knock: 0 },
+    { dmg: 7, cd: 0.5, amount: 1, radius: 44, slow: 0.6, deploy: 0.6, armor: 1, regen: 1.0, comfy: 5, knock: 0 },
+    { dmg: 9, cd: 0.5, amount: 1, radius: 44, slow: 0.5, deploy: 0.6, armor: 2, regen: 1.5, comfy: 5, knock: 0 },
+    { dmg: 15, cd: 0.5, amount: 1, radius: 44, slow: 0.5, deploy: 0.4, armor: 2, regen: 2.0, comfy: 5, knock: 0 },
+    { dmg: 28, cd: 0.5, amount: 1, radius: 52, slow: 0.5, deploy: 0.4, armor: 3, regen: 2.5, comfy: 5, knock: 0, sleep: 1 },
   ],
-  upgrades: ["Damage +1, bigger blanket", "Cosier: stronger slow, more regen", "Damage +2, deploys faster, +1 armor inside", "Damage +2, bigger; enemies inside 3 s fall asleep and take +25% damage"],
-  evolutions: [{ into: "eternal_winter_break", with: "chibi_charm" }],
+  upgrades: ["Damage +2, bigger blanket, more regen", "Cosier: damage +2, stronger slow, more regen, +1 armor inside", "Damage +6, deploys faster, more regen", "Damage +13, bigger, +1 armor; enemies inside 3 s fall asleep and take +25% damage"],
+  evolutions: [
+    { into: "eternal_winter_break", with: "chibi_charm" },
+    { into: NABE, with: "bento_box" },
+  ],
   // mastery Limit Breaks (docs/content/weapons.md §4): a Limit Break amount = +8% radius
   limitBreak: [
     { area: 0.2, dmg: 0.15, text: "LIMIT BREAK — Bigger Blanket: +20% area, +15% damage" },
@@ -411,10 +425,114 @@ export const eternalWinterBreak: WeaponDef = {
   sfx: "snore",
   evolved: true,
   desc: "EVOLUTION! The kotatsu comes with you, pulls in gems, and lobs mikan when you get Too Comfy.",
-  levels: [{ dmg: 14, cd: 0.4, amount: 1, radius: 64, slow: 0.4, armor: 2, regen: 1.5, comfy: 3, gemPull: 120, mikanEvery: 0.5, mikanDmg: 20, knock: 0 }],
+  levels: [{ dmg: 24, cd: 0.4, amount: 1, radius: 64, slow: 0.4, armor: 3, regen: 3, comfy: 3, gemPull: 120, mikanEvery: 0.5, mikanDmg: 20, knock: 0 }],
   upgrades: [],
   update: winterBreak,
   dispose,
 };
 
-export const weapons: WeaponDef[] = [kotatsuOfSloth, eternalWinterBreak];
+// ---------------------------------------------------------------- All-You-Can-Eat Nabe
+/** heroFx cue (src/view/evo2/d.ts): the nabe served a snack at (x, y). */
+export const NABE_SNACK = "evo2d_snack";
+const NABE_WORLDS = new WeakSet<World>();
+
+/** Count what dies inside a deployed nabe (once per world; the hook reads the live instance). */
+function nabeKills(w: World): void {
+  if (NABE_WORLDS.has(w)) return;
+  NABE_WORLDS.add(w);
+  w.hooks.on("kill", (k) => {
+    const inst = w.hasWeapon(NABE);
+    const K = inst && STATES.get(inst);
+    if (!inst || !K || !K.deployed || k.boss || k.enemy.def.prop) return;
+    const dx = k.x - K.x;
+    const dy = k.y - (K.y - 6);
+    const rr = K.r + 8;
+    if (dx * dx + dy * dy > rr * rr) return;
+    const L = inst.def.levels[0];
+    if (++K.eaten % Math.max(1, L.snackEvery ?? 12) !== 0) return;
+    dropSnack(w, "w_mikan", k.x, k.y, L.snackHeal ?? 4);
+    a2fx(w, NABE_SNACK, k.x, k.y);
+  });
+}
+
+function nabe(w: World, inst: WeaponInstance, dt: number): void {
+  const S = wstats(w, inst);
+  const L = S.L;
+  const K = state(w, inst);
+  const pl = w.player;
+  if (standingStill(w)) K.still += dt;
+  else {
+    K.still = 0;
+    if (K.deployed) {
+      K.deployed = false;
+      K.inside.clear();
+      K.heat = 0;
+      a2fx(w, A2_KOTATSU_FOLD, K.x, K.y);
+    }
+  }
+  if (!K.deployed) {
+    // folded: nothing travels with her
+    K.x = pl.x;
+    K.y = pl.y;
+    K.r = 0;
+    setBonus(w, K, false, 0, 0);
+    if (K.still < (L.deploy ?? 0.4)) return;
+    K.deployed = true;
+    a2fx(w, A2_KOTATSU_DEPLOY, K.x, K.y, K.x, K.y, 0, 1);
+  }
+  const R = (L.radius ?? 60) * S.area * (1 + 0.08 * Math.max(0, S.amount - 1));
+  K.r = R;
+  const hx = pl.x - K.x;
+  const hy = pl.y - K.y;
+  setBonus(w, K, hx * hx + hy * hy <= R * R, L.armor ?? 2, L.regen ?? 1);
+  // slow + cook: each enemy's seconds inside raise its own damage
+  const cx = K.x;
+  const cy = K.y - 6;
+  const ch = inst.slot;
+  const now = w.t;
+  const tick = Math.max(0.12, S.cd);
+  const rate = L.cook ?? 0.12;
+  const cap = L.cookMax ?? 1.8;
+  const slow = L.slow ?? 0.7;
+  const prev = K.swap();
+  let heat = 0;
+  const buf = w.acquire();
+  const n = w.grid.query(cx, cy, R + 14, buf);
+  const items = w.enemies.items;
+  for (let k = 0; k < n; k++) {
+    const e = items[buf[k]] as Enemy | undefined;
+    if (!e || e.dead || e.def.prop) continue;
+    const dx = e.x - cx;
+    const dy = e.y - e.cy * 0.5 - cy;
+    const rr = R + e.r * 0.5;
+    if (dx * dx + dy * dy > rr * rr) continue;
+    slowEnemy(e, slow, 0.25);
+    const t = (prev.get(e.uid) ?? 0) + dt;
+    K.inside.set(e.uid, t);
+    const bonus = Math.min(cap, rate * t);
+    if (bonus > heat) heat = bonus;
+    if (now - e.lastHit[ch] < tick) continue;
+    e.lastHit[ch] = now;
+    w.hitEnemy(e, S.dmg * (1 + bonus), inst, Math.atan2(dy, dx), S.knock, 0, NABE, inst.def.color);
+  }
+  w.release();
+  K.heat = heat;
+}
+
+export const allYouCanEatNabe: WeaponDef = {
+  id: NABE,
+  name: "All-You-Can-Eat Nabe",
+  icon: "icon_all_you_can_eat_nabe",
+  color: 0xff9a3c,
+  evolved: true,
+  desc: "EVOLUTION! The kotatsu gets a hot pot. Whatever wanders in gets cooked. Whatever gets cooked is dinner.",
+  levels: [{ dmg: 9, cd: 0.3, amount: 1, radius: 60, slow: 0.7, deploy: 0.4, cook: 0.12, cookMax: 1.8, snackEvery: 12, snackHeal: 4, armor: 2, regen: 1, knock: 0 }],
+  upgrades: [],
+  init(w) {
+    nabeKills(w);
+  },
+  update: nabe,
+  dispose,
+};
+
+export const weapons: WeaponDef[] = [kotatsuOfSloth, eternalWinterBreak, allYouCanEatNabe];

@@ -71,6 +71,8 @@ interface Book {
   doubleXp: boolean;
   /** Love Triangle (talent): chain charms on charmed kills. */
   triangle: boolean;
+  /** Who Are You Again? (second evolution): a charm ended (`died`: the charmed enemy was killed). Never muted. */
+  onEnd: ((w: World, e: Enemy, died: boolean) => void) | null;
 }
 
 const books = new WeakMap<World, Book>();
@@ -84,7 +86,7 @@ const near: Enemy[] = [];
 
 /** Live weapon credited with charm attacks (the evolution once Notice-Me Sparkles evolved). */
 function charmOwner(w: World): WeaponInstance | null {
-  return w.hasWeapon("shoujo_filter") ?? w.hasWeapon("notice_me_sparkles") ?? null;
+  return w.hasWeapon("shoujo_filter") ?? w.hasWeapon("who_are_you_again") ?? w.hasWeapon("notice_me_sparkles") ?? null;
 }
 
 /** grid.nearest acceptor: a live, non-prop enemy that is not charmed (and not the attacker itself). */
@@ -100,7 +102,7 @@ function acceptVictim(id: number): boolean {
 export function charmBook(w: World): Book {
   let b = books.get(w);
   if (b) return b;
-  const book: Book = { list: [], map: new Map(), pool: [], counted: 0, distracted: new Map(), critBonus: 0, doubleXp: false, triangle: false };
+  const book: Book = { list: [], map: new Map(), pool: [], counted: 0, distracted: new Map(), critBonus: 0, doubleXp: false, triangle: false, onEnd: null };
   b = book;
   books.set(w, book);
   w.hooks.on("step", (h) => update(w, book, h.dt));
@@ -118,6 +120,7 @@ export function charmBook(w: World): Book {
     const r = book.map.get(k.enemy);
     // Senpai C6: charmed enemies drop double XP
     if (book.doubleXp && r && r.uid === k.enemy.uid && r.charm > 0 && !k.boss) extraGem(w, k.enemy, k.x, k.y);
+    if (book.onEnd && r && r.uid === k.enemy.uid && r.charm > 0) book.onEnd(w, k.enemy, true);
     // Love Triangle: a charmed enemy's kill charms the nearest non-charmed enemy within 48 px (3 links)
     const a = attacking;
     if (book.triangle && a && a.links > 0 && !k.boss) {
@@ -157,12 +160,13 @@ export function isCharmed(w: World, e: Enemy): boolean {
   return !!r && r.charm > 0;
 }
 
-/** Set book-wide rules (Shoujo Filter crit bonus, Senpai C6, Love Triangle). */
-export function charmRules(w: World, o: { critBonus?: number; doubleXp?: boolean; triangle?: boolean }): void {
+/** Set book-wide rules (Shoujo Filter crit bonus, Senpai C6, Love Triangle; `onEnd`: Who Are You Again?, null clears it). */
+export function charmRules(w: World, o: { critBonus?: number; doubleXp?: boolean; triangle?: boolean; onEnd?: Book["onEnd"] }): void {
   const b = charmBook(w);
   if (o.critBonus !== undefined) b.critBonus = Math.max(b.critBonus, o.critBonus);
   if (o.doubleXp) b.doubleXp = true;
   if (o.triangle) b.triangle = true;
+  if (o.onEnd !== undefined) b.onEnd = o.onEnd;
 }
 
 function rec(b: Book, e: Enemy): CharmRec {
@@ -404,6 +408,7 @@ function endCharm(w: World, b: Book, r: CharmRec): void {
     hfx(w, HB.HEARTBREAK, e.x, y, e.x, y, 16, 1, e);
     w.explode(e.x, y, 16, 20 * w.stats.might * (owner?.dmgMul ?? 1), owner, 60, owner ? owner.def.id : "notice_me_sparkles", C.pink);
   } else hfx(w, HB.HEARTBREAK, e.x, y, e.x, y, 0, 0, e);
+  b.onEnd?.(w, e, false);
 }
 
 /** Senpai's trait: enemies within `r` px of the hero move `slow` x (they're staring). Installed once. */
