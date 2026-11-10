@@ -427,7 +427,7 @@ export const freeDelivery: WeaponDef = {
   color: C.yellow,
   evolved: true,
   desc: "EVOLUTION! The horn now pulls. Parcels are delivered to the bumper. The parcels are enemies.",
-  levels: [{ dmg: 12, cd: 1.6, amount: 1, len: 110, angle: 40, pull: 60, knock: 150, ram: 40, slam: 85, slamR: 16, slamAfter: 0.24, isekai: 0.25 }],
+  levels: [{ dmg: 30, cd: 1.5, amount: 1, len: 110, angle: 40, pull: 80, knock: 150, ram: 45, slam: 130, slamR: 22, slamAfter: 0.24, isekai: 0.25 }],
   upgrades: [],
   init(w, inst) {
     quietIsekai(w);

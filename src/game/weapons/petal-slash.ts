@@ -6,6 +6,7 @@
  * Second evolution: Already Cut (+ Swift Shoes) - one long line cut along the way she last moved: no damage
  *   on the cut, everything on the line is MARKED and takes it all at once when she sheathes the blade
  *   (`wait` s later; +`moved` if she walked on meanwhile). Marks that die shed petal blades down the line.
+ *   (Aim assist: she turns to a line with more than twice as many enemies on it, if there is one.)
  *   Directional and delayed, the highest single-line burst, nothing behind her.
  *
  * Rin's talents (talents/rin.ts) read here, for both forms: Wide Stance (+6%
@@ -284,7 +285,7 @@ function markLine(w: World, c: Cut, x: number, y: number, a: number, len: number
     const along = dx * ca + dy * sa;
     if (along < -e.r || along > len + e.r || Math.abs(dy * ca - dx * sa) > hw + e.r) continue;
     on++;
-    if (dry) break;
+    if (dry) continue;
     let seen = false;
     for (let i = 0; i < c.n; i++)
       if (c.uids[i] === e.uid) {
@@ -384,11 +385,21 @@ export const alreadyCut: WeaponDef = {
     const hw = (L.wid ?? 14) * 0.5 * area * (moon ? 2.5 : 1);
     const x = pl.x;
     const y = pl.y - 8;
-    // the way she last moved; with nobody on that line, at the nearest enemy in reach (a cut is never wasted on air)
-    let a0 = Math.atan2(pl.aimY, pl.aimX);
-    if (markLine(w, c, x, y, a0, len, hw, wait, true) === 0) {
-      const e = w.nearestEnemy(x, y, len);
-      if (e) a0 = Math.atan2(e.y - e.cy - y, e.x - x);
+    // The way she last moved - unless that line holds less than half of what the best line around her would
+    // (the nearest enemy's, or one of 12 around the clock): then she turns to that one. Melee on a phone needs
+    // the help (as Petal Slash's auto-aim), and lining enemies up is still the player's job.
+    const move = Math.atan2(pl.aimY, pl.aimX);
+    let a0 = move;
+    const mine = markLine(w, c, x, y, move, len, hw, wait, true);
+    let best = mine * 2;
+    const e = w.nearestEnemy(x, y, len);
+    for (let k = e ? -1 : 0; k < 12; k++) {
+      const a = k < 0 && e ? Math.atan2(e.y - e.cy - y, e.x - x) : move + (k * TAU) / 12;
+      const n = markLine(w, c, x, y, a, len, hw, wait, true);
+      if (n > best) {
+        best = n;
+        a0 = a;
+      }
     }
     c.px = pl.x;
     c.py = pl.y;

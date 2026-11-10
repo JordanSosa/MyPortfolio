@@ -211,7 +211,7 @@ describe("Already Cut", () => {
     expect(mean(plain) / dmg).toBeLessThan(1.08);
   });
 
-  test("it follows the way she moves, and turns to the nearest enemy only when that line is empty", () => {
+  test("it follows the way she moves, and turns only to a line that holds more than twice as many", () => {
     const a = make();
     dummy(a.w, 0, -60);
     dummy(a.w, 60, 0);
@@ -230,6 +230,17 @@ describe("Already Cut", () => {
     // facing right with nobody there: the cut goes to the one enemy behind her
     expect(cutsB[0].x2).toBeLessThan(cutsB[0].x - 100);
     expect(marks).toHaveLength(1);
+
+    const c = make();
+    dummy(c.w, 50, 0);
+    dummy(c.w, 80, 0);
+    for (let i = 0; i < 4; i++) dummy(c.w, 0, 40 + i * 16);
+    for (let i = 0; i < 5; i++) dummy(c.w, 4, -40 - i * 16);
+    const cutsC = cues(c.w, FX_CUT);
+    untilCut(c.w);
+    // two ahead, four below, five above: five is more than twice two, so she turns up (four alone would not do)
+    expect(Math.abs(cutsC[0].x2 - cutsC[0].x)).toBeLessThan(30);
+    expect(cutsC[0].y2).toBeLessThan(cutsC[0].y - 100);
   });
 
   test("a mark that dies sheds `petals` petal blades down the line", () => {

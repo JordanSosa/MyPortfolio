@@ -242,7 +242,7 @@ export const whoAreYouAgain: WeaponDef = {
   sfx: "sparkleCharm",
   evolved: true,
   desc: "EVOLUTION! He looks right at them. Then he asks their name. The heartbreak is area damage.",
-  levels: [{ dmg: 30, cd: 0.45, amount: 1, radius: 56, charm: 0.25, duration: 2.5, max: 12, knock: 8, sting: 5, burst: 32, hpShare: 0.06, hpCap: 240, rate: 8 }],
+  levels: [{ dmg: 40, cd: 0.45, amount: 1, radius: 56, charm: 0.25, duration: 2.5, max: 12, knock: 8, sting: 6, burst: 32, hpShare: 0.06, hpCap: 60, rate: 8 }],
   upgrades: [],
   init(w, inst) {
     inst.timer = 0.2;
@@ -254,7 +254,7 @@ export const whoAreYouAgain: WeaponDef = {
       onEnd: (_w, e) => {
         if (q.length >= QUEUE_MAX * 4) return;
         const L = inst.def.levels[0];
-        q.push(e.x, e.y - e.cy, Math.min(L.hpCap ?? 240, (L.hpShare ?? 0.06) * e.maxHp), e.uid);
+        q.push(e.x, e.y - e.cy, Math.min(L.hpCap ?? 60, (L.hpShare ?? 0.06) * e.maxHp), e.uid);
       },
     });
   },

@@ -446,7 +446,7 @@ const nabe: Evo2Module = {
     if (!K || !K.deployed || K.r <= 1) return;
     const r = kit.r;
     const ps = kit.fx.ps;
-    const hot = Math.min(1, K.heat / 1.8);
+    const hot = Math.min(1, K.heat / 2);
     const ax = K.x;
     const ay = K.y - 6;
     // the cooking floor: a warm disc that deepens as the pot heats up, a soft rim at the aura's edge

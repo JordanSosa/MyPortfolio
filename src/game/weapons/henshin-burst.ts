@@ -300,7 +300,7 @@ export const skipIntro: WeaponDef = {
   color: C.mint,
   evolved: true,
   desc: "EVOLUTION! The transformation sequence has been skipped. So has the invulnerability.",
-  levels: [{ dmg: 44, cd: 1.25, amount: 1, radius: 70, ribbons: 8, ribbonDmg: 14, knock: 160, finEvery: 5, finArea: 1.4, finDmg: 2 }],
+  levels: [{ dmg: 40, cd: 1.25, amount: 1, radius: 70, ribbons: 8, ribbonDmg: 12, knock: 160, finEvery: 5, finArea: 1.4, finDmg: 2 }],
   upgrades: [],
   init(_w, inst) {
     inst.data.charge = 0.6;

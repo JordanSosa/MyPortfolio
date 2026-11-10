@@ -328,7 +328,7 @@ export const holdingBack: WeaponDef = {
   color: C.orange,
   evolved: true,
   desc: "EVOLUTION! He is holding back. This is him holding back: a stream of perfectly ordinary fireballs.",
-  levels: [{ dmg: 15, cd: 0.14, amount: 1, speed: 230, blast: 12, knock: 20, sneeze: 100, sneezeDmg: 156, sneezeBlast: 70 }],
+  levels: [{ dmg: 26, cd: 0.14, amount: 1, speed: 230, blast: 15, knock: 20, sneeze: 100, sneezeDmg: 156, sneezeBlast: 70 }],
   upgrades: [],
   init(_w, inst) {
     inst.timer = 0.3;
@@ -350,7 +350,7 @@ export const holdingBack: WeaponDef = {
     // (a step can owe more than one volley at a tiny cooldown: the timer keeps the remainder)
     inst.timer += Math.max(0.05, S.cd);
     const d = inst.data;
-    const blast = (S.L.blast ?? 12) * S.area * blastK(w);
+    const blast = (S.L.blast ?? 15) * S.area * blastK(w);
     const every = Math.max(10, S.L.sneeze ?? 100);
     for (let i = 0; i < streams; i++) {
       const t = targets[i % n];

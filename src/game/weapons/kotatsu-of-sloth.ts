@@ -480,7 +480,7 @@ function nabe(w: World, inst: WeaponInstance, dt: number): void {
     K.deployed = true;
     a2fx(w, A2_KOTATSU_DEPLOY, K.x, K.y, K.x, K.y, 0, 1);
   }
-  const R = (L.radius ?? 60) * S.area * (1 + 0.08 * Math.max(0, S.amount - 1));
+  const R = (L.radius ?? 80) * S.area * (1 + 0.08 * Math.max(0, S.amount - 1));
   K.r = R;
   const hx = pl.x - K.x;
   const hy = pl.y - K.y;
@@ -491,8 +491,8 @@ function nabe(w: World, inst: WeaponInstance, dt: number): void {
   const ch = inst.slot;
   const now = w.t;
   const tick = Math.max(0.12, S.cd);
-  const rate = L.cook ?? 0.12;
-  const cap = L.cookMax ?? 1.8;
+  const rate = L.cook ?? 0.25;
+  const cap = L.cookMax ?? 2;
   const slow = L.slow ?? 0.7;
   const prev = K.swap();
   let heat = 0;
@@ -526,7 +526,7 @@ export const allYouCanEatNabe: WeaponDef = {
   color: 0xff9a3c,
   evolved: true,
   desc: "EVOLUTION! The kotatsu gets a hot pot. Whatever wanders in gets cooked. Whatever gets cooked is dinner.",
-  levels: [{ dmg: 9, cd: 0.3, amount: 1, radius: 60, slow: 0.7, deploy: 0.4, cook: 0.12, cookMax: 1.8, snackEvery: 12, snackHeal: 4, armor: 2, regen: 1, knock: 0 }],
+  levels: [{ dmg: 36, cd: 0.3, amount: 1, radius: 80, slow: 0.7, deploy: 0.4, cook: 0.25, cookMax: 2, snackEvery: 12, snackHeal: 4, armor: 2, regen: 1, knock: 0 }],
   upgrades: [],
   init(w) {
     nabeKills(w);
