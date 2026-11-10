@@ -950,7 +950,7 @@ now pulls. Parcels are delivered to the bumper. The parcels are enemies." The ho
 1.5 s a cone ahead (`len` 110 × area, half-angle `angle` 40°) **pulls** every enemy in it up to `pull` 80 px
 toward the drop spot just off the bumper (a `dmg` 30 tug; elites half, bosses and props 0), then
 `slamAfter` 0.24 s later the delivery hits everything there (r `slamR` 22) for `slam` 130 and throws it
-ahead; gems and every pickup in the cone are pulled too (food and chests included). The moving ram stays
+ahead; every pickup in the cone is pulled too (food and chests included; gems are left to the magnet). The moving ram stays
 (`ram` 45). Its kills are isekai'd with the base weapon's extra-gem chance (`isekai` 0.25), quietly: one
 light pillar per delivery instead of one per kill (they all die in one spot, on the truck). No phantom
 trucks. **Versus Isekai Rush Hour** (360° honk, scheduled phantom trucks): aimed, greedy and close - he

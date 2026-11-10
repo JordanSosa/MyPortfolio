@@ -238,7 +238,9 @@ test.each([
 
 describe("homing projectiles and pooled enemies", () => {
   test("a homing star never keeps chasing a pooled Enemy object that was recycled into a new enemy", { tags: ["slow"] }, () => {
-    const w = new World({ hero: "hoshi", seed: 21 });
+    // (god mode: the run must still be going after 150 s whatever the card offers of the day make the bot pick -
+    // every new evolution recipe moves them, and this seed's hero once died at 130 s with nothing left to check)
+    const w = new World({ hero: "hoshi", seed: 21, god: true });
     const bot = new Bot(3);
     simulate(w, 150, 1 / 30, bot);
     // A target that dies and whose pooled object is re-spawned AFTER this step's homing update (a kill-hook spawn

@@ -10,11 +10,13 @@
 // died at 2:17 with the first guard rule, survives to 3:20 with this one) and by the second-evolution pass (a new recipe
 // changes which passives complete a pair, so the level-up weights and the bot's picks of the heroes holding that weapon
 // move: Yarn Orbit + Power Bow -> Meowteor Hammer moved the mochi line only; every further second evolution re-records
-// the lines of the runs that hold its base weapon - docs/content/weapons.md section 8). If a future balance pass changes Dream Meadow
+// the lines of the runs that hold its base weapon - docs/content/weapons.md section 8; package A - Star Shot, Petal Slash,
+// Heart Boomerang, Thunder Bell, Candy Bomb - is in every one of the four runs' pools, so it re-recorded all four lines,
+// after packages B-D). If a future balance pass changes Dream Meadow
 // on purpose, regenerate these lines with the generator in tests/stages.test.ts (fingerprint()).
 export const MEADOW_PARITY: readonly string[] = [
-  "hoshi|1|200|200.033|play|904|12|-88.673|-766.936|76|5|96|supernova_shower:26010,star_shot:17469,petal_slash:5239,bubble_aura:2672|wave:swarm@105.03 spawn:king_puff@183.03",
-  "rin|2|200|68.367|dead|429|7|421.114|-61.505|91|4|121|thousand_blossom_cut:14139,candy_bomb:5708,petal_slash:3365,yarn_orbit:1160|",
-  "mochi|3|200|200.033|play|391|10|1840.759|-2189.787|181|6|92|nyan_stampede:10460,petal_slash:4514,yarn_orbit:2768,bubble_aura:1435|wave:swarm@105.03 spawn:king_puff@183.03",
-  "hoshi|7|700|200.800|dead|1326|16|-744.352|-1446.355|162|6|121|thunder_bell:22522,star_shot:20740,supernova_shower:19137,prism_beam:5403,bubble_aura:2782|wave:swarm@105.03 spawn:king_puff@183.03",
+  "hoshi|1|200|200.033|play|4136|26|786.331|-549.740|34|14|23|critical_constellation:235934,raijin_drum:163135,supernova_shower:27805,petal_slash:2651|wave:swarm@105.03 spawn:king_puff@183.03",
+  "rin|2|200|146.867|dead|848|9|-877.720|1131.679|159|1|181|thousand_blossom_cut:34179,star_shot:14173,candy_bomb:7875,petal_slash:7246|wave:swarm@105.03",
+  "mochi|3|200|200.033|play|1083|14|504.457|1962.359|171|12|88|candy_bomb:23908,nyan_stampede:21785,yarn_orbit:4426,petal_slash:3393,bubble_aura:2947|wave:swarm@105.03 spawn:king_puff@183.03",
+  "hoshi|7|700|132.133|dead|728|8|-2147.944|-1926.731|159|6|105|star_shot:10460,supernova_shower:9697,prism_beam:4319,bubble_aura:1581|wave:swarm@105.03",
 ];

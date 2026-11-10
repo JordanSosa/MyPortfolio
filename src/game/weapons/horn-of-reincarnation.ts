@@ -17,7 +17,7 @@
  *
  * Second evolution: Free Delivery (+ Magnet Star) - the honk is reversed: every `cd` s the cone ahead
  * (`len` x area, half-angle `angle`°) PULLS every enemy in it up to `pull` px toward the bumper (a `dmg`
- * tug; elites half, bosses and props not at all) and the gems / pickups in it to the truck; `slamAfter` s
+ * tug; elites half, bosses and props not at all) and the pickups in it to the truck; `slamAfter` s
  * later the DELIVERY lands: everything on the bumper (r `slamR` x area) takes `slam` and is thrown ahead.
  * The moving ram stays (`ram`), no phantom trucks. Its kills are isekai'd with the base weapon's extra-gem
  * chance (`isekai`), but quietly (`quietIsekai`): everything dies ON the bumper, and a light pillar per
@@ -317,7 +317,7 @@ function quietIsekai(w: World): void {
  * The delivery spot: `out` = the point just off the bumper, `DROP` px ahead of the body along (dx, dy).
  * (Not on the cab: a whole cone of enemies dying on top of the truck buried it in their own death fx.)
  */
-const DROP = 22;
+const DROP = 30;
 function bumper(w: World, dx: number, dy: number, out: { x: number; y: number }): void {
   const p = w.player;
   out.x = p.x + dx * DROP;
@@ -362,19 +362,10 @@ function pullCone(w: World, inst: WeaponInstance, dx: number, dy: number, len: n
     }
   }
   w.release();
-  // free shipping: the gems and every pickup in the cone come along (food, chests and power-ups too, not just coins)
+  // free shipping: every pickup in the cone comes along (food, chests and power-ups too, not just coins).
+  // Gems are left to the magnet: Magnet Star already reaches about as far as the cone, and a whole cone of
+  // gems landing in one frame buried the truck in pickup sparks.
   const far = len * len;
-  const gems = w.gems;
-  for (let i = 0; i < gems.count; i++) {
-    const g = gems.items[i];
-    if (g.dead || g.state !== 0) continue;
-    const gx = g.x - ox;
-    const gy = g.y - oy;
-    const d2 = gx * gx + gy * gy;
-    if (d2 > far || gx * dx + gy * dy < cosH * Math.sqrt(d2)) continue;
-    g.state = 1;
-    g.speed = 90;
-  }
   const picks = w.pickups;
   for (let i = 0; i < picks.count; i++) {
     const c = picks.items[i];
