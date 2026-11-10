@@ -6,7 +6,7 @@
 //   npm run scenes -- --only boss:,ult:             scenarios whose name starts with one of these (or equals one)
 //   npm run scenes -- --only "ult:kuro~180/15"      a FILM: the scenario, then a checked shot every 15 frames for 180
 //                                                   (transient effects: an ult's shadow pass, a flash, a phase change)
-//   npm run scenes -- --all                         every scenario __kk.scenarios() lists (116)
+//   npm run scenes -- --all                         every scenario __kk.scenarios() lists (135)
 //   npm run scenes -- --devices i13,i13l,se,desktop,w360 --jobs 4   (also fhd 1920x1080, laptop 1366x768, half 683x768)
 //   npm run scenes -- --baseline                    store these shots as the visual baseline (shots/scenes/baseline/); every
 //                                                   scene is loaded twice and its load-to-load diff kept as its noise floor
@@ -1208,6 +1208,7 @@ export async function runScenes(args = {}) {
       ms: Date.now() - T0,
       bootMs: tBoot,
       contactMs,
+      retried,
       out: relative(ROOT, out),
       contact: contactError ? `(contact sheet failed: ${contactError}; open the gallery)` : relative(ROOT, join(out, "contact.png")),
       gallery: relative(ROOT, join(out, "index.html")),
@@ -1261,7 +1262,7 @@ function printSummary(s) {
     for (const t of s.selfTest) console.log(`  ${t.ok ? "ok  " : "FAIL"} ${t.device.padEnd(8)} ${t.fault.padEnd(12)} expect ${String(t.expect).padEnd(12)} got ${t.got.join(",") || "-"}`);
   }
   if (s.noise) console.log(`\nbaseline noise floor (load-to-load diff %): ${Object.entries(s.noise).filter(([, v]) => v > 0).map(([k, v]) => `${k} ${v}`).join(", ") || "all 0"}`);
-  console.log(`\nscenes ${s.ok ? "ok" : "FAIL"}: ${s.count} shots (${s.devices.join(", ")}, ${s.jobs} pages) in ${(s.ms / 1000).toFixed(1)} s (boot ${(s.bootMs / 1000).toFixed(1)} s, contact sheet ${(s.contactMs / 1000).toFixed(1)} s) | ${s.flagged.errors} flagged, ${s.flagged.warnings} with warnings${s.mode !== "check" ? ` | ${s.mode}` : ""}`);
+  console.log(`\nscenes ${s.ok ? "ok" : "FAIL"}: ${s.count} shots (${s.devices.join(", ")}, ${s.jobs} pages) in ${(s.ms / 1000).toFixed(1)} s (boot ${(s.bootMs / 1000).toFixed(1)} s, contact sheet ${(s.contactMs / 1000).toFixed(1)} s) | ${s.flagged.errors} flagged, ${s.flagged.warnings} with warnings${s.mode !== "check" ? ` | ${s.mode}` : ""}${s.retried ? ` | ${s.retried} scene(s) reshot on a fresh browser` : ""}`);
   console.log(`contact sheet: ${s.contact}\ngallery:       ${s.gallery}\nsummary:       ${s.out}/summary.json`);
 }
 
