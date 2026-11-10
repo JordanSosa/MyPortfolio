@@ -414,22 +414,29 @@ function deliver(w: World, inst: WeaponInstance, S: WStats, dx: number, dy: numb
   w.release();
   // a boss does not come to the bumper (nothing pulls it): one that the horn's cone reaches gets its parcel where
   // it stands, so the route is not dead weight in a boss fight
-  const boss = w.boss;
-  if (boss && !boss.dead && !boss.untargetable && coneLen > 0) {
+  if (coneLen > 0) {
     const p = w.player;
-    const bx = boss.x - p.x;
-    const by = boss.y - boss.cy - (p.y - CFG.playerCy);
-    const bd = Math.sqrt(bx * bx + by * by);
-    const ex = boss.x - cx;
-    const ey = boss.y - boss.cy - cy;
-    const rr = R + boss.r;
-    const onBumper = ex * ex + ey * ey <= rr * rr;
-    if (!onBumper && bd <= coneLen + boss.r && (bd <= boss.r || (bx * dx + by * dy) / bd >= cosHalf - boss.r / Math.max(8, bd))) {
-      w.hitEnemy(boss, dmg, inst, ka, 0, 0, FREE, inst.def.color);
+    const ox = p.x;
+    const oy = p.y - CFG.playerCy;
+    const buf2 = w.acquire();
+    const m = w.grid.query(ox, oy, coneLen + 40, buf2);
+    for (let k = 0; k < m; k++) {
+      const e = items[buf2[k]];
+      if (!e || e.dead || !e.def.boss || e.untargetable) continue;
+      const ex = e.x - cx;
+      const ey = e.y - e.cy - cy;
+      const rr = R + e.r;
+      // (on the bumper: the slam above already hit it)
+      if (ex * ex + ey * ey <= rr * rr) continue;
+      const bx = e.x - ox;
+      const by = e.y - e.cy - oy;
+      const bd = Math.sqrt(bx * bx + by * by);
+      if (bd > coneLen + e.r) continue;
+      if (bd > e.r && (bx * dx + by * dy) / bd < cosHalf - e.r / Math.max(8, bd)) continue;
+      w.hitEnemy(e, dmg, inst, ka, 0, 0, FREE, inst.def.color);
       hits++;
-      hfx(w, FD_SLAM, boss.x, boss.y - boss.cy, dx, dy, R, 1);
-      return;
     }
+    w.release();
   }
   if (hits > 0) hfx(w, FD_SLAM, cx, cy, dx, dy, R, hits + 100 * finished);
 }

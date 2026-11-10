@@ -210,6 +210,25 @@ describe("the choice", () => {
   });
 });
 
+describe("the bot plans one recipe per weapon", () => {
+  const passive = (id: string, from = 0) => ({ kind: "passive" as const, id, name: id, icon: "", desc: "", from, to: from + 1, rarity: "common" as const });
+
+  test("the first evolution's passive is the goal; a second route's is not, until it is the route in the build", () => {
+    // (Mochi holds Yarn Orbit: Magnet Star -> Cosmic Yarn, Power Bow -> Meowteor Hammer)
+    const w = new World({ hero: "mochi", seed: 1, director: false });
+    const bot = new Bot(1);
+    const plain = new World({ hero: "hoshi", seed: 1, director: false });
+    const recipe = (ww: World, id: string, from = 0) => bot.score(ww, passive(id, from)) - bot.score(plain, passive(id, from));
+    // every route at full value made 8-12 of the 16 passives "a recipe" and starved the weapons of level-ups
+    expect(recipe(w, "magnet_star")).toBe(26);
+    expect(recipe(w, "power_bow")).toBe(3);
+    w.addPassive("power_bow", 1);
+    // the second route is in the build: it is the route now, and the other one is only a choice
+    expect(recipe(w, "power_bow", 1)).toBe(26);
+    expect(recipe(w, "magnet_star")).toBe(3);
+  });
+});
+
 describe("mastery, Limit Breaks and relics follow the base weapon on either route", () => {
   test("weaponDamage / talent damage entries of the base weapon apply to the second evolution", () => {
     const plain = yarn5([]);

@@ -1256,6 +1256,92 @@ still trails the starters at P2-P3.
   -86 %), **Horn of Reincarnation Lv1** (0.43x, -60 %), **Ocean Dome**.
 - **Paper Crane Flock** is still flagged (0.49-0.50x): out of dead-weight range, a gap left for players (fold
   streaks, a Wish Charm build) rather than a number to chase.
-- The **second evolutions** (§8): the bench flags 8 sibling gaps (Tapioca Tsunami / Brown Sugar Railgun 4.2x,
+- The **second evolutions** (§8): the bench flagged 8 sibling gaps (Tapioca Tsunami / Brown Sugar Railgun 4.2x,
   Meteor / "Holding Back" 4.9x, Galaxy Barrage / Critical Constellation 2.2x, Meowteor Hammer 0.45x WEAK ...).
-  Their balance pass uses this tool.
+  Their balance pass is §9.1; the tables above are the bench **before** it.
+
+### 9.1 Sibling pass (second evolutions) and the early-game regression
+
+**The regression.** With the second evolutions in, Dream Meadow got harder for early accounts. 400 real runs per
+tree (P2 x Dream Meadow, Hoshi / Rin / Kuro / Mochi x 100 seeds, mid bot, `--batch` of `full` jobs):
+
+| Tree | Clears | Hoshi / Rin / Kuro / Mochi |
+| --- | --- | --- |
+| before the second evolutions (2dd395c) | 128 / 400 = 32 % | 50 / 26 / 25 / 27 |
+| all 20 second evolutions as shipped (5c39fcc) | 77 / 400 = 19 % | 35 / 17 / 9 / 16 |
+| the same, second recipes switched off (`evolutionsOf()` cut to the first entry) | 56 / 160 = 35 % | - |
+| the same, the bot and the nudge reading first recipes only | 99 / 400 = 25 % | 45 / 24 / 13 / 17 |
+| ... and every route evolving into the FIRST evolution | 146 / 400 = 37 % | 56 / 33 / 26 / 31 |
+| ... and every route evolving into the SECOND evolution | 63 / 400 = 16 % | 21 / 14 / 20 / 8 |
+| after this pass | 98 / 400 = 25 % | 42 / 22 / 12 / 22 |
+
+So nothing in the base weapons or shared helpers changed (recipes off = the old tree). Two causes:
+
+1. **The second evolutions were not sidegrades in the early game** (about two thirds of the loss). A run that fell
+   into a second route got a weaker, above all a less protective weapon: route 1 only 37 %, route 2 only 16 % on the
+   same builds. One family at a time (its route 2 forced, everything else route 1; 146 = no change): Yarn Orbit ->
+   Meowteor Hammer 12 / 100 Mochi runs against 31, Bubble Tea Cannon -> Brown Sugar Railgun 122, Bubble Aura -> Soap
+   Opera 129, Prism Beam -> Refraction Overload 136; Star Shot, Petal Slash, Dark Flame Dragon, Heart Boomerang,
+   Thunder Bell and Candy Bomb within noise (the Mosh Pit and the Nabe cannot be reached at P2: Plot Armor and
+   Bento Box are not unlocked yet). This is a real change for players.
+2. **The bot hoarded passives** (about one third): `Bot.score` valued the passive of every route at the full recipe
+   value, so 8-12 of the 16 passives were "a recipe" for a 4-6 weapon build and early level-ups went to passives
+   instead of weapon levels. A measurement artefact: the bot now wants one recipe per weapon again (the first
+   evolution's passive, or a later route's once it is in the build; any other route's passive is worth little).
+   The level-up nudge of `upgrades.ts` (+3 for a NEW passive that evolves a held weapon, now on either route) was
+   measured too: 83 against 77 clears with it on first recipes only, inside the noise (about 9 clears), so it is
+   unchanged.
+
+The default lab report (model + samples, Hoshi / Rin / Kuro; 2dd395c -> 5c39fcc -> after): Dream Meadow P1 43 -> 26
+-> 51-55 %, P2 54 -> 34 -> 44-47 %; first Dream Meadow clear of the progression sample (6 accounts, 2 h) 1.20 -> 1.87
+-> 0.88 h (the bot change alone 1.39 h, the weapon numbers alone 1.19 h). Other intended cells, 5c39fcc -> after:
+Candy Kingdom P3 33 -> 42 %, Shoujo Academy P4 60 -> 56 %, Beach P5 47 -> 51 %, Final Arc P5 30 -> 20 % (18 full
+runs: 2 -> 5 clears, so the model's drop is noise) and P6 57 -> 61 %.
+
+**The sibling pass.** Goal: the two evolutions of a weapon within about 0.7-1.4x of each other on the bench, each
+better at something. New evolutions were brought to their sibling; no first evolution was cut. Bench at the end
+(evolution tier; `power` / `crowd` / `boss` / `camp` to the tier median, `taken x` lower = protects), before -> after:
+
+| Weapon | Evolution | power | crowd | boss | camp | taken x | Changed |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Cheat Fireball | Meteor Lv.99999 | 4.20 -> 3.55 | 4.19 -> 3.52 | 3.99 -> 3.77 | 4.93 -> 4.67 | 0.69 | - (the tier median rose) |
+| | "Holding Back" | 0.86 -> 3.27 | 0.67 -> 2.51 | 1.01 -> 4.22 | 1.32 -> 4.32 | 0.56 -> 0.40 | dmg 26 -> 48, blast 15 -> 24, sneeze every 100th -> 50th, sneezeDmg 156 -> 320, sneezeBlast 70 -> 90 |
+| Bubble Tea Cannon | Tapioca Tsunami | 3.37 -> 2.89 | 2.47 -> 2.07 | 4.09 -> 3.86 | 2.93 -> 2.78 | 0.57 | - (real, not a bench artefact: 46 % of the build's damage, kills x1.37, the President in 76 s against 148 s) |
+| | Brown Sugar Railgun | 0.79 -> 2.16 | 0.85 -> 1.88 | 0.69 -> 2.55 | 0.95 -> 2.77 | 0.74 -> 0.68 | dmg 190 -> 540, cd 1.3 -> 1.05, falloff 0.12 -> 0.08, floor 0.4 -> 0.5, syrupW 6 -> 8, syrupDps 30 -> 60 |
+| Star Shot | Galaxy Barrage | 8.52 -> 7.53 | 1.87 -> 1.57 | 14.73 -> 13.90 | 2.37 -> 2.25 | 0.36 | - |
+| | Critical Constellation | 3.96 -> 5.96 | 1.99 -> 1.67 | 5.73 -> 10.57 | 2.88 -> 2.73 | 0.43 -> 0.41 | with a boss in view every fourth comet is aimed at it (it got 1 in 5-8 before) |
+| Horn of Reincarnation | Isekai Rush Hour | 0.85 -> 0.72 | 0.91 -> 0.76 | 0.75 -> 0.71 | 0.86 -> 0.82 | 0.42 | - |
+| | Free Delivery | 0.42 -> 0.48 | 0.46 -> 0.44 | 0.37 -> 0.54 | 1.58 -> 1.59 | 0.32 -> 0.30 | dmg 30 -> 32; a boss the cone reaches takes the delivery where it stands; the parcels stop 8 px short of a spot 38 px out (was 4 / 30) |
+| Kotatsu of Sloth | Eternal Winter Break | 0.16 -> 0.13 | - | - | 0.70 -> 0.66 | 0.48 | - |
+| | All-You-Can-Eat Nabe | 0.01 | - | - | 1.29 -> 0.98 | 0.95 -> 1.04 | dmg 36 -> 24 (camp DPS 1.8x -> 1.5x its sibling's; the Break is the protective one) |
+| Idol Lightstick Wave | Sold-Out Dome Tour | 1.27 -> 1.07 | 1.41 -> 1.19 | 1.07 -> 1.01 | 1.06 -> 1.00 | 0.71 | - |
+| | Underground Mosh Pit | 0.51 -> 0.95 | 0.45 -> 0.97 | 0.55 -> 0.99 | 0.75 -> 0.85 | 0.26 -> 0.31 | dmg 40 -> 46, range 70 -> 78 |
+| Thunder Bell | Raijin Drum | 1.38 -> 1.16 | 1.40 -> 1.18 | 1.29 -> 1.21 | 1.33 -> 1.26 | 1.00 | - |
+| | Group Chat Lightning | 0.80 -> 1.04 | 1.15 -> 1.55 | 0.41 -> 0.58 | 0.80 -> 1.26 | 0.95 -> 0.77 | dmg 58 -> 66, seenR 30 -> 36, seenMul 2 -> 3 |
+| Yarn Orbit | Cosmic Yarn | 0.71 -> 0.61 | 0.58 -> 0.49 | 0.81 -> 0.76 | 0.44 -> 0.41 | 0.49 | - |
+| | Meowteor Hammer | 0.45 -> 0.83 | 0.49 -> 0.91 | 0.37 -> 0.78 | 0.25 -> 0.62 | 0.76 -> 0.82 | dmg 28 -> 46, cd 2.6 -> 2.0, knock 90 -> 110, slam 26 -> 30, slamDmg 90 -> 170 |
+| Petal Slash | Sakura Tempest | 0.89 -> 1.08 | 0.55 -> 0.60 | 1.18 -> 1.62 | 0.71 -> 0.78 | 0.58 -> 0.50 | dmg 28 -> 33, petalDmg 14 -> 17 (the weak one of the pair, on the weakest starter) |
+| | Already Cut | 1.32 -> 1.01 | 1.43 -> 1.21 | 1.13 -> 0.85 | 1.58 -> 1.39 | 0.81 -> 0.83 | dmg 62 -> 54 (in-build DPS 2.6x -> 2.0x Sakura Tempest's) |
+| Bubble Aura | Ocean Dome | 0.62 -> 0.52 | 0.80 -> 0.67 | 0.41 -> 0.39 | 0.75 -> 0.71 | 0.38 | - |
+| | Soap Opera | 0.64 -> 0.79 | 0.86 -> 0.80 | 0.39 -> 0.82 | 0.19 -> 0.26 | 0.61 -> 0.68 | dmg 24 -> 30, radius 22 -> 30, a bubble every 14 -> 12 px, life 3.5 -> 4.5, hold 1.6 -> 2.2, pop 90 -> 120 (the early-game loss above) |
+| Prism Beam | Rainbow Cannon | 1.12 -> 0.94 | 1.33 -> 1.12 | 0.86 -> 0.81 | 1.40 -> 1.33 | 0.75 | - |
+| | Refraction Overload | 0.72 -> 0.74 | 0.83 -> 0.84 | 0.58 -> 0.69 | 0.83 -> 0.99 | 0.87 -> 0.74 | dmg 28 -> 36, d2 18 -> 24, d3 12 -> 16 |
+
+Who is better at what: Meteor crowds, "Holding Back" bosses and protection; Tsunami dense hordes and boss fights
+with adds, the Railgun a lone boss or elite (pinned-boss gauge 588 against 47) and standing ground; Galaxy Barrage
+bosses and protection, the Constellation crowd DPS and standing ground; Rush Hour kiting, Free Delivery driving in
+or standing (1.9x) and pickups; the Break protection, the Nabe damage; Dome Tour reach, the Mosh Pit protection;
+Raijin bosses, Group Chat crowds; Cosmic Yarn protection and gems, the Hammer damage; Sakura Tempest bosses and
+protection, Already Cut crowds; Ocean Dome protection and standing ground, Soap Opera kiting.
+
+Untouched: **Failed Exam Storm** (0.98 against the Wish's 0.88 before, 0.81 / 0.75 after the median moved; its
+in-build DPS is 3x the Wish's, but it does half the Wish's boss damage and has no full heal - a trial cut to dmg 32
+moved its rows by more than the cut, i.e. inside the bench's noise) and the eight pairs that were already inside
+the range. Still flagged: **Horn of Reincarnation** (Free Delivery 0.67x Rush Hour with the kiting bot, 1.9x
+standing ground: the cone points the way he drives, a play-style split rather than a number).
+
+**Limits of the bench for this job.** Its evolution tier is one late cell (P4 x Shoujo Academy at 8:00). Early
+accounts die rather than run out of damage, so a sibling can be level on `power` and still lose runs through
+`taken x` or lost utility (Cosmic Yarn's guard and gem pull): after the pass the Hammer is 0.83 against 0.61 on the
+bench and still clears Dream Meadow less often for Mochi (17 / 100 with the first lift against 31). Check a second
+evolution of an early weapon with real runs as well (the table at the top of this section).

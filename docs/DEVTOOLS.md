@@ -373,6 +373,11 @@ check the stages with the default report: `npm run balance:lab -- --set ...` (be
   `power` rates the weapon **on its hero**, not the level table alone. A hero-wide answer needs
   `npm run balance:lab -- --heroes <hero>`.
 - Utility is not scored: gem pull (Cosmic Yarn), slows, knock-back, the Thousand Crane Wish's full heal, XP.
+- The evolution tier is one late cell. Early accounts die rather than run out of damage, so two evolutions can be
+  level on `power` and still differ in early clear rates (protection, gem pull). For an early weapon, also compare
+  real runs: a `--batch` of `full` jobs (P2 x Dream Meadow, 100 seeds a hero: ~3 min for 400 runs; 400 runs put
+  about +-2 points on a clear rate, 24 runs tell nothing). `docs/content/weapons.md` §9.1 found the second
+  evolutions' early-game gap that way.
 - Boss DPS in a real fight is far below the pinned-boss gauge (adds soak hits, the bot dodges): Paper Crane
   Flock is 2x the median on the pinned boss and 0.14x in the fight (its darts pick the nearest enemy).
 

@@ -228,7 +228,9 @@ describe("Free Delivery (Horn of Reincarnation + Magnet Star)", () => {
     const { w, inst } = make();
     const L = inst.def.levels[0];
     // (the truck starts heading +x)
-    const a = dummy(w, 90, 0, "puff");
+    // (`a` near the far end of the cone: the parcels stop 8 px short of the drop spot 38 px off the bumper, so
+    // only an enemy from further out travels most of `pull`)
+    const a = dummy(w, 105, 0, "puff");
     const b = dummy(w, 70, 16, "puff");
     const behind = dummy(w, -70, 0, "puff");
     const boss = dummy(w, 100, -20, "king_puff", 1e6);
@@ -251,6 +253,8 @@ describe("Free Delivery (Horn of Reincarnation + Magnet Star)", () => {
     expect(hpA - a.hp).toBeGreaterThan((L.slam ?? 0) * 0.8);
     expect(b.hp).toBeLessThan(b.maxHp - (L.slam ?? 0) * 0.8);
     expect(behind.hp).toBe(behind.maxHp);
+    // a boss the cone reaches is not pulled: its parcel is delivered where it stands
+    expect(boss.maxHp - boss.hp).toBeGreaterThan((L.slam ?? 0) * 0.8);
     expect(w.damageBy.get("free_delivery") ?? 0).toBeGreaterThan(0);
   });
 

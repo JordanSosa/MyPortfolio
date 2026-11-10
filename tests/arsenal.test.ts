@@ -252,7 +252,9 @@ describe("homing projectiles and pooled enemies", () => {
     simulate(w, 60, DT, bot, (ww) => {
       for (let i = 0; i < ww.projectiles.count; i++) {
         const p = ww.projectiles.items[i];
-        if (p.dead || p.homing <= 0 || !p.target) continue;
+        // (a projectile inside its `delay` - a boba pearl's beat after a bounce - is not homing yet: World skips its
+        // homing update, so it neither drops nor chases the stale object until the delay is over)
+        if (p.dead || p.homing <= 0 || !p.target || p.age < p.delay) continue;
         checks++;
         const t = p.target;
         if (t.uid !== p.targetUid) {

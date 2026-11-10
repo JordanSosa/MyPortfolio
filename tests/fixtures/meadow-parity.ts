@@ -12,11 +12,13 @@
 // move: Yarn Orbit + Power Bow -> Meowteor Hammer moved the mochi line only; every further second evolution re-records
 // the lines of the runs that hold its base weapon - docs/content/weapons.md section 8; package A - Star Shot, Petal Slash,
 // Heart Boomerang, Thunder Bell, Candy Bomb - is in every one of the four runs' pools, so it re-recorded all four lines,
-// after packages B-D). If a future balance pass changes Dream Meadow
+// after packages B-D) and by the sibling balance pass (docs/content/weapons.md section 9.1: the bot plans one recipe
+// per weapon again and the Meowteor Hammer hits harder - the hoshi and mochi lines; the rin line did not move).
+// If a future balance pass changes Dream Meadow
 // on purpose, regenerate these lines with the generator in tests/stages.test.ts (fingerprint()).
 export const MEADOW_PARITY: readonly string[] = [
-  "hoshi|1|200|200.033|play|4136|26|786.331|-549.740|34|14|23|critical_constellation:235934,raijin_drum:163135,supernova_shower:27805,petal_slash:2651|wave:swarm@105.03 spawn:king_puff@183.03",
+  "hoshi|1|200|156.333|dead|2117|13|1809.764|-1475.570|133|6|90|thunder_bell:53523,star_shot:34762,supernova_shower:10540,heart_boomerang:4126,petal_slash:1977|wave:swarm@105.03",
   "rin|2|200|146.867|dead|848|9|-877.720|1131.679|159|1|181|thousand_blossom_cut:34179,star_shot:14173,candy_bomb:7875,petal_slash:7246|wave:swarm@105.03",
-  "mochi|3|200|200.033|play|1083|14|504.457|1962.359|171|12|88|candy_bomb:23908,nyan_stampede:21785,yarn_orbit:4426,petal_slash:3393,bubble_aura:2947|wave:swarm@105.03 spawn:king_puff@183.03",
-  "hoshi|7|700|132.133|dead|728|8|-2147.944|-1926.731|159|6|105|star_shot:10460,supernova_shower:9697,prism_beam:4319,bubble_aura:1581|wave:swarm@105.03",
+  "mochi|3|200|119.567|dead|568|10|-85.562|-885.926|107|6|194|meowteor_hammer:16873,nyan_stampede:10505,thunder_bell:5926,prism_beam:1764|wave:swarm@105.03",
+  "hoshi|7|700|132.567|dead|1024|9|-1931.136|-1482.971|158|2|112|thunder_bell:11866,supernova_shower:11637,star_shot:11181,prism_beam:3748,bubble_aura:2055|wave:swarm@105.03",
 ];
