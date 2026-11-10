@@ -22,7 +22,9 @@ import { evolutionCards, makeOffer } from "../src/game/upgrades";
 import { guardOf } from "../src/game/weapons/_orbital";
 import { meowteorSwing } from "../src/game/weapons/yarn-orbit";
 import { World } from "../src/game/world";
+import { ACHIEVEMENTS } from "../src/meta/achievements";
 import { baseWeaponId, gameContent } from "../src/meta/content";
+import { PROFILE_VERSION, defaultProfile } from "../src/meta/profile";
 
 const DT = 1 / 60;
 
@@ -93,6 +95,28 @@ describe("data model: several evolutions per weapon", () => {
     expect(baseWeaponId("meowteor_hammer", ctx)).toBe("yarn_orbit");
     expect(ctx.weapons.get("cosmic_yarn")?.evoIndex).toBe(0);
     expect(ctx.weapons.get("meowteor_hammer")?.evoIndex).toBe(1);
+  });
+});
+
+describe("the account layer counts either route", () => {
+  test("Evolution Encyclopedia: 20 weapons with an evolution discovered, whichever route; the v2 save shape is untouched", () => {
+    const ctx = gameContent();
+    const def = ACHIEVEMENTS.get("evolutions_all")!;
+    const val = (weapons: string[]): number => {
+      const p = defaultProfile(0);
+      p.codex.weapons = weapons;
+      return def.value({ p, ctx, run: null } as unknown as Parameters<typeof def.value>[0]);
+    };
+    const bases = baseWeapons();
+    expect(bases).toHaveLength(20);
+    expect(val(bases.map((b) => evolutionsOf(b)[0].into))).toBe(20);
+    expect(val(bases.map((b) => evolutionsOf(b)[1].into))).toBe(20);
+    // both routes of one weapon are one weapon
+    expect(val(evolutionsOf(bases[0]).map((e) => e.into))).toBe(1);
+    expect(val(bases.map((b) => b.id))).toBe(0);
+    // 60 weapon ids in the codex catalogue (20 + 40), and discoveries are plain ids in the same list as before
+    expect(ctx.weapons.size).toBe(60);
+    expect(PROFILE_VERSION).toBe(2);
   });
 });
 
@@ -189,6 +213,51 @@ describe("the choice", () => {
     expect(w.choosing).toBe(false);
     expect(w.pendingPicks).toBe(1);
     expect(w.offer().some((c) => c.kind === "evolution")).toBe(false);
+  });
+
+  test("two weapons at a route split: a level-up shows a weapon's routes together or not at all", () => {
+    const w = yarn5(["magnet_star", "power_bow", "wish_charm", "lucky_clover"]);
+    const star = w.addWeapon("star_shot", 1)!;
+    w.setWeaponLevel(star, 5);
+    expect(evolutionCards(w)).toHaveLength(4);
+    // three cards: one weapon's pair - never a lone card of the other pair, which would decide its route unseen
+    const three = makeOffer(w, 3);
+    const evo3 = three.filter((c) => c.kind === "evolution");
+    expect(evo3).toHaveLength(2);
+    expect(new Set(evo3.map((c) => c.base)).size).toBe(1);
+    // four cards: both pairs; and the other pair comes at the next level-up once the first is picked
+    expect(makeOffer(w, 4).filter((c) => c.kind === "evolution")).toHaveLength(4);
+    w.pendingLevels = 2;
+    const first = w.offer().filter((c) => c.kind === "evolution");
+    w.choose(first[0]);
+    const next = w.offer().filter((c) => c.kind === "evolution");
+    expect(next).toHaveLength(2);
+    expect(next[0].base).not.toBe(first[0].base);
+    // (a one-card offer still evolves: the first route rather than nothing)
+    expect(makeOffer(w, 1)[0].kind).toBe("evolution");
+  });
+
+  test("a stale choice with no level behind it opens no picker", () => {
+    const w = yarn5(["magnet_star", "power_bow"]);
+    w.pendingChests.push({ golden: false });
+    w.openChest();
+    expect(w.pendingPicks).toBe(1);
+    w.evolveWeapon(w.hasWeapon("yarn_orbit")!, "cosmic_yarn");
+    expect(w.pendingPicks).toBe(0);
+  });
+
+  test("two chests in a row queue the choice once; a card from outside the choice applies the first route", () => {
+    const w = yarn5(["magnet_star", "power_bow"]);
+    w.pendingChests.push({ golden: false }, { golden: true });
+    w.openChest();
+    w.openChest();
+    expect(w.pendingChoices).toHaveLength(1);
+    expect(w.hasWeapon("yarn_orbit")).toBeTruthy();
+    const cards = w.offer();
+    // (picking a card that is not in the choice applies the first route, never a foreign card)
+    w.choose({ ...cards[1], id: "galaxy_barrage" });
+    expect(w.hasWeapon("cosmic_yarn")).toBeTruthy();
+    expect(w.pendingPicks).toBe(0);
   });
 
   test("the bot drains chests, their choices and level-ups (headless runs never hang on a ROUTE SPLIT)", () => {

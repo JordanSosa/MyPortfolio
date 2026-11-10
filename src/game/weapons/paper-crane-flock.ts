@@ -498,7 +498,8 @@ export const failedExamStorm: WeaponDef = {
       p.b = L.xp ?? 0.01;
       p.sprite = "w_paper_plane";
       p.fps = 8;
-      p.scale = Math.min(1.5, S.area);
+      // (drawn a third larger than it hits: a 12 px dart was lost in a crowd on a phone)
+      p.scale = 1.3 * Math.min(1.5, S.area);
       p.rotMode = ROT_VELOCITY;
       p.rot = a;
       p.onHit = planeHit;

@@ -71,6 +71,8 @@ Hitstop 100 ms → light pillar + ray burst + "LEVEL UP!" text → time eases to
 0.2× over 0.3 s → modal with **3 cards** (4 with Luck meta). Cards fly in
 staggered with a flip; rarity frame: common (white), rare (blue), epic
 (violet), **evolution (animated rainbow)**. Multiple pending level-ups queue.
+A weapon has **two evolutions**, one per passive (docs/content/weapons.md §8): with both passives held the
+level-up shows one card per evolution, always together, and the pick decides (the other route is gone).
 **Mobile safety:** ignore card taps for the first 350 ms and require a *fresh*
 touch (a finger still held from the joystick must not select a card). If
 everything is maxed, offer "Heal 30 HP" / "+50 coins".
@@ -79,7 +81,9 @@ everything is maxed, offer "Heal 30 HP" / "+50 coins".
 Elites drop a chest; bosses drop a golden chest. Opening: chest shakes,
 light beams leak, lid bursts, a slot-reel of item icons spins and lands on 1
 upgrade (golden chest: 3; 5 % chance of a 5-upgrade "JACKPOT"). Chests
-prioritise evolutions when eligible.
+prioritise evolutions when eligible. A chest never chooses between a weapon's two evolutions: with both
+ready its reward is a **ROUTE SPLIT** card, and the card picker opens right after the chest with the two
+evolutions (no level spent; no reroll, banish or skip).
 
 ---
 
@@ -94,6 +98,8 @@ prioritise evolutions when eligible.
 | **Mochi** (neko-girl) | cream bob + cat ears, golden cat eyes, oversized lavender paw hoodie, tail | Yarn Orbit | +15 % move speed, +20 % pickup radius, 1 armor | **Nyan Stampede** — 60 big (2×) glowing cats in warm creams / peaches only (never the enemy pastels) gallop across the screen in 5 walls of two staggered rows, trampling (damage + big knockback); each wall: dust row, speed lines, "NYA!" |
 
 ### 3.2 Weapons (5 levels each) and evolutions
+The table lists each weapon's **first** evolution. Every weapon also has a second one through a different
+passive, a sidegrade with its own play style: the 20 second evolutions are in docs/content/weapons.md §8.
 Base stats are multiplied by passives (Might, Area, Cooldown, Amount...).
 
 | Weapon | Behaviour | Base | Evolution (needs Lv5 + passive) |

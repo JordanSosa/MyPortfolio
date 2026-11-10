@@ -116,6 +116,10 @@ const LINES = 6;
 const LINE_LIFE = 0.5;
 const lineXY = new Float32Array(LINES * 5);
 const lineT = new Float32Array(LINES).fill(9);
+/** The click replays the cut: 1 = this line waits for its click, then `lineFlash` runs 0 -> FLASH_LIFE. */
+const lineFresh = new Uint8Array(LINES);
+const lineFlash = new Float32Array(LINES).fill(9);
+const FLASH_LIFE = 0.16;
 let lineN = 0;
 
 const MARKS = 48;
@@ -181,6 +185,8 @@ let hFlare = -1;
 function clear(): void {
   linkT.fill(9);
   lineT.fill(9);
+  lineFresh.fill(0);
+  lineFlash.fill(9);
   pingT.fill(9);
   boltT.fill(9);
   markE.fill(null);
@@ -224,6 +230,8 @@ const packageA: Evo2Module = {
             lineXY[i * 5 + 3] = e.y2;
             lineXY[i * 5 + 4] = e.r;
             lineT[i] = 0;
+            lineFresh[i] = 1;
+            lineFlash[i] = 9;
             if (e.n === 0) cutAng = Math.atan2(e.y2 - e.y, e.x2 - e.x);
             break;
           }
@@ -239,16 +247,22 @@ const packageA: Evo2Module = {
           case FX_CUT_CLICK:
             clickT = 0;
             markE.fill(null);
+            // (the payoff: every cut of this draw flashes once more as the blade clicks home)
+            for (let i = 0; i < LINES; i++) {
+              if (!lineFresh[i]) continue;
+              lineFresh[i] = 0;
+              if (e.n > 0) lineFlash[i] = 0;
+            }
             if (e.n >= 3 && !o.calm) kit.fx.juice.shake(Math.min(0.14, 0.04 + e.n * 0.012));
             break;
           case FX_CHAT_BOLT:
-            bolt(e.x, e.y, e.x2, e.y2, 0.2, 2);
+            bolt(e.x, e.y, e.x2, e.y2, 0.24, 2);
             ps.emit(pingSpark, e.x2, e.y2, 4);
             ping(e.x2, e.y2);
             break;
           case FX_CHAT_HOP: {
             if (hops++ >= 16) break;
-            bolt(e.x, e.y, e.x2, e.y2, 0.17, 1);
+            bolt(e.x, e.y, e.x2, e.y2, 0.22, 1);
             ps.emit(pingSpark, e.x2, e.y2, 2);
             ping(e.x2, e.y2);
             // (the notification tick, climbing with the chain; never more than one every 70 ms)
@@ -322,8 +336,8 @@ const packageA: Evo2Module = {
     // ---- Already Cut: the line (it starts clear of her body and fades over her anyway)
     for (let i = 0; i < LINES; i++) {
       const t = lineT[i];
-      if (t >= LINE_LIFE) continue;
-      lineT[i] += dt;
+      const ft = lineFlash[i];
+      if (t >= LINE_LIFE && ft >= FLASH_LIFE) continue;
       const j = i * 5;
       const dx = lineXY[j + 2] - lineXY[j];
       const dy = lineXY[j + 3] - lineXY[j + 1];
@@ -331,9 +345,24 @@ const packageA: Evo2Module = {
       const clearK = Math.min(0.4, 12 / len);
       const cx = lineXY[j] + dx * (0.5 + clearK * 0.5);
       const cy = lineXY[j + 1] + dy * (0.5 + clearK * 0.5);
-      const f = t < 0.09 ? 0 : t < 0.26 ? 1 : 2;
-      const a = t < 0.26 ? 1 : 1 - (t - 0.26) / (LINE_LIFE - 0.26);
-      r.spr(Layer.Fx, hLine + f, cx, cy, (len * (1 - clearK)) / 46, Math.max(1, lineXY[j + 4] / 5), Math.atan2(dy, dx), 0xffffff, a, 0, Flag.NoSnap | Flag.Focus);
+      const sx = (len * (1 - clearK)) / 46;
+      const sy = Math.max(1, lineXY[j + 4] / 5);
+      const ang = Math.atan2(dy, dx);
+      if (t < LINE_LIFE) {
+        lineT[i] += dt;
+        const f = t < 0.09 ? 0 : t < 0.26 ? 1 : 2;
+        const a = t < 0.26 ? 1 : 1 - (t - 0.26) / (LINE_LIFE - 0.26);
+        r.spr(Layer.Fx, hLine + f, cx, cy, sx, sy, ang, 0xffffff, a, 0, Flag.NoSnap | Flag.Focus);
+      }
+      if (ft < FLASH_LIFE) {
+        // the click: the whole cut once more, on a crimson bed (it reads on the pale academy floor), closing shut
+        lineFlash[i] += dt;
+        const u = ft / FLASH_LIFE;
+        const x0 = lineXY[j] + dx * clearK;
+        const y0 = lineXY[j + 1] + dy * clearK;
+        r.line(Layer.Fx, x0, y0, lineXY[j + 2], lineXY[j + 3], Math.max(1, sy * 4.5 * (1 - u)), C.hotPink, 0.75 * (1 - u * u), Flag.Focus);
+        r.spr(Layer.Fx, hLine, cx, cy, sx, sy * (1.5 - u), ang, 0xffffff, 1 - u * u, 0, Flag.NoSnap | Flag.Focus);
+      }
     }
     // ... the marks: a white slit across each marked enemy, flickering faster as the click comes
     const ca = Math.cos(cutAng);
@@ -383,8 +412,8 @@ const packageA: Evo2Module = {
         const off = n === segs ? 0 : jit(q, n) * amp;
         const bx = x0 + dx * f - (dy / len) * off;
         const by = y0 + dy * f + (dx / len) * off;
-        r.line(Layer.Fx, ax, ay, bx, by, th + 3, 0x3462d6, 0.5 * al, Flag.Focus);
-        r.line(Layer.Fx, ax, ay, bx, by, th + 1.5, C.cyan, 0.9 * al, Flag.Focus);
+        r.line(Layer.Fx, ax, ay, bx, by, th + 3.5, 0x2a4fc4, 0.8 * al, Flag.Focus);
+        r.line(Layer.Fx, ax, ay, bx, by, th + 1.5, C.cyan, al, Flag.Focus);
         r.line(Layer.Fx, ax, ay, bx, by, th, C.white, al, Flag.Focus | Flag.Glow);
         ax = bx;
         ay = by;

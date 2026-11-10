@@ -195,7 +195,7 @@ current table — update `UNLOCK_RULES`):
 | `mastery_all` | Arsenal: MASTERED | Reach mastery rank 10 with all 20 weapons. | `count(rank ≥ 10) ≥ 20` | 1,000 ♦ · title "Weapon Encyclopedia" |
 | `arsenal_8` ● | Arsenal Otaku | Discover 8 weapons in the codex. | `p.codex.weapons.length ≥ 8` | 50 ♦ |
 | `arsenal_20` | Full Arsenal | Discover all 20 base weapons. | base weapons in `p.codex.weapons` `≥ 20` | 150 ♦ |
-| `evolutions_all` | Evolution Encyclopedia | Discover all 20 evolutions. | evolutions in `p.codex.weapons` `≥ 20` | 400 ♦ |
+| `evolutions_all` | Evolution Encyclopedia | Discover an evolution of all 20 weapons. | base weapons with an evolution (either route) in `p.codex.weapons` `≥ 20` | 400 ♦ |
 | `passives_all` | Fully Accessorised | Discover all 16 passives. | `p.codex.passives.length ≥ 16` | 100 ♦ |
 | `seven_weapons` | Seven-Weapon Sampler | Hold 7 weapons at once. | `run.maxWeaponsHeld† ≥ 7` | 80 ♦ |
 | `evo_galaxy_barrage` | Galaxy Brain | Evolve Galaxy Barrage. | `p.codex.weapons has galaxy_barrage` | 20 ♦ |

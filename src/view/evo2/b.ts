@@ -286,6 +286,10 @@ let examHits = 0;
 let gradeAt = -9;
 const GRADES = ["23/100", "F", "SEE ME", "11/100"] as const;
 let grade = 0;
+/** Speed lines drawn per frame (planes past it fly without one). */
+const PLANE_LINES = 48;
+/** Exam ink (navy, the dart's outline). */
+const INK = 0x1f2a73;
 
 const exam: Evo2Module = {
   ids: [EXAM],
@@ -308,6 +312,23 @@ const exam: Evo2Module = {
         }
       }),
     ];
+  },
+  draw(kit, w, inst) {
+    // a short ink line behind every plane: crisp, normal blend (white darts alone vanished on the pale academy
+    // floor, and nothing here may bloom into a streak); it fades over her like the planes
+    const r = kit.r;
+    const items = w.projectiles.items;
+    let n = 0;
+    for (let i = 0; i < w.projectiles.count && n < PLANE_LINES; i++) {
+      const p = items[i];
+      if (p.dead || p.owner !== inst || p.speed <= 0) continue;
+      const len = Math.min(13, p.age * p.speed);
+      if (len < 7) continue;
+      n++;
+      const ca = p.vx / p.speed;
+      const sa = p.vy / p.speed;
+      r.line(Layer.Fx, p.x - ca * len, p.y - sa * len, p.x - ca * 6, p.y - sa * 6, 1, INK, 0.55, Flag.Focus);
+    }
   },
 };
 

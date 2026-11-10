@@ -37,7 +37,8 @@ synthesised with WebAudio, and every effect is a WebGL2 shader.
   Magical Girl #47, Isekai-kun and Truck-kun. Each has a signature weapon, a
   trait, an ultimate with an anime cut-in, a talent tree, six constellations
   and an OC bio.
-- **20 weapons, each with an evolution and Limit Breaks**, **16 passives**,
+- **20 weapons, each with two evolutions and Limit Breaks** (40 evolutions:
+  one per passive, and a ROUTE SPLIT pick when both are ready), **16 passives**,
   rarity-framed level-up cards, rerolls, banish / skip, and slot-reel chests.
 - **The Filler Arc:** after a stage is cleared, an endless mode keeps going
   past the final boss.

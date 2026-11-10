@@ -216,7 +216,15 @@ function pickWeighted(w: World, list: Cand[]): Cand | null {
 /** Generate `count` cards for a level-up. */
 export function makeOffer(w: World, count: number = w.stats.cards): UpgradeCard[] {
   const out: UpgradeCard[] = [];
-  for (const evo of evolutionCards(w)) if (out.length < count) out.push(evo);
+  // (a weapon's routes are offered TOGETHER or not at all: with two weapons at a route split and three cards, a
+  // lone third card would decide the second weapon's route without showing the alternative - it waits a level)
+  const evos = evolutionCards(w);
+  for (let i = 0; i < evos.length; ) {
+    let j = i + 1;
+    while (j < evos.length && evos[j].base === evos[i].base) j++;
+    if (out.length + (j - i) <= count || out.length === 0) for (let k = i; k < j && out.length < count; k++) out.push(evos[k]);
+    i = j;
+  }
   const pool = candidates(w, false);
   // the build forms: while the hero holds only its starter weapon, every offer shows one NEW weapon
   if (out.length < count && count >= 2 && w.weapons.length < Math.min(EARLY_WEAPONS, w.weaponSlots)) {

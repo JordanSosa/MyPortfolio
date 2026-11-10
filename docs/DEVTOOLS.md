@@ -726,8 +726,11 @@ above scores 100 % on both, on any machine and under any load.
 ### 6.4 `npm run check:bundle` (`scripts/check-bundle.mjs`, ~4 s)
 
 1. `vite build`.
-2. The main chunk must stay within 1,575,000 B raw and 530,000 B gzip. Today it is 1,498,877 B (95.2 %)
-   and 506,784 B gzip (95.6 %).
+2. The main chunk must stay within 1,608,000 B raw and 542,000 B gzip. Today it is 1,560,803 B (97.1 %)
+   and 525,950 B gzip (97.0 %).
+   - The budget was 1,575,000 B / 530,000 B until the twenty second evolutions (docs/content/weapons.md §8) took
+     the chunk from 1,498,877 B / 506,784 B to 99 % of it. It was raised on purpose to measured + 3 %.
+   - Raise it the same way (in review, with the old and new numbers written here), never in passing.
 3. The dev console (`kkd-panel`) and the scenario list (`results:first-clear`) must not appear in the main
    chunk. They must stay lazy chunks.
 

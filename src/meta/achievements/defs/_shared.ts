@@ -55,19 +55,31 @@ export function weaponSeen(c: AchCtx, id: string): boolean {
   return c.p.codex.weapons.includes(id) || !!c.run?.weaponsUsed?.includes(id);
 }
 
-/**
- * Number of discovered codex weapons that are base weapons (`evolved = false`) or evolutions (`true`).
- * `evoIndex`: only evolutions at that position of their base weapon's list (0 = first evolutions, 1 = second).
- */
-export function codexWeapons(c: AchCtx, evolved: boolean, evoIndex?: number): number {
+/** Number of discovered codex weapons that are base weapons (`evolved = false`) or evolutions (`true`). */
+export function codexWeapons(c: AchCtx, evolved: boolean): number {
   const seen = new Set(c.p.codex.weapons);
   for (const id of c.run?.weaponsUsed ?? []) seen.add(id);
   let n = 0;
   for (const id of seen) {
     const w = c.ctx.weapons.get(id);
-    if (w && w.evolved === evolved && (evoIndex === undefined || (w.evoIndex ?? 0) === evoIndex)) n++;
+    if (w && w.evolved === evolved) n++;
   }
   return n;
+}
+
+/**
+ * Number of base weapons with at least one discovered evolution, either route (Evolution Encyclopedia: the goal
+ * stayed "20" when every weapon got a second evolution, and a weapon evolved down its second route counts).
+ */
+export function evolvedFamilies(c: AchCtx): number {
+  const bases = new Set<string>();
+  const add = (id: string): void => {
+    const w = c.ctx.weapons.get(id);
+    if (w?.evolved && w.baseOf) bases.add(w.baseOf);
+  };
+  for (const id of c.p.codex.weapons) add(id);
+  for (const id of c.run?.weaponsUsed ?? []) add(id);
+  return bases.size;
 }
 
 /** Weapons with mastery rank >= `rank`. */

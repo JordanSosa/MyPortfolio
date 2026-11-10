@@ -649,7 +649,8 @@ export class HeroesBFx {
         b.sortKey = NaN;
         const beat = 1 + 0.25 * Math.max(0, Math.sin(time * (rec.swoon > 0 ? 7 : 10) + e.uid));
         const s = rec.swoon > 0 ? 1.45 : 1.4;
-        r.spr(Layer.Text, this.hCharm, e.x, top - 1 - Math.sin(time * 3 + e.uid) * 1.2, beat * s, beat * s, 0, 0xffffff, 1, 0, Flag.Glow | Flag.NoSnap);
+        // (Focus: a dozen admirers crowding him stacked their hearts over Senpai until he was gone - Who Are You Again?)
+        r.spr(Layer.Text, this.hCharm, e.x, top - 1 - Math.sin(time * 3 + e.uid) * 1.2, beat * s, beat * s, 0, 0xffffff, 1, 0, Flag.Glow | Flag.NoSnap | Flag.Focus);
       } else if (rec.vuln > 0) {
         // a flustered boss: a heart pops over it
         const k = Math.min(1, rec.vuln);
@@ -658,7 +659,7 @@ export class HeroesBFx {
       if (rec.hb > 0) {
         // heartbroken: the heart cracks (f1) and falls
         const k = 1 - rec.hb / 0.6;
-        r.spr(Layer.Text, this.hCharm + 1, e.x + k * 3, top + k * 14, 1, 1, k * 0.6, 0xffffff, 1 - k * 0.8, 0, Flag.NoSnap);
+        r.spr(Layer.Text, this.hCharm + 1, e.x + k * 3, top + k * 14, 1, 1, k * 0.6, 0xffffff, 1 - k * 0.8, 0, Flag.NoSnap | Flag.Focus);
       }
     }
   }
@@ -696,7 +697,10 @@ export class HeroesBFx {
       const f = Math.min(this.nHenshin - 1, Math.floor(k * this.nHenshin));
       const s = t.r >= 2 ? Math.min(3.2, t.r) * (0.7 + 0.3 * k) : 1 + 0.3 * k;
       const col = t.r === 1 ? C.paleYellow : 0xffffff;
-      r.spr(Layer.Fx, this.hHenshin + f, p.x, p.y - 10, s, s, 0, col, t.r >= 2 ? 0.85 * (1 - k) : 1, 0, Flag.Glow | Flag.NoSnap);
+      // (the weapon's flash fades over her body - Flag.Focus - and stays a corona around her: on Infinite Henshin
+      // Loop it plays every 2.5 s and hid her for half a second each time, 17 % of her contrast left in the key
+      // crowd film. The ultimate's stages are a set piece and keep covering her.)
+      r.spr(Layer.Fx, this.hHenshin + f, p.x, p.y - 10, s, s, 0, col, t.r >= 2 ? 0.85 * (1 - k) : 1, 0, t.r >= 2 ? Flag.Glow | Flag.NoSnap : Flag.Glow | Flag.NoSnap | Flag.Focus);
     }
   }
 

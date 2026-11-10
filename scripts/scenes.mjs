@@ -941,6 +941,9 @@ export async function runScenes(args = {}) {
     // one Chromium per worker: pages of one browser share its single GPU process, and SwiftShader there
     // serialises them (4 pages in one browser were no faster than 1)
     const browsers = [browser];
+    /** Scenes shot again on a fresh browser after the first one gave out (printed with the result). */
+    let retried = 0;
+    const INFRA = /Target crashed|page crashed|WebGL2 is not available|ERR_INSUFFICIENT_RESOURCES|Target page, context or browser has been closed/;
     const worker = async (wi) => {
       const slots = new Map();
       let br = wi === 0 ? browser : await launchBrowser();
@@ -1103,6 +1106,21 @@ export async function runScenes(args = {}) {
             base.ms.ready ??= Date.now() - t0;
           }
           base.errors ??= [...slot.logs];
+          // the browser itself gave out (a crashed tab, no WebGL2 context left, ERR_INSUFFICIENT_RESOURCES: seen in a
+          // 135-scene --all run, where the four chest scenes after the crash all failed on the same sick Chromium):
+          // that is the harness, not the game. Once per job: a fresh browser for this worker and the scene again.
+          if (!job.retried && (slot.crashed || INFRA.test(`${base.harnessError ?? ""}\n${base.errors.join("\n")}`))) {
+            job.retried = true;
+            retried++;
+            for (const s of slots.values()) await settle(s.context.close(), 5000);
+            slots.clear();
+            await settle(br.close(), 10000);
+            br = await launchBrowser();
+            if (wi === 0) browser = br;
+            else browsers.push(br);
+            queue.unshift(job);
+            continue;
+          }
           base.ms.total = Date.now() - t0;
           base.flags = flagsFor(spec.scenario, base);
           if (film.length) base.film = film.length;

@@ -51,14 +51,14 @@ boundary. Content names and numbers come from the content bible
 | `unlocks` | `heroes, weapons, passives, stages, twists` (ids) and `relicSlots` (extra slots from non-board sources) |
 | `board` | `ranks` (node -> rank), `paid` (node -> coins paid: exact refunds), `active` (keystones switched on), `respecs` |
 | `heroes` | per hero: `xp, level` (cached from xp), `talents` (id -> rank), `constellation` (0-6), `runs, clears, kills, time, bestTime, talentRespecs` |
-| `mastery` | base weapon id -> mastery XP (evolutions feed their base) |
+| `mastery` | base weapon id -> mastery XP (both evolutions of a weapon feed their base) |
 | `relics` | owned relic id -> stars 0-6 |
 | `loadout` | `stage, hero, relics[], twists{id: rank}, endless, startWeapon` |
 | `gacha` | per banner `{pity, pityUR, guaranteed, pulls}`, `spark`, `history` (last 100), `stats` (pulls, tenPulls, gemsSpent, byRarity, 50/50s, N streaks, copiumEarned, sparksUsed, exchangeBuys, hardPityHits, pityInsurance, gemExchanges) |
 | `rotation` | `cycle, runsLeft` (featured banners change every 3 runs) |
 | `achievements` | `progress` (best value), `done` (id -> episode), `claimed` |
 | `lifetime` | runs, clears, deaths, time, kills, killsByEnemy, eliteKills, bossKills, `bossHeat` (stage -> boss -> best heat), damage / kills by base weapon, dashes, ults, level-ups, chests, food, evolutions, revives, damage taken, coins / gems / copium earned, max combo / rank / level, no-hit / no-dash / pacifist bests, fastest death, pulls, max evolutions, heroes that cleared |
-| `codex` | discovered ids per tab (heroes, weapons, passives, enemies, bosses, relics, stages) |
+| `codex` | discovered ids per tab (heroes, weapons, passives, enemies, bosses, relics, stages). `weapons` holds 60 ids: 20 base weapons and their 40 evolutions (two per weapon, docs/content/weapons.md §8); each is its own discovery and bounty, and the save shape is unchanged |
 | `records` | per stage: runs, clears, best time / heat (-1 = never cleared) / endless / kills / level / combo, first-clear episode |
 | `best` | v1 global bests (title screen) |
 | `settings` | unchanged from v1 |

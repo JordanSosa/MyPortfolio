@@ -2547,6 +2547,8 @@ export class World {
 
   /** Picks waiting for the player: queued level-ups plus chest evolution choices. */
   get pendingPicks(): number {
+    // (pruned first: a choice whose weapon is gone must not open a picker with no level behind it)
+    this.pruneChoices();
     return this.pendingLevels + this.pendingChoices.length;
   }
 
